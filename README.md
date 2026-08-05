@@ -37,4 +37,6 @@ Capture → Compile → Verify → Share
 
 ## MVP 边界
 
-第一版优先支持 macOS/Linux、终端捕获、文件变化捕获、Skill 编译、权限审查、受控回放、本地 Web 查看器和通用 Skill 导出。
+当前 foundation 仅支持本地 Skill 包初始化与 lint。
+
+以下能力属于未来工作：Capture、Compiler、Verify、Console/Web viewer，以及终端捕获、文件变化捕获、权限审查、受控回放和通用 Skill 导出。
