@@ -2,7 +2,12 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
-use skilltape_core::{create_skill_template, Diagnostic, DiagnosticLevel, LintReport, SkillPackage};
+use skilltape_core::{create_skill_template, Diagnostic, LintReport, SkillPackage};
+
+use crate::output;
+
+const PACKAGE_ERROR_EXIT_CODE: u8 = 2;
+const POLICY_ERROR_EXIT_CODE: u8 = 3;
 
 #[derive(Parser)]
 #[command(name = "skilltape")]
@@ -44,76 +49,35 @@ fn lint(path: PathBuf, strict: bool, json: bool) -> ExitCode {
     let package = match SkillPackage::load(&path) {
         Ok(package) => package,
         Err(error) => {
-            if json {
-                println!(
-                    "{}",
-                    serde_json::json!({"error": error.to_string()})
-                );
-            } else {
-                eprintln!("{error}");
-            }
-            return ExitCode::FAILURE;
+            eprintln!("{error}");
+            return ExitCode::from(2);
         }
     };
 
     let report = package.lint(strict);
     if json {
-        println!("{}", report_json(&report));
+        println!("{}", output::json_report(&report));
     } else {
-        print_text_report(&report);
+        print!("{}", output::human_report(&report));
     }
 
+    lint_exit_code(&report)
+}
+
+fn lint_exit_code(report: &LintReport) -> ExitCode {
     if report.errors.is_empty() {
-        ExitCode::SUCCESS
+        return ExitCode::SUCCESS;
+    }
+
+    if report.errors.iter().any(is_package_or_schema_failure) {
+        ExitCode::from(PACKAGE_ERROR_EXIT_CODE)
     } else {
-        ExitCode::FAILURE
+        ExitCode::from(POLICY_ERROR_EXIT_CODE)
     }
 }
 
-fn print_text_report(report: &LintReport) {
-    for diagnostic in report.errors.iter().chain(report.warnings.iter()) {
-        let level = match diagnostic.level {
-            DiagnosticLevel::Error => "error",
-            DiagnosticLevel::Warning => "warning",
-        };
-        println!(
-            "{level}[{}] {}:{}\n  {}",
-            diagnostic.code, diagnostic.file, diagnostic.path, diagnostic.message
-        );
-    }
-
-    if report.errors.is_empty() && report.warnings.is_empty() {
-        println!("Lint passed: {} files checked", report.files_checked);
-    } else {
-        println!(
-            "Checked {} files: {} errors, {} warnings",
-            report.files_checked,
-            report.errors.len(),
-            report.warnings.len()
-        );
-    }
-}
-
-fn report_json(report: &LintReport) -> String {
-    serde_json::to_string(&serde_json::json!({
-        "files_checked": report.files_checked,
-        "errors": report.errors.iter().map(diagnostic_json).collect::<Vec<_>>(),
-        "warnings": report.warnings.iter().map(diagnostic_json).collect::<Vec<_>>(),
-    }))
-    .expect("lint report JSON serialization cannot fail")
-}
-
-fn diagnostic_json(diagnostic: &Diagnostic) -> serde_json::Value {
-    serde_json::json!({
-        "code": diagnostic.code,
-        "level": match diagnostic.level {
-            DiagnosticLevel::Error => "error",
-            DiagnosticLevel::Warning => "warning",
-        },
-        "file": diagnostic.file,
-        "path": diagnostic.path,
-        "message": diagnostic.message,
-    })
+fn is_package_or_schema_failure(diagnostic: &Diagnostic) -> bool {
+    matches!(diagnostic.code.as_str(), "PKG001" | "PKG002" | "PKG003")
 }
 
 fn init(name: String, output: PathBuf, force: bool) -> ExitCode {

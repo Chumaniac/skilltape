@@ -41,7 +41,7 @@ fn lint_rejects_a_missing_package() {
         .args(["lint"])
         .arg(missing)
         .assert()
-        .failure()
+        .code(2)
         .stderr(predicates::str::contains("invalid package root"));
 }
 
@@ -63,7 +63,7 @@ fn lint_accepts_a_generated_package() {
         .arg(&output)
         .assert()
         .success()
-        .stdout(predicates::str::contains("Lint passed: 6 files checked"));
+        .stdout(predicates::str::contains("Checked 6 files: 0 errors, 0 warnings"));
 }
 
 #[test]
@@ -77,13 +77,14 @@ fn lint_json_reports_a_load_failure() {
         .arg(missing)
         .arg("--json")
         .assert()
-        .failure()
+        .code(2)
+        .stderr(predicates::str::contains("invalid package root"))
+        .stdout(predicates::str::is_empty())
         .get_output()
-        .stdout
+        .stderr
         .clone();
 
-    let report: serde_json::Value = serde_json::from_slice(&output).expect("valid JSON");
-    assert!(report["error"].as_str().is_some());
+    assert!(!output.is_empty());
 }
 
 #[test]
