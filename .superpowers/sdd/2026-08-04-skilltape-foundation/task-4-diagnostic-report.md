@@ -21,3 +21,5 @@ The tests used the installed rustup toolchain explicitly and a temporary writabl
 Controller verification confirmed `package_validation` passes 13/13.
 
 Follow-up fix (2026-08-05): Updated `PackageError::InvalidFile` to report the file and generic `parse failure` without interpolating the underlying source error. Focused test: 14 passed, 2 pre-existing diagnostic failures. Commit: `c6de124` (`fix: sanitize package parse errors`).
+
+Fix round 1 (2026-08-05): Closed the remaining path-lint gaps by applying PKG007 safety validation to manifest output paths, filesystem read/write scopes, and lockfile script paths, and applying PKG008 declared-input validation to every interpolated path-bearing field. Focused test: 16 passed, 0 failed. Workspace test suite: passed. Fix commit: `6d13f64` (`fix: close package path lint gaps`).
