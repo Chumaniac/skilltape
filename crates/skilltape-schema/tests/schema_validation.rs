@@ -37,6 +37,78 @@ fn rejects_absolute_output_path() {
 }
 
 #[test]
+fn rejects_windows_drive_absolute_output_path() {
+    let document = serde_json::json!({
+        "schema": "skilltape.dev/workflow/v1",
+        "steps": [{
+            "id": "write",
+            "action": "file",
+            "operation": "copy",
+            "from": "input.txt",
+            "to": "C:\\output.txt"
+        }]
+    });
+
+    let errors = validate_json(SchemaId::WorkflowV1, &document).expect_err("must reject");
+
+    assert!(errors.iter().any(|error| error.keyword == "pattern"));
+}
+
+#[test]
+fn rejects_unc_output_path() {
+    let document = serde_json::json!({
+        "schema": "skilltape.dev/workflow/v1",
+        "steps": [{
+            "id": "write",
+            "action": "file",
+            "operation": "copy",
+            "from": "input.txt",
+            "to": "\\\\server\\share\\output.txt"
+        }]
+    });
+
+    let errors = validate_json(SchemaId::WorkflowV1, &document).expect_err("must reject");
+
+    assert!(errors.iter().any(|error| error.keyword == "pattern"));
+}
+
+#[test]
+fn rejects_parent_traversal_with_forward_slashes() {
+    let document = serde_json::json!({
+        "schema": "skilltape.dev/workflow/v1",
+        "steps": [{
+            "id": "write",
+            "action": "file",
+            "operation": "copy",
+            "from": "input.txt",
+            "to": "output/../output.txt"
+        }]
+    });
+
+    let errors = validate_json(SchemaId::WorkflowV1, &document).expect_err("must reject");
+
+    assert!(errors.iter().any(|error| error.keyword == "pattern"));
+}
+
+#[test]
+fn rejects_parent_traversal_with_backslashes() {
+    let document = serde_json::json!({
+        "schema": "skilltape.dev/workflow/v1",
+        "steps": [{
+            "id": "write",
+            "action": "file",
+            "operation": "copy",
+            "from": "input.txt",
+            "to": "output\\..\\output.txt"
+        }]
+    });
+
+    let errors = validate_json(SchemaId::WorkflowV1, &document).expect_err("must reject");
+
+    assert!(errors.iter().any(|error| error.keyword == "pattern"));
+}
+
+#[test]
 fn accepts_minimal_skill_manifest() {
     let document = serde_json::json!({
         "schema": "skilltape.dev/skill/v1",
