@@ -30,3 +30,98 @@ fn init_refuses_to_overwrite_without_force() {
         .assert()
         .failure();
 }
+
+#[test]
+fn lint_rejects_a_missing_package() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let missing = temp.path().join("missing-skill");
+
+    assert_cmd::Command::cargo_bin("skilltape")
+        .expect("binary")
+        .args(["lint"])
+        .arg(missing)
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("invalid package root"));
+}
+
+#[test]
+fn lint_accepts_a_generated_package() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let output = temp.path().join("minimal-skill");
+
+    assert_cmd::Command::cargo_bin("skilltape")
+        .expect("binary")
+        .args(["init", "minimal-skill", "--output"])
+        .arg(&output)
+        .assert()
+        .success();
+
+    assert_cmd::Command::cargo_bin("skilltape")
+        .expect("binary")
+        .args(["lint"])
+        .arg(&output)
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("Lint passed: 6 files checked"));
+}
+
+#[test]
+fn lint_json_reports_a_load_failure() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let missing = temp.path().join("missing-skill");
+
+    let output = assert_cmd::Command::cargo_bin("skilltape")
+        .expect("binary")
+        .args(["lint"])
+        .arg(missing)
+        .arg("--json")
+        .assert()
+        .failure()
+        .get_output()
+        .stdout
+        .clone();
+
+    let report: serde_json::Value = serde_json::from_slice(&output).expect("valid JSON");
+    assert!(report["error"].as_str().is_some());
+}
+
+#[test]
+fn lint_json_reports_a_clean_generated_package() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let output = temp.path().join("minimal-skill");
+
+    assert_cmd::Command::cargo_bin("skilltape")
+        .expect("binary")
+        .args(["init", "minimal-skill", "--output"])
+        .arg(&output)
+        .assert()
+        .success();
+
+    let first = assert_cmd::Command::cargo_bin("skilltape")
+        .expect("binary")
+        .args(["lint"])
+        .arg(&output)
+        .arg("--json")
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let second = assert_cmd::Command::cargo_bin("skilltape")
+        .expect("binary")
+        .args(["lint"])
+        .arg(&output)
+        .arg("--json")
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    assert_eq!(first, second);
+    let report: serde_json::Value = serde_json::from_slice(&first).expect("valid JSON");
+    assert_eq!(report["files_checked"], 6);
+    assert_eq!(report["errors"].as_array().map(Vec::len), Some(0));
+    assert_eq!(report["warnings"].as_array().map(Vec::len), Some(0));
+}
