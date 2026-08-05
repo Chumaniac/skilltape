@@ -43,7 +43,7 @@ pub enum PackageError {
         #[source]
         source: std::io::Error,
     },
-    #[error("PKG003 invalid package file {file}: {source}")]
+    #[error("PKG003 invalid package file {file}: parse failure")]
     InvalidFile {
         file: String,
         #[source]
