@@ -1,6 +1,10 @@
-use std::fs;
+use std::fs::{self, File, OpenOptions};
 use std::io::Write;
+use std::sync::{mpsc, Arc, Barrier};
+use std::thread;
+use std::time::Duration;
 
+use fs2::FileExt;
 use skilltape_tape::{
     EventSource, RedactionState, TapeEvent, TapeEventKind, TapeIdGenerator, TapeManifest,
     TapeStore, TapeStoreError, TAPE_SCHEMA_V1,
@@ -51,6 +55,18 @@ fn overwrite_manifest(root: &std::path::Path, value: &TapeManifest) {
     let mut bytes = serde_json::to_vec_pretty(value).unwrap();
     bytes.push(b'\n');
     fs::write(root.join("manifest.json"), bytes).unwrap();
+}
+
+fn lock_tape(root: &std::path::Path) -> File {
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(root.join(".store.lock"))
+        .unwrap();
+    FileExt::lock_exclusive(&file).unwrap();
+    file
 }
 
 #[test]
@@ -105,6 +121,91 @@ fn duplicate_sequence_is_rejected_without_changing_existing_events() {
     ));
     assert_eq!(fs::read(root.join("events.jsonl")).unwrap(), before);
     assert_eq!(store.read_manifest().unwrap().event_count, 1);
+}
+
+#[test]
+fn simultaneous_appends_cannot_both_accept_the_same_sequence() {
+    let (_temp_dir, root, store) = create_store();
+    let held_lock = lock_tape(&root);
+    let store = Arc::new(store);
+    let start = Arc::new(Barrier::new(3));
+    let (result_tx, result_rx) = mpsc::channel();
+    let mut workers = Vec::new();
+
+    for _ in 0..2 {
+        let store = Arc::clone(&store);
+        let start = Arc::clone(&start);
+        let result_tx = result_tx.clone();
+        workers.push(thread::spawn(move || {
+            start.wait();
+            result_tx.send(store.append(&event(0))).unwrap();
+        }));
+    }
+    drop(result_tx);
+    start.wait();
+
+    assert!(result_rx.recv_timeout(Duration::from_millis(200)).is_err());
+    FileExt::unlock(&held_lock).unwrap();
+
+    let results: Vec<_> = result_rx.iter().collect();
+    for worker in workers {
+        worker.join().unwrap();
+    }
+    assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+    assert_eq!(
+        results
+            .iter()
+            .filter(|result| matches!(
+                result,
+                Err(TapeStoreError::SequenceMismatch {
+                    expected: 1,
+                    actual: 0,
+                    ..
+                })
+            ))
+            .count(),
+        1
+    );
+    assert_eq!(store.read_manifest().unwrap().event_count, 1);
+    assert_eq!(
+        store
+            .read_events()
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap(),
+        vec![event(0)]
+    );
+}
+
+#[test]
+fn append_after_concurrent_finish_cannot_succeed() {
+    let (_temp_dir, root, store) = create_store();
+    let held_lock = lock_tape(&root);
+    let store = Arc::new(store);
+    let (started_tx, started_rx) = mpsc::channel();
+    let (finished_tx, finished_rx) = mpsc::channel();
+    let finisher_store = Arc::clone(&store);
+    let finisher = thread::spawn(move || {
+        started_tx.send(()).unwrap();
+        finished_tx.send(finisher_store.finish(99)).unwrap();
+    });
+
+    started_rx.recv().unwrap();
+    assert!(finished_rx
+        .recv_timeout(Duration::from_millis(200))
+        .is_err());
+    FileExt::unlock(&held_lock).unwrap();
+
+    assert_eq!(
+        finished_rx.recv().unwrap().unwrap().finished_at_ms,
+        Some(99)
+    );
+    finisher.join().unwrap();
+    assert!(matches!(
+        store.append(&event(0)),
+        Err(TapeStoreError::AlreadyFinished)
+    ));
+    assert!(store.read_events().unwrap().next().is_none());
 }
 
 #[test]

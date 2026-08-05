@@ -2,6 +2,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, BufReader, Write};
 use std::path::{Component, Path, PathBuf};
 
+use fs2::FileExt;
 use serde_json::Error as JsonError;
 use thiserror::Error;
 
@@ -9,6 +10,7 @@ use crate::{TapeEvent, TapeManifest};
 
 const MANIFEST: &str = "manifest.json";
 const EVENTS: &str = "events.jsonl";
+const STORE_LOCK: &str = ".store.lock";
 
 #[derive(Debug, Error)]
 pub enum TapeStoreError {
@@ -103,6 +105,7 @@ impl TapeStore {
     }
 
     pub fn append(&self, event: &TapeEvent) -> Result<(), TapeStoreError> {
+        let _lock = self.lock_exclusive()?;
         let mut manifest = self.read_manifest()?;
         if manifest.finished_at_ms.is_some() {
             return Err(TapeStoreError::AlreadyFinished);
@@ -150,6 +153,7 @@ impl TapeStore {
     }
 
     pub fn finish(&self, finished_at_ms: u64) -> Result<TapeManifest, TapeStoreError> {
+        let _lock = self.lock_exclusive()?;
         let mut manifest = self.read_manifest()?;
         if manifest.finished_at_ms.is_some() {
             return Err(TapeStoreError::AlreadyFinished);
@@ -176,6 +180,17 @@ impl TapeStore {
             manifest_count: manifest.event_count,
             done: false,
         })
+    }
+
+    fn lock_exclusive(&self) -> Result<File, TapeStoreError> {
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(self.root.join(STORE_LOCK))?;
+        FileExt::lock_exclusive(&file)?;
+        Ok(file)
     }
 }
 
