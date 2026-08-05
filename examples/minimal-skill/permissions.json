@@ -1,0 +1,19 @@
+{
+  "schema": "skilltape.dev/permissions/v1",
+  "filesystem": {
+    "read": [],
+    "write": ["fixtures/output/message.txt"]
+  },
+  "process": {
+    "executables": ["printf"],
+    "max_processes": 1,
+    "default_timeout_ms": 120000
+  },
+  "network": {
+    "enabled": false,
+    "allow_hosts": []
+  },
+  "secrets": {
+    "read_environment": false
+  }
+}

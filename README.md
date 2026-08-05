@@ -4,7 +4,18 @@ SkillTape 是一个 local-first、可回放验证的 Agent Skill 编译器。
 
 它把用户真实完成的一次终端和文件工作流，转换成可审计、可复用、可提交到 GitHub 的 Skill 包。
 
-当前状态：设计阶段，尚未实现运行时代码。
+当前状态：foundation MVP 已实现，提供 Skill 包初始化与 lint。
+
+## Quick Start
+
+需要 Rust stable。`init` 与 `lint` 不需要 provider。
+
+```bash
+cargo run -p skilltape-cli -- init my-skill --output ./my-skill
+cargo run -p skilltape-cli -- lint ./my-skill
+```
+
+当前 MVP 不实现 Capture、Compiler、Verify 或 Console；它们属于后续独立计划和边界。
 
 ## 核心流程
 
@@ -27,4 +38,3 @@ Capture → Compile → Verify → Share
 ## MVP 边界
 
 第一版优先支持 macOS/Linux、终端捕获、文件变化捕获、Skill 编译、权限审查、受控回放、本地 Web 查看器和通用 Skill 导出。
-

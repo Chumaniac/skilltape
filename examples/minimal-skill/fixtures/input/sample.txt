@@ -1,0 +1,1 @@
+Sample input for the minimal SkillTape package.

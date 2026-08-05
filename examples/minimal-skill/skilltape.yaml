@@ -1,0 +1,17 @@
+schema: skilltape.dev/skill/v1
+name: minimal-skill
+version: 0.1.0
+description: A minimal SkillTape package.
+engine:
+  min_version: 0.1.0
+entrypoint:
+  workflow: workflow.yaml
+  permissions: permissions.json
+  lockfile: skilltape.lock
+inputs: []
+outputs:
+  - id: message
+    type: text
+    path: fixtures/output/message.txt
+targets:
+  - generic-agent-skill

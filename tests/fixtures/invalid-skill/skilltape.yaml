@@ -1,0 +1,14 @@
+schema: skilltape.dev/skill/v1
+name: invalid-skill
+version: 0.1.0
+description: An invalid SkillTape package for lint tests.
+engine:
+  min_version: 0.1.0
+entrypoint:
+  workflow: workflow.yaml
+  permissions: permissions.json
+  lockfile: skilltape.lock
+inputs: []
+outputs: []
+targets:
+  - generic-agent-skill
