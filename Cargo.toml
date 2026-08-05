@@ -1,0 +1,22 @@
+[workspace]
+members = [
+  "crates/skilltape-schema",
+  "crates/skilltape-core",
+  "crates/skilltape-cli",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+assert_cmd = "2"
+clap = { version = "4", features = ["derive"] }
+jsonschema = "0.26"
+predicates = "3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+tempfile = "3"
+thiserror = "2"
