@@ -25,6 +25,41 @@ fn invalid_values_are_rejected() {
 }
 
 #[test]
+fn unknown_event_kind_is_rejected() {
+    assert!(serde_json::from_value::<TapeEvent>(serde_json::json!({
+        "sequence": 0,
+        "occurred_at_ms": 1,
+        "kind": "future_event",
+        "source": "cli",
+        "payload": {},
+        "redaction": "unredacted"
+    }))
+    .is_err());
+}
+
+#[test]
+fn cross_platform_absolute_and_traversal_roots_are_rejected() {
+    for root in [
+        "/tmp/work",
+        "\\\\server\\share",
+        "\\work",
+        "C:\\work",
+        "workspace/../outside",
+        "workspace\\..\\outside",
+    ] {
+        let manifest = serde_json::json!({
+            "schema": TAPE_SCHEMA_V1,
+            "id": "session-1",
+            "started_at_ms": 1,
+            "platform": "test",
+            "workspace_root": root,
+            "event_count": 0
+        });
+        assert!(serde_json::from_value::<TapeManifest>(manifest).is_err(), "{root}");
+    }
+}
+
+#[test]
 fn event_sequences_are_monotonic() {
     let events = [event(0, TapeEventKind::SessionStarted), event(1, TapeEventKind::CaptureWarning), event(2, TapeEventKind::SessionFinished)];
     assert!(events.windows(2).all(|pair| pair[1].sequence > pair[0].sequence));
