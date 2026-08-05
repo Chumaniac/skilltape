@@ -440,6 +440,7 @@ steps:
         ("workflow.yaml", "steps[1].from"),
         ("workflow.yaml", "steps[1].to"),
         ("workflow.yaml", "steps[2].assertion.path"),
+        ("skilltape.lock", "scripts[0].path"),
     ] {
         assert!(
             has_diagnostic(&report.errors, "PKG008", DiagnosticLevel::Error, file, path),
