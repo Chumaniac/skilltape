@@ -1,3 +1,11 @@
+pub mod model;
+
+pub use model::{
+    AssertStep, AssertionSpec, EntryPoint, ExecStep, FileStep, FilesystemPermissions, InputSpec,
+    LockFile, NetworkPermissions, OutputSpec, Permissions, ProcessPermissions, ScriptStep,
+    SecretPermissions, SkillManifest, Step, StepOutput, Workflow,
+};
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SchemaId {
     SkillV1,
