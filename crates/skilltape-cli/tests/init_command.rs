@@ -63,7 +63,9 @@ fn lint_accepts_a_generated_package() {
         .arg(&output)
         .assert()
         .success()
-        .stdout(predicates::str::contains("Checked 6 files: 0 errors, 0 warnings"));
+        .stdout(predicates::str::contains(
+            "Checked 6 files: 0 errors, 0 warnings",
+        ));
 }
 
 #[test]

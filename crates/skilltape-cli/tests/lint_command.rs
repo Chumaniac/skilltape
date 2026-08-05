@@ -74,9 +74,9 @@ fn lint_json_output_contains_files_checked_and_errors() {
     let report: Value = serde_json::from_slice(&output).expect("valid JSON");
     assert_eq!(report["files_checked"], 6);
     let errors = report["errors"].as_array().expect("errors array");
-    assert!(errors.iter().any(|error| {
-        error["code"] == "PKG004" && error["file"] == "workflow.yaml"
-    }));
+    assert!(errors
+        .iter()
+        .any(|error| { error["code"] == "PKG004" && error["file"] == "workflow.yaml" }));
 }
 
 #[test]
