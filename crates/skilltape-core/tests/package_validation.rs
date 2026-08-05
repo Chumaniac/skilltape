@@ -136,7 +136,11 @@ fn loads_all_required_package_files() {
     assert_eq!(loaded.lockfile.tools.len(), 1);
     let report = loaded.lint(false);
     assert_eq!(report.files_checked, 6);
-    assert!(report.errors.is_empty(), "unexpected errors: {:?}", report.errors);
+    assert!(
+        report.errors.is_empty(),
+        "unexpected errors: {:?}",
+        report.errors
+    );
     assert!(report.warnings.is_empty());
 }
 
@@ -247,7 +251,10 @@ fn rejects_invalid_typed_value_without_echoing_file_contents() {
         "permissions.json",
         &fs::read_to_string(package.path("permissions.json"))
             .unwrap()
-            .replace("\"max_processes\": 1", "\"max_processes\": \"secret-typed-value\""),
+            .replace(
+                "\"max_processes\": 1",
+                "\"max_processes\": \"secret-typed-value\"",
+            ),
     );
 
     let error = SkillPackage::load(&package.root).expect_err("invalid type must fail loading");
@@ -486,10 +493,7 @@ fn reports_lockfile_tool_mismatch() {
         "skilltape.lock",
         &fs::read_to_string(package.path("skilltape.lock"))
             .unwrap()
-            .replace(
-                "[{\"program\": \"cp\", \"version\": \"1.0.0\"}]",
-                "[]",
-            ),
+            .replace("[{\"program\": \"cp\", \"version\": \"1.0.0\"}]", "[]"),
     );
 
     let report = SkillPackage::load(&package.root).unwrap().lint(false);

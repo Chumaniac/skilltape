@@ -15,7 +15,9 @@ const TEMPLATE_FILES: [&str; 6] = [
 
 #[derive(Debug, Error)]
 pub enum TemplateError {
-    #[error("invalid skill name: names must be non-empty, unpadded, and contain no path separators")]
+    #[error(
+        "invalid skill name: names must be non-empty, unpadded, and contain no path separators"
+    )]
     InvalidName,
     #[error("template target already exists: {path}")]
     TargetExists { path: PathBuf },
@@ -48,8 +50,14 @@ pub fn create_skill_template(root: &Path, name: &str) -> Result<(), TemplateErro
         ("workflow.yaml", WORKFLOW.to_owned()),
         ("permissions.json", PERMISSIONS.to_owned()),
         ("skilltape.lock", LOCKFILE.to_owned()),
-        ("SKILL.md", format!("# {name}\n\nDescribe how agents should use this skill.\n")),
-        ("README.md", format!("# {name}\n\nA SkillTape skill package.\n")),
+        (
+            "SKILL.md",
+            format!("# {name}\n\nDescribe how agents should use this skill.\n"),
+        ),
+        (
+            "README.md",
+            format!("# {name}\n\nA SkillTape skill package.\n"),
+        ),
     ];
 
     for (file, contents) in files {
@@ -200,8 +208,16 @@ mod tests {
 
         let loaded = crate::SkillPackage::load(&first_root).expect("load generated template");
         let report = loaded.lint(false);
-        assert!(report.errors.is_empty(), "unexpected errors: {:?}", report.errors);
-        assert!(report.warnings.is_empty(), "unexpected warnings: {:?}", report.warnings);
+        assert!(
+            report.errors.is_empty(),
+            "unexpected errors: {:?}",
+            report.errors
+        );
+        assert!(
+            report.warnings.is_empty(),
+            "unexpected warnings: {:?}",
+            report.warnings
+        );
     }
 
     #[test]

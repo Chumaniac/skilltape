@@ -15,6 +15,20 @@ cargo run -p skilltape-cli -- init my-skill --output ./my-skill
 cargo run -p skilltape-cli -- lint ./my-skill
 ```
 
+Foundation verification was completed locally with:
+
+```bash
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+cargo run -p skilltape-cli -- init final-smoke --output /tmp/skilltape-final-smoke
+cargo run -p skilltape-cli -- lint /tmp/skilltape-final-smoke
+cargo run -p skilltape-cli -- lint examples/minimal-skill
+cargo run -p skilltape-cli -- lint examples/minimal-skill --json
+```
+
+Next plan: [Capture](docs/superpowers/plans/2026-08-04-skilltape-capture.md).
+
 当前 MVP 不实现 Capture、Compiler、Verify 或 Console；它们属于后续独立计划和边界。
 
 ## 核心流程
