@@ -241,6 +241,25 @@ fn rejects_invalid_json_without_echoing_file_contents() {
 }
 
 #[test]
+fn rejects_invalid_typed_value_without_echoing_file_contents() {
+    let package = TestPackage::valid();
+    package.write(
+        "permissions.json",
+        &fs::read_to_string(package.path("permissions.json"))
+            .unwrap()
+            .replace("\"max_processes\": 1", "\"max_processes\": \"secret-typed-value\""),
+    );
+
+    let error = SkillPackage::load(&package.root).expect_err("invalid type must fail loading");
+
+    assert!(matches!(
+        error,
+        PackageError::InvalidFile { ref file, .. } if file == "permissions.json"
+    ));
+    assert!(!error.to_string().contains("secret-typed-value"));
+}
+
+#[test]
 fn reports_json_schema_mismatch_with_source_path() {
     let package = TestPackage::valid();
     package.write(
@@ -313,6 +332,121 @@ steps:
         "workflow.yaml",
         "steps[0].path"
     ));
+}
+
+#[test]
+fn reports_unsafe_paths_in_manifest_permissions_and_lockfile() {
+    let package = TestPackage::valid();
+    package.write(
+        "skilltape.yaml",
+        &fs::read_to_string(package.path("skilltape.yaml"))
+            .unwrap()
+            .replace("path: output/result.txt", "path: ../outside/result.txt"),
+    );
+    package.write(
+        "permissions.json",
+        &fs::read_to_string(package.path("permissions.json"))
+            .unwrap()
+            .replace(
+                "\"read\": [\"inputs/**\", \"work/**\", \"scripts/**\"]",
+                "\"read\": [\"../inputs/**\", \"work/**\", \"scripts/**\"]",
+            )
+            .replace(
+                "\"write\": [\"work/**\", \"output/**\"]",
+                "\"write\": [\"work/**\", \"/tmp/**\"]",
+            ),
+    );
+    package.write(
+        "skilltape.lock",
+        &fs::read_to_string(package.path("skilltape.lock"))
+            .unwrap()
+            .replace(
+                "\"scripts\": []",
+                "\"scripts\": [{\"path\": \"..\\\\scripts\\\\build.py\", \"sha256\": \"abc\"}]",
+            ),
+    );
+
+    let report = SkillPackage::load(&package.root).unwrap().lint(false);
+
+    for (file, path) in [
+        ("skilltape.yaml", "outputs[0].path"),
+        ("permissions.json", "filesystem.read[0]"),
+        ("permissions.json", "filesystem.write[1]"),
+        ("skilltape.lock", "scripts[0].path"),
+    ] {
+        assert!(
+            has_diagnostic(&report.errors, "PKG007", DiagnosticLevel::Error, file, path),
+            "missing PKG007 for {file}:{path}; diagnostics: {:?}",
+            report.errors
+        );
+    }
+}
+
+#[test]
+fn reports_undeclared_inputs_in_every_interpolated_path_field() {
+    let package = TestPackage::valid();
+    package.write(
+        "skilltape.yaml",
+        &fs::read_to_string(package.path("skilltape.yaml"))
+            .unwrap()
+            .replace(
+                "path: output/result.txt",
+                "path: output/{{ inputs.missing_output }}/result.txt",
+            ),
+    );
+    package.write(
+        "workflow.yaml",
+        r#"schema: skilltape.dev/workflow/v1
+steps:
+  - id: run-script
+    action: script
+    path: scripts/{{ inputs.missing_script }}/build.py
+    args: []
+    timeout_ms: 1000
+    outputs:
+      - path: output/{{ inputs.missing_output }}/result.txt
+        type: file
+  - id: copy-file
+    action: file
+    operation: copy
+    from: inputs/{{ inputs.missing_from }}/source.txt
+    to: work/{{ inputs.missing_to }}/source.txt
+  - id: assert-file
+    action: assert
+    assertion:
+      type: exists
+      path: output/{{ inputs.missing_assert }}/result.txt
+"#,
+    );
+    package.write(
+        "skilltape.lock",
+        r#"{
+  "schema": "skilltape.dev/lock/v1",
+  "engine": {"version": "0.1.0"},
+  "tools": [],
+  "scripts": [{
+    "path": "scripts/{{ inputs.missing_script }}/build.py",
+    "sha256": "abc"
+  }]
+}"#,
+    );
+
+    let report = SkillPackage::load(&package.root).unwrap().lint(false);
+
+    for (file, path) in [
+        ("skilltape.yaml", "outputs[0].path"),
+        ("workflow.yaml", "steps[0].path"),
+        ("workflow.yaml", "steps[0].outputs[0].path"),
+        ("workflow.yaml", "steps[1].from"),
+        ("workflow.yaml", "steps[1].to"),
+        ("workflow.yaml", "steps[2].assertion.path"),
+    ] {
+        assert!(
+            has_diagnostic(&report.errors, "PKG008", DiagnosticLevel::Error, file, path),
+            "missing PKG008 for {file}:{path}; diagnostics: {:?}",
+            report.errors
+        );
+    }
 }
 
 #[test]

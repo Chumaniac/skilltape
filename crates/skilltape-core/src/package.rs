@@ -99,6 +99,7 @@ impl LoadedSkillPackage {
 
         self.lint_required_files(&mut report);
         self.lint_schema(&mut report);
+        self.lint_manifest_and_permission_paths(&mut report);
         self.lint_entrypoints(&mut report);
         self.lint_workflow_permissions_and_paths(&mut report);
         self.lint_lockfile(&mut report, strict);
@@ -147,7 +148,29 @@ impl LoadedSkillPackage {
         );
     }
 
+    fn lint_manifest_and_permission_paths(&self, report: &mut LintReport) {
+        let input_ids = self.declared_input_ids();
+
+        for (index, output) in self.manifest.outputs.iter().enumerate() {
+            let path = format!("outputs[{index}].path");
+            lint_workspace_path_safety(report, &output.path, "skilltape.yaml", path.clone());
+            lint_path_inputs(report, &output.path, "skilltape.yaml", path, &input_ids);
+        }
+
+        for (scope_kind, scopes) in [
+            ("read", &self.permissions.filesystem.read),
+            ("write", &self.permissions.filesystem.write),
+        ] {
+            for (index, scope) in scopes.iter().enumerate() {
+                let path = format!("filesystem.{scope_kind}[{index}]");
+                lint_workspace_path_safety(report, scope, "permissions.json", path.clone());
+                lint_path_inputs(report, scope, "permissions.json", path, &input_ids);
+            }
+        }
+    }
+
     fn lint_entrypoints(&self, report: &mut LintReport) {
+        let input_ids = self.declared_input_ids();
         let expected = [
             (
                 "workflow",
@@ -186,16 +209,19 @@ impl LoadedSkillPackage {
                     "entrypoint path must be relative and must not traverse directories",
                 );
             }
+
+            lint_path_inputs(
+                report,
+                actual,
+                "skilltape.yaml",
+                format!("entrypoint.{field}"),
+                &input_ids,
+            );
         }
     }
 
     fn lint_workflow_permissions_and_paths(&self, report: &mut LintReport) {
-        let input_ids = self
-            .manifest
-            .inputs
-            .iter()
-            .map(|input| input.id.as_str())
-            .collect::<BTreeSet<_>>();
+        let input_ids = self.declared_input_ids();
         let manifest_output_paths = self
             .manifest
             .outputs
@@ -232,6 +258,7 @@ impl LoadedSkillPackage {
                         &step.outputs,
                         &self.permissions.filesystem.write,
                         &manifest_output_paths,
+                        &input_ids,
                     );
                 }
                 Step::Script(step) => {
@@ -241,6 +268,7 @@ impl LoadedSkillPackage {
                         "workflow.yaml",
                         format!("steps[{index}].path"),
                         &self.permissions.filesystem.read,
+                        &input_ids,
                     );
                     lint_args(report, index, &step.args, &input_ids);
                     lint_step_outputs(
@@ -249,16 +277,24 @@ impl LoadedSkillPackage {
                         &step.outputs,
                         &self.permissions.filesystem.write,
                         &manifest_output_paths,
+                        &input_ids,
                     );
                 }
                 Step::File(step) => {
-                    lint_file_step(report, index, step, &self.permissions.filesystem.read);
+                    lint_file_step(
+                        report,
+                        index,
+                        step,
+                        &self.permissions.filesystem.read,
+                        &input_ids,
+                    );
                     lint_write_path(
                         report,
                         &step.to_path,
                         "workflow.yaml",
                         format!("steps[{index}].to"),
                         &self.permissions.filesystem.write,
+                        &input_ids,
                     );
                 }
                 Step::Assert(step) => {
@@ -269,6 +305,7 @@ impl LoadedSkillPackage {
                             "workflow.yaml",
                             format!("steps[{index}].assertion.path"),
                             &self.permissions.filesystem.read,
+                            &input_ids,
                         );
                     }
                 }
@@ -276,7 +313,16 @@ impl LoadedSkillPackage {
         }
     }
 
+    fn declared_input_ids(&self) -> BTreeSet<&str> {
+        self.manifest
+            .inputs
+            .iter()
+            .map(|input| input.id.as_str())
+            .collect()
+    }
+
     fn lint_lockfile(&self, report: &mut LintReport, strict: bool) {
+        let input_ids = self.declared_input_ids();
         let manifest_engine = self
             .manifest
             .engine
@@ -329,6 +375,14 @@ impl LoadedSkillPackage {
             .iter()
             .filter_map(|script| script.get("path").and_then(serde_json::Value::as_str))
             .collect::<BTreeSet<_>>();
+
+        for (index, script) in self.lockfile.scripts.iter().enumerate() {
+            if let Some(script_path) = script.get("path").and_then(serde_json::Value::as_str) {
+                let path = format!("scripts[{index}].path");
+                lint_workspace_path_safety(report, script_path, "skilltape.lock", path.clone());
+                lint_path_inputs(report, script_path, "skilltape.lock", path, &input_ids);
+            }
+        }
 
         for step in &self.workflow.steps {
             if let Step::Script(step) = step {
@@ -530,13 +584,20 @@ fn input_references(value: &str) -> Vec<String> {
     inputs
 }
 
-fn lint_file_step(report: &mut LintReport, index: usize, step: &FileStep, read_scopes: &[String]) {
+fn lint_file_step(
+    report: &mut LintReport,
+    index: usize,
+    step: &FileStep,
+    read_scopes: &[String],
+    declared_inputs: &BTreeSet<&str>,
+) {
     lint_read_path(
         report,
         &step.from_path,
         "workflow.yaml",
         format!("steps[{index}].from"),
         read_scopes,
+        declared_inputs,
     );
 }
 
@@ -546,6 +607,7 @@ fn lint_step_outputs(
     outputs: &[StepOutput],
     write_scopes: &[String],
     manifest_output_paths: &BTreeSet<&str>,
+    declared_inputs: &BTreeSet<&str>,
 ) {
     for (output_index, output) in outputs.iter().enumerate() {
         let path = format!("steps[{step_index}].outputs[{output_index}].path");
@@ -555,6 +617,7 @@ fn lint_step_outputs(
             "workflow.yaml",
             path.clone(),
             write_scopes,
+            declared_inputs,
         );
         if !manifest_output_paths.contains(output.path.as_str()) {
             report.push(
@@ -577,8 +640,10 @@ fn lint_read_path(
     file: &str,
     path: String,
     scopes: &[String],
+    declared_inputs: &BTreeSet<&str>,
 ) {
     lint_workspace_path_safety(report, value, file, path.clone());
+    lint_path_inputs(report, value, file, path.clone(), declared_inputs);
     if !path_matches_any_scope(value, scopes) {
         report.push(
             "PKG005",
@@ -596,8 +661,10 @@ fn lint_write_path(
     file: &str,
     path: String,
     scopes: &[String],
+    declared_inputs: &BTreeSet<&str>,
 ) {
     lint_workspace_path_safety(report, value, file, path.clone());
+    lint_path_inputs(report, value, file, path.clone(), declared_inputs);
     if !path_matches_any_scope(value, scopes) {
         report.push(
             "PKG006",
@@ -606,6 +673,26 @@ fn lint_write_path(
             path,
             format!("path `{value}` is outside declared filesystem write scopes"),
         );
+    }
+}
+
+fn lint_path_inputs(
+    report: &mut LintReport,
+    value: &str,
+    file: &str,
+    path: String,
+    declared_inputs: &BTreeSet<&str>,
+) {
+    for input in input_references(value) {
+        if !declared_inputs.contains(input.as_str()) {
+            report.push(
+                "PKG008",
+                DiagnosticLevel::Error,
+                file,
+                path.clone(),
+                format!("input `{input}` is not declared in the manifest"),
+            );
+        }
     }
 }
 
