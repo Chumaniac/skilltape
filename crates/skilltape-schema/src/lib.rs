@@ -1,10 +1,12 @@
 pub mod model;
+pub mod validation;
 
 pub use model::{
     AssertStep, AssertionSpec, EntryPoint, ExecStep, FileStep, FilesystemPermissions, InputSpec,
     LockFile, NetworkPermissions, OutputSpec, Permissions, ProcessPermissions, ScriptStep,
     SecretPermissions, SkillManifest, Step, StepOutput, Workflow,
 };
+pub use validation::{validate_json, SchemaDiagnostic};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SchemaId {

@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skilltape.dev/schemas/workflow/v1.json",
+  "type": "object",
+  "required": ["schema", "steps"],
+  "properties": {
+    "schema": { "const": "skilltape.dev/workflow/v1" },
+    "steps": { "type": "array", "items": { "$ref": "#/$defs/step" } }
+  },
+  "patternProperties": { "^x-": true },
+  "additionalProperties": false,
+  "$defs": {
+    "workspacePath": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+    },
+    "output": {
+      "type": "object",
+      "required": ["path", "type"],
+      "properties": {
+        "path": { "$ref": "#/$defs/workspacePath" },
+        "type": { "type": "string", "minLength": 1 }
+      },
+      "patternProperties": { "^x-": true },
+      "additionalProperties": false
+    },
+    "assertion": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "type": "string", "minLength": 1 },
+        "path": { "$ref": "#/$defs/workspacePath" },
+        "schema": { "type": "string", "minLength": 1 },
+        "hash": { "type": "string", "minLength": 1 }
+      },
+      "patternProperties": { "^x-": true },
+      "additionalProperties": false
+    },
+    "step": {
+      "allOf": [
+        {
+          "type": "object",
+          "required": ["action"],
+          "properties": {
+            "action": { "enum": ["exec", "script", "file", "assert"] },
+            "from": { "$ref": "#/$defs/workspacePath" },
+            "to": { "$ref": "#/$defs/workspacePath" },
+            "path": { "$ref": "#/$defs/workspacePath" }
+          }
+        },
+        {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["id", "action", "program", "args", "timeout_ms"],
+              "properties": {
+                "id": { "type": "string", "minLength": 1 },
+                "action": { "const": "exec" },
+                "program": { "type": "string", "minLength": 1 },
+                "args": { "type": "array", "items": { "type": "string" } },
+                "timeout_ms": { "type": "integer", "minimum": 1 },
+                "outputs": { "type": "array", "items": { "$ref": "#/$defs/output" } }
+              },
+              "patternProperties": { "^x-": true },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["id", "action", "path", "args", "timeout_ms"],
+              "properties": {
+                "id": { "type": "string", "minLength": 1 },
+                "action": { "const": "script" },
+                "path": { "$ref": "#/$defs/workspacePath" },
+                "args": { "type": "array", "items": { "type": "string" } },
+                "timeout_ms": { "type": "integer", "minimum": 1 },
+                "outputs": { "type": "array", "items": { "$ref": "#/$defs/output" } }
+              },
+              "patternProperties": { "^x-": true },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["id", "action", "operation", "from", "to"],
+              "properties": {
+                "id": { "type": "string", "minLength": 1 },
+                "action": { "const": "file" },
+                "operation": { "enum": ["copy", "move", "mkdir"] },
+                "from": { "$ref": "#/$defs/workspacePath" },
+                "to": { "$ref": "#/$defs/workspacePath" }
+              },
+              "patternProperties": { "^x-": true },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["id", "action", "assertion"],
+              "properties": {
+                "id": { "type": "string", "minLength": 1 },
+                "action": { "const": "assert" },
+                "assertion": { "$ref": "#/$defs/assertion" }
+              },
+              "patternProperties": { "^x-": true },
+              "additionalProperties": false
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
