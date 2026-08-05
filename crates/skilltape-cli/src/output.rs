@@ -44,12 +44,12 @@ pub(crate) fn json_report(report: &LintReport) -> String {
         errors: report
             .errors
             .iter()
-            .map(|diagnostic| JsonDiagnostic::from_diagnostic(diagnostic))
+            .map(JsonDiagnostic::from_diagnostic)
             .collect(),
         warnings: report
             .warnings
             .iter()
-            .map(|diagnostic| JsonDiagnostic::from_diagnostic(diagnostic))
+            .map(JsonDiagnostic::from_diagnostic)
             .collect(),
     };
 
