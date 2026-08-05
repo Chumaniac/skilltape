@@ -1,5 +1,6 @@
 [workspace]
 members = [
+  "crates/skilltape-tape",
   "crates/skilltape-schema",
   "crates/skilltape-core",
   "crates/skilltape-cli",
