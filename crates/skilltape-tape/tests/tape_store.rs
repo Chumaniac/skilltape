@@ -37,6 +37,22 @@ fn create_store() -> (TempDir, std::path::PathBuf, TapeStore) {
     (temp_dir, root, store)
 }
 
+fn append_raw_event(root: &std::path::Path, item: &TapeEvent) {
+    let mut file = fs::OpenOptions::new()
+        .append(true)
+        .open(root.join("events.jsonl"))
+        .unwrap();
+    serde_json::to_writer(&mut file, item).unwrap();
+    file.write_all(b"\n").unwrap();
+    file.sync_all().unwrap();
+}
+
+fn overwrite_manifest(root: &std::path::Path, value: &TapeManifest) {
+    let mut bytes = serde_json::to_vec_pretty(value).unwrap();
+    bytes.push(b'\n');
+    fs::write(root.join("manifest.json"), bytes).unwrap();
+}
+
 #[test]
 fn creates_empty_tape_and_reopens_it_without_overwriting() {
     let (_temp_dir, root, store) = create_store();
@@ -89,6 +105,69 @@ fn duplicate_sequence_is_rejected_without_changing_existing_events() {
     ));
     assert_eq!(fs::read(root.join("events.jsonl")).unwrap(), before);
     assert_eq!(store.read_manifest().unwrap().event_count, 1);
+}
+
+#[test]
+fn retry_after_event_fsync_repairs_manifest_without_duplicating_the_event() {
+    let (_temp_dir, root, store) = create_store();
+    append_raw_event(&root, &event(0));
+
+    store.append(&event(0)).unwrap();
+
+    assert_eq!(store.read_manifest().unwrap().event_count, 1);
+    let recovered = store
+        .read_events()
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(recovered, vec![event(0)]);
+}
+
+#[test]
+fn recovery_reports_when_manifest_claims_more_events_than_jsonl_contains() {
+    let (_temp_dir, root, store) = create_store();
+    store.append(&event(0)).unwrap();
+    let mut inconsistent = store.read_manifest().unwrap();
+    inconsistent.event_count = 2;
+    overwrite_manifest(&root, &inconsistent);
+
+    let mut recovered = store.read_events().unwrap();
+    assert_eq!(recovered.next().unwrap().unwrap(), event(0));
+    assert!(matches!(
+        recovered.next().unwrap(),
+        Err(TapeStoreError::EventCountShortfall {
+            manifest_count: 2,
+            event_count: 1,
+        })
+    ));
+}
+
+#[test]
+fn recovery_reports_when_jsonl_contains_more_events_than_manifest_claims() {
+    let (_temp_dir, root, store) = create_store();
+    store.append(&event(0)).unwrap();
+    append_raw_event(&root, &event(1));
+
+    let mut recovered = store.read_events().unwrap();
+    assert_eq!(recovered.next().unwrap().unwrap(), event(0));
+    assert!(matches!(
+        recovered.next().unwrap(),
+        Err(TapeStoreError::EventCountExceeded {
+            manifest_count: 1,
+            minimum_event_count: 2,
+        })
+    ));
+}
+
+#[test]
+fn stale_manifest_temp_file_is_replaced_by_the_next_atomic_update() {
+    let (_temp_dir, root, store) = create_store();
+    fs::write(root.join("manifest.json.tmp"), b"stale partial manifest").unwrap();
+
+    store.append(&event(0)).unwrap();
+
+    assert_eq!(store.read_manifest().unwrap().event_count, 1);
+    assert!(!root.join("manifest.json.tmp").exists());
 }
 
 #[test]

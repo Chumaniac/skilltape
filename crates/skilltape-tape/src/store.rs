@@ -32,6 +32,20 @@ pub enum TapeStoreError {
         actual: u64,
         line: usize,
     },
+    #[error(
+        "manifest expects {manifest_count} events, but events.jsonl ended after {event_count}"
+    )]
+    EventCountShortfall {
+        manifest_count: u64,
+        event_count: u64,
+    },
+    #[error(
+        "manifest expects {manifest_count} events, but events.jsonl contains at least {minimum_event_count}"
+    )]
+    EventCountExceeded {
+        manifest_count: u64,
+        minimum_event_count: u64,
+    },
     #[error("tape is already finished")]
     AlreadyFinished,
 }
@@ -61,8 +75,10 @@ impl TapeStore {
             path: root.clone(),
             source,
         })?;
-        File::create(root.join(EVENTS))?.sync_all()?;
-        write_manifest(&root, &manifest)?;
+        if let Err(error) = initialize_tape(&root, &manifest) {
+            let _ = fs::remove_dir_all(&root);
+            return Err(error);
+        }
         Ok(Self { root })
     }
 
@@ -87,9 +103,32 @@ impl TapeStore {
     }
 
     pub fn append(&self, event: &TapeEvent) -> Result<(), TapeStoreError> {
-        let manifest = self.read_manifest()?;
+        let mut manifest = self.read_manifest()?;
         if manifest.finished_at_ms.is_some() {
             return Err(TapeStoreError::AlreadyFinished);
+        }
+        let events = read_event_file(&self.root)?;
+        let event_count = events.len() as u64;
+        if event_count < manifest.event_count {
+            return Err(TapeStoreError::EventCountShortfall {
+                manifest_count: manifest.event_count,
+                event_count,
+            });
+        }
+        if event_count > manifest.event_count {
+            if event_count != manifest.event_count + 1 {
+                return Err(TapeStoreError::EventCountExceeded {
+                    manifest_count: manifest.event_count,
+                    minimum_event_count: event_count,
+                });
+            }
+
+            let recovered_event = events.last().expect("event count is non-zero");
+            manifest.event_count = event_count;
+            write_manifest(&self.root, &manifest)?;
+            if recovered_event == event {
+                return Ok(());
+            }
         }
         let expected = manifest.event_count;
         if event.sequence != expected {
@@ -129,11 +168,13 @@ impl TapeStore {
         &self,
     ) -> Result<impl Iterator<Item = Result<TapeEvent, TapeStoreError>>, TapeStoreError> {
         let file = File::open(self.root.join(EVENTS))?;
-        self.read_manifest()?;
+        let manifest = self.read_manifest()?;
         Ok(EventIter {
             lines: BufReader::new(file).lines(),
             next_sequence: 0,
             line: 0,
+            manifest_count: manifest.event_count,
+            done: false,
         })
     }
 }
@@ -142,12 +183,31 @@ struct EventIter<R = io::Lines<BufReader<File>>> {
     lines: R,
     next_sequence: u64,
     line: usize,
+    manifest_count: u64,
+    done: bool,
 }
 
 impl Iterator for EventIter {
     type Item = Result<TapeEvent, TapeStoreError>;
     fn next(&mut self) -> Option<Self::Item> {
-        let line = match self.lines.next()? {
+        if self.done {
+            return None;
+        }
+        let line = match self.lines.next() {
+            None if self.next_sequence < self.manifest_count => {
+                self.done = true;
+                return Some(Err(TapeStoreError::EventCountShortfall {
+                    manifest_count: self.manifest_count,
+                    event_count: self.next_sequence,
+                }));
+            }
+            None => {
+                self.done = true;
+                return None;
+            }
+            Some(line) => line,
+        };
+        let line = match line {
             Ok(line) => line,
             Err(e) => return Some(Err(e.into())),
         };
@@ -169,6 +229,13 @@ impl Iterator for EventIter {
             }));
         }
         self.next_sequence += 1;
+        if self.next_sequence > self.manifest_count {
+            self.done = true;
+            return Some(Err(TapeStoreError::EventCountExceeded {
+                manifest_count: self.manifest_count,
+                minimum_event_count: self.next_sequence,
+            }));
+        }
         Some(Ok(event))
     }
 }
@@ -189,9 +256,43 @@ fn validate_manifest(manifest: &TapeManifest) -> Result<(), TapeStoreError> {
         .map_err(|e| TapeStoreError::InvalidManifest(e.to_string()))
 }
 
+fn initialize_tape(root: &Path, manifest: &TapeManifest) -> Result<(), TapeStoreError> {
+    File::create(root.join(EVENTS))?.sync_all()?;
+    write_manifest(root, manifest)
+}
+
+fn read_event_file(root: &Path) -> Result<Vec<TapeEvent>, TapeStoreError> {
+    let file = File::open(root.join(EVENTS))?;
+    let mut events = Vec::new();
+    for (index, line) in BufReader::new(file).lines().enumerate() {
+        let line_number = index + 1;
+        let line = line?;
+        let event: TapeEvent =
+            serde_json::from_str(&line).map_err(|source| TapeStoreError::InvalidJsonl {
+                line: line_number,
+                source,
+            })?;
+        let expected = events.len() as u64;
+        if event.sequence != expected {
+            return Err(TapeStoreError::SequenceMismatch {
+                expected,
+                actual: event.sequence,
+                line: line_number,
+            });
+        }
+        events.push(event);
+    }
+    Ok(events)
+}
+
 fn write_manifest(root: &Path, manifest: &TapeManifest) -> Result<(), TapeStoreError> {
     validate_manifest(manifest)?;
     let tmp = root.join("manifest.json.tmp");
+    match fs::remove_file(&tmp) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
     let mut file = OpenOptions::new().write(true).create_new(true).open(&tmp)?;
     serde_json::to_writer_pretty(&mut file, manifest)?;
     file.write_all(b"\n")?;
