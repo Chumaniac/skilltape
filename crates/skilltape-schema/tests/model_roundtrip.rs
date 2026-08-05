@@ -33,6 +33,7 @@ steps:
 
 #[test]
 fn exposes_the_complete_typed_model_api() {
+    #[allow(clippy::too_many_arguments)]
     fn accepts_model_types(
         _: Option<SkillManifest>,
         _: Option<EntryPoint>,
