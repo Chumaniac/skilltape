@@ -23,8 +23,23 @@ impl Default for PolicyRules {
     fn default() -> Self {
         Self {
             denied_programs: [
-                "chmod", "chown", "chgrp", "doas", "kill", "killall", "mkfs", "mount", "pkill",
-                "poweroff", "reboot", "shutdown", "sudo", "su", "umount",
+                "chmod",
+                "chown",
+                "chgrp",
+                "cmd.exe",
+                "command.com",
+                "doas",
+                "kill",
+                "killall",
+                "mkfs",
+                "mount",
+                "pkill",
+                "poweroff",
+                "reboot",
+                "shutdown",
+                "sudo",
+                "su",
+                "umount",
             ]
             .into_iter()
             .map(str::to_owned)

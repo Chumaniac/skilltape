@@ -296,6 +296,7 @@ fn is_safe_workspace_path(path: &str) -> bool {
     if path.is_empty()
         || path.starts_with('/')
         || path.starts_with('\\')
+        || path.contains('\\')
         || has_windows_drive_prefix(path)
         || path.chars().any(|character| character.is_control())
     {
@@ -311,13 +312,10 @@ fn has_windows_drive_prefix(path: &str) -> bool {
 }
 
 fn is_safe_scope(scope: &str) -> bool {
-    scope == "**" || is_safe_workspace_path(scope)
+    is_safe_workspace_path(scope)
 }
 
 fn path_matches_scope(path: &str, scope: &str) -> bool {
-    if scope == "**" {
-        return true;
-    }
     if let Some(prefix) = scope.strip_suffix("/**") {
         return path == prefix || path.starts_with(&format!("{prefix}/"));
     }

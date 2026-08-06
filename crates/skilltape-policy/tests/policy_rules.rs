@@ -76,6 +76,49 @@ fn denies_dangerous_commands_even_when_declared() {
 }
 
 #[test]
+fn denies_windows_shell_interpreters_even_when_declared() {
+    let engine = PolicyEngine::default();
+    let permissions = permissions(
+        &[],
+        &[],
+        &[
+            "cmd.exe",
+            "command.com",
+            r"C:\Windows\System32\CMD.EXE",
+            "C:/Windows/command.com",
+        ],
+        false,
+        &[],
+        false,
+    );
+
+    for (program, args) in [
+        ("cmd.exe", vec!["/c".to_owned(), "echo hello".to_owned()]),
+        ("cmd.exe", vec!["/k".to_owned(), "echo hello".to_owned()]),
+        (
+            r"C:\Windows\System32\CMD.EXE",
+            vec!["/c".to_owned(), "echo hello".to_owned()],
+        ),
+        (
+            "command.com",
+            vec!["/c".to_owned(), "echo hello".to_owned()],
+        ),
+        (
+            "C:/Windows/command.com",
+            vec!["/c".to_owned(), "echo hello".to_owned()],
+        ),
+    ] {
+        let decision = engine.check_command(program, &args, &permissions);
+        assert_decision(
+            &decision,
+            false,
+            "POLICY_COMMAND_DANGEROUS",
+            RiskLevel::Critical,
+        );
+    }
+}
+
+#[test]
 fn path_checks_use_workspace_relative_scope_boundaries() {
     let engine = PolicyEngine::default();
     let permissions = permissions(&["inputs/**"], &["outputs/**"], &[], false, &[], false);
@@ -91,9 +134,28 @@ fn path_checks_use_workspace_relative_scope_boundaries() {
 }
 
 #[test]
+fn path_checks_reject_windows_separator_scope_bypass() {
+    let engine = PolicyEngine::default();
+    let permissions = permissions(&["foo/*"], &[], &[], false, &[], false);
+
+    let nested_windows_path =
+        engine.check_path(r"foo/bar\secret.txt", FileAccess::Read, &permissions);
+    assert_decision(&nested_windows_path, false, "PKG007", RiskLevel::High);
+}
+
+#[test]
+fn bare_double_star_does_not_grant_workspace_wide_access() {
+    let engine = PolicyEngine::default();
+    let permissions = permissions(&["**"], &[], &[], false, &[], false);
+
+    let decision = engine.check_path("workspace/file.txt", FileAccess::Read, &permissions);
+    assert_decision(&decision, false, "PKG005", RiskLevel::High);
+}
+
+#[test]
 fn path_checks_reject_absolute_drive_and_traversal_forms() {
     let engine = PolicyEngine::default();
-    let permissions = permissions(&["**"], &["**"], &[], false, &[], false);
+    let permissions = permissions(&["inputs/**"], &["outputs/**"], &[], false, &[], false);
 
     for unsafe_path in [
         "",
