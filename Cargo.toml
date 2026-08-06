@@ -17,6 +17,7 @@ assert_cmd = "2"
 clap = { version = "4", features = ["derive"] }
 fs2 = "0.4"
 jsonschema = "0.26"
+libc = "0.2"
 predicates = "3"
 portable-pty = "0.9"
 regex = "1"

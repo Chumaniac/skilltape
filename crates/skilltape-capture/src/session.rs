@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde_json::{json, Value};
 use skilltape_tape::{
@@ -11,6 +11,8 @@ use tokio_util::sync::CancellationToken;
 use crate::environment::snapshot_environment;
 use crate::pty::{PortablePtyAdapter, PtyAdapter, PtyRequest, PtyRunResult};
 use crate::{redact_text, RedactionConfig};
+
+const DEFAULT_CAPTURE_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CaptureOptions {
@@ -45,6 +47,7 @@ pub struct CaptureSummary {
     pub exit_code: u32,
     pub signal: Option<String>,
     pub cancelled: bool,
+    pub timed_out: bool,
     pub output_bytes: usize,
     pub output_truncated: bool,
     pub terminal_size: TerminalSize,
@@ -66,12 +69,34 @@ pub enum CaptureError {
     Worker(String),
 }
 
+/// Captures a command through a PTY into the supplied tape store.
+///
+/// PTYs expose one merged output stream. Output events therefore use
+/// `stream: "pty"` and `stdout_stderr_merged: true` rather than claiming
+/// separate stdout and stderr ordering that the platform cannot provide.
 pub async fn capture_terminal(
     options: CaptureOptions,
     store: TapeStore,
     cancel: CancellationToken,
 ) -> Result<CaptureSummary, CaptureError> {
-    capture_terminal_with_adapter(options, store, cancel, PortablePtyAdapter).await
+    capture_terminal_with_adapter(
+        options,
+        store,
+        cancel,
+        PortablePtyAdapter,
+        DEFAULT_CAPTURE_TIMEOUT,
+    )
+    .await
+}
+
+#[cfg(test)]
+async fn capture_terminal_with_test_timeout(
+    options: CaptureOptions,
+    store: TapeStore,
+    cancel: CancellationToken,
+    timeout: Duration,
+) -> Result<CaptureSummary, CaptureError> {
+    capture_terminal_with_adapter(options, store, cancel, PortablePtyAdapter, timeout).await
 }
 
 pub(crate) async fn capture_terminal_with_adapter<A: PtyAdapter>(
@@ -79,6 +104,7 @@ pub(crate) async fn capture_terminal_with_adapter<A: PtyAdapter>(
     store: TapeStore,
     cancel: CancellationToken,
     adapter: A,
+    timeout: Duration,
 ) -> Result<CaptureSummary, CaptureError> {
     validate_options(&options)?;
     let started_at = now_ms();
@@ -142,11 +168,38 @@ pub(crate) async fn capture_terminal_with_adapter<A: PtyAdapter>(
         workspace: options.workspace,
         output_limit: options.output_limit,
         terminal_size,
+        timeout,
     };
-    let run = tokio::task::spawn_blocking(move || adapter.run(request, cancel))
-        .await
-        .map_err(|error| CaptureError::Worker(error.to_string()))??;
-    finish_capture(&store, &mut sequence, started_at, run, redaction_config)
+    let completion_cancel = cancel.clone();
+    let run = match tokio::task::spawn_blocking(move || adapter.run(request, cancel)).await {
+        Ok(run) => run,
+        Err(error) => {
+            let error = CaptureError::Worker(error.to_string());
+            finish_capture_error(
+                &store,
+                &mut sequence,
+                started_at,
+                terminal_size,
+                completion_cancel.is_cancelled(),
+                &error,
+            )?;
+            return Err(error);
+        }
+    };
+    match run {
+        Ok(run) => finish_capture(&store, &mut sequence, started_at, run, redaction_config),
+        Err(error) => {
+            finish_capture_error(
+                &store,
+                &mut sequence,
+                started_at,
+                terminal_size,
+                completion_cancel.is_cancelled(),
+                &error,
+            )?;
+            Err(error)
+        }
+    }
 }
 
 fn finish_capture(
@@ -198,6 +251,7 @@ fn finish_capture(
             "exit_code": run.exit_code,
             "signal": run.signal,
             "cancelled": run.cancelled,
+            "timed_out": run.timed_out,
             "duration_ms": finished_at.saturating_sub(started_at),
             "terminal_size": terminal_size_json(run.terminal_size),
         }),
@@ -209,10 +263,41 @@ fn finish_capture(
         exit_code: run.exit_code,
         signal: run.signal,
         cancelled: run.cancelled,
+        timed_out: run.timed_out,
         output_bytes: run.output_bytes,
         output_truncated,
         terminal_size: run.terminal_size,
     })
+}
+
+fn finish_capture_error(
+    store: &TapeStore,
+    sequence: &mut u64,
+    started_at: u64,
+    terminal_size: TerminalSize,
+    cancelled: bool,
+    error: &CaptureError,
+) -> Result<(), CaptureError> {
+    let finished_at = now_ms();
+    append_event(
+        store,
+        sequence,
+        finished_at,
+        TapeEventKind::SessionFinished,
+        EventSource::System,
+        json!({
+            "exit_code": Value::Null,
+            "signal": Value::Null,
+            "cancelled": cancelled,
+            "timed_out": false,
+            "duration_ms": finished_at.saturating_sub(started_at),
+            "terminal_size": terminal_size_json(terminal_size),
+            "error": error.to_string(),
+        }),
+        RedactionState::Unredacted,
+    )?;
+    store.finish(finished_at)?;
+    Ok(())
 }
 
 fn append_event(
@@ -267,6 +352,8 @@ fn now_ms() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Arc, Mutex};
+    use std::time::Duration;
     use tempfile::TempDir;
 
     struct FakePty;
@@ -284,8 +371,65 @@ mod tests {
                 output_bytes: 24,
                 output_truncated: false,
                 cancelled: cancel.is_cancelled(),
+                timed_out: false,
                 terminal_size: request.terminal_size,
             })
+        }
+    }
+
+    struct RecordingPty {
+        request: Arc<Mutex<Option<RecordedRequest>>>,
+        terminal_size: TerminalSize,
+    }
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct RecordedRequest {
+        command: String,
+        args: Vec<String>,
+        workspace: PathBuf,
+        output_limit: usize,
+        terminal_size: TerminalSize,
+        timeout: Duration,
+    }
+
+    impl PtyAdapter for RecordingPty {
+        fn run(
+            &self,
+            request: PtyRequest,
+            _cancel: CancellationToken,
+        ) -> Result<PtyRunResult, CaptureError> {
+            *self.request.lock().expect("recording lock") = Some(RecordedRequest {
+                command: request.command,
+                args: request.args,
+                workspace: request.workspace,
+                output_limit: request.output_limit,
+                terminal_size: request.terminal_size,
+                timeout: request.timeout,
+            });
+            Ok(PtyRunResult {
+                exit_code: 0,
+                signal: None,
+                output: Vec::new(),
+                output_bytes: 0,
+                output_truncated: false,
+                cancelled: false,
+                timed_out: false,
+                terminal_size: self.terminal_size,
+            })
+        }
+    }
+
+    struct ErrorPty;
+
+    impl PtyAdapter for ErrorPty {
+        fn run(
+            &self,
+            _request: PtyRequest,
+            _cancel: CancellationToken,
+        ) -> Result<PtyRunResult, CaptureError> {
+            Err(CaptureError::Io(std::io::Error::other(
+                "fake PTY read failure",
+            )))
         }
     }
 
@@ -322,6 +466,7 @@ mod tests {
             store,
             cancel,
             FakePty,
+            DEFAULT_CAPTURE_TIMEOUT,
         )
         .await
         .expect("capture");
@@ -331,5 +476,175 @@ mod tests {
         let persisted = std::fs::read_to_string(tape_root.join("events.jsonl")).expect("events");
         assert!(!persisted.contains("raw-fake-secret"));
         assert!(persisted.contains("[REDACTED"));
+    }
+
+    #[tokio::test]
+    async fn short_internal_timeout_finishes_a_non_terminating_capture() {
+        let temp = TempDir::new().expect("temp dir");
+        let workspace = temp.path().join("workspace");
+        std::fs::create_dir(&workspace).expect("workspace");
+        let tape_root = temp.path().join("tape");
+        let store = TapeStore::create(
+            &tape_root,
+            skilltape_tape::TapeManifest {
+                schema: skilltape_tape::TAPE_SCHEMA_V1.to_owned(),
+                id: "timeout".to_owned(),
+                started_at_ms: 1,
+                finished_at_ms: None,
+                platform: std::env::consts::OS.to_owned(),
+                workspace_root: "workspace".to_owned(),
+                event_count: 0,
+            },
+        )
+        .expect("store");
+
+        let summary = capture_terminal_with_test_timeout(
+            CaptureOptions {
+                command: "/bin/sh".to_owned(),
+                args: vec!["-c".to_owned(), "while :; do :; done".to_owned()],
+                workspace,
+                env_allowlist: vec![],
+                output_limit: 1024,
+            },
+            store,
+            CancellationToken::new(),
+            Duration::from_millis(50),
+        )
+        .await
+        .expect("timed out capture is finalized");
+
+        assert!(summary.timed_out);
+        assert!(!summary.cancelled);
+        let reopened = TapeStore::open(&tape_root).expect("reopen tape");
+        let manifest = reopened.read_manifest().expect("manifest");
+        assert!(manifest.finished_at_ms.is_some());
+        let events = reopened
+            .read_events()
+            .expect("read events")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("valid events");
+        let finished = events.last().expect("session finished event");
+        assert_eq!(finished.kind, TapeEventKind::SessionFinished);
+        assert_eq!(finished.payload["timed_out"], true);
+    }
+
+    #[tokio::test]
+    async fn adapter_receives_command_args_cwd_limits_size_and_timeout() {
+        let temp = TempDir::new().expect("temp dir");
+        let workspace = temp.path().join("workspace");
+        std::fs::create_dir(&workspace).expect("workspace");
+        let tape_root = temp.path().join("tape");
+        let store = test_store(&tape_root);
+        let request = Arc::new(Mutex::new(None));
+        let reported_size = TerminalSize {
+            rows: 40,
+            cols: 120,
+            pixel_width: 800,
+            pixel_height: 600,
+        };
+
+        let summary = capture_terminal_with_adapter(
+            CaptureOptions {
+                command: "fake-command".to_owned(),
+                args: vec!["--flag".to_owned(), "value".to_owned()],
+                workspace: workspace.clone(),
+                env_allowlist: vec![],
+                output_limit: 321,
+            },
+            store,
+            CancellationToken::new(),
+            RecordingPty {
+                request: Arc::clone(&request),
+                terminal_size: reported_size,
+            },
+            Duration::from_secs(7),
+        )
+        .await
+        .expect("capture");
+
+        assert_eq!(
+            request.lock().expect("recording lock").take(),
+            Some(RecordedRequest {
+                command: "fake-command".to_owned(),
+                args: vec!["--flag".to_owned(), "value".to_owned()],
+                workspace,
+                output_limit: 321,
+                terminal_size: TerminalSize::default(),
+                timeout: Duration::from_secs(7),
+            })
+        );
+        assert_eq!(summary.terminal_size, reported_size);
+        let events = TapeStore::open(&tape_root)
+            .expect("reopen tape")
+            .read_events()
+            .expect("read events")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("valid events");
+        assert_eq!(events[0].payload["terminal_size"]["rows"], 24);
+        assert_eq!(events[3].payload["terminal_size"]["rows"], 40);
+        assert_eq!(events[2].payload["stream"], "pty");
+        assert_eq!(events[2].payload["stdout_stderr_merged"], true);
+    }
+
+    #[tokio::test]
+    async fn adapter_error_is_propagated_after_the_tape_is_finalized() {
+        let temp = TempDir::new().expect("temp dir");
+        let workspace = temp.path().join("workspace");
+        std::fs::create_dir(&workspace).expect("workspace");
+        let tape_root = temp.path().join("tape");
+        let store = test_store(&tape_root);
+
+        let error = capture_terminal_with_adapter(
+            CaptureOptions {
+                command: "fake-command".to_owned(),
+                args: vec![],
+                workspace,
+                env_allowlist: vec![],
+                output_limit: 1024,
+            },
+            store,
+            CancellationToken::new(),
+            ErrorPty,
+            DEFAULT_CAPTURE_TIMEOUT,
+        )
+        .await
+        .expect_err("adapter error must propagate");
+
+        assert!(matches!(error, CaptureError::Io(_)));
+        let reopened = TapeStore::open(&tape_root).expect("reopen tape");
+        assert!(reopened
+            .read_manifest()
+            .expect("manifest")
+            .finished_at_ms
+            .is_some());
+        let events = reopened
+            .read_events()
+            .expect("read events")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("valid events");
+        let finished = events.last().expect("session finished event");
+        assert_eq!(finished.kind, TapeEventKind::SessionFinished);
+        assert_eq!(finished.payload["timed_out"], false);
+        assert_eq!(finished.payload["cancelled"], false);
+        assert_eq!(
+            finished.payload["error"],
+            "I/O error: fake PTY read failure"
+        );
+    }
+
+    fn test_store(tape_root: &std::path::Path) -> TapeStore {
+        TapeStore::create(
+            tape_root,
+            skilltape_tape::TapeManifest {
+                schema: skilltape_tape::TAPE_SCHEMA_V1.to_owned(),
+                id: "fake".to_owned(),
+                started_at_ms: 1,
+                finished_at_ms: None,
+                platform: std::env::consts::OS.to_owned(),
+                workspace_root: "workspace".to_owned(),
+                event_count: 0,
+            },
+        )
+        .expect("store")
     }
 }

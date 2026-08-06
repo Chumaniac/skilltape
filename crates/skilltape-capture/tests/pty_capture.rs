@@ -113,20 +113,35 @@ async fn capture_respects_the_output_limit() {
     assert!(events[2].payload["text"].as_str().expect("text").len() <= 5);
 }
 
+#[cfg(unix)]
 #[tokio::test]
-async fn cancellation_terminates_and_reaps_the_child() {
+async fn cancellation_sends_sigint_and_cleans_up_descendants() {
     let temp = TempDir::new().expect("temp directory");
     let workspace = temp.path().join("workspace");
     std::fs::create_dir(&workspace).expect("workspace");
+    let interrupt_marker = workspace.join("interrupt-marker");
+    let descendant_pid_file = workspace.join("descendant-pid");
     let tape_root = temp.path().join("tape");
     let store = store(&tape_root, &workspace);
     let cancel = CancellationToken::new();
     let trigger = cancel.clone();
 
+    let started = std::time::Instant::now();
     let capture = tokio::spawn(capture_terminal(
         CaptureOptions {
             command: "/bin/sh".to_owned(),
-            args: vec!["-c".to_owned(), "while :; do :; done".to_owned()],
+            args: vec![
+                "-c".to_owned(),
+                concat!(
+                    "trap 'printf SIGINT > \"$1\"; exit 130' INT; ",
+                    "/bin/sh -c 'trap \"\" INT TERM; /bin/sleep 2' & ",
+                    "echo $! > \"$2\"; wait"
+                )
+                .to_owned(),
+                "capture-test".to_owned(),
+                interrupt_marker.to_string_lossy().into_owned(),
+                descendant_pid_file.to_string_lossy().into_owned(),
+            ],
             workspace,
             env_allowlist: vec![],
             output_limit: 1024,
@@ -134,15 +149,42 @@ async fn cancellation_terminates_and_reaps_the_child() {
         store,
         cancel,
     ));
-    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    for _ in 0..100 {
+        if descendant_pid_file.exists() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    let descendant_pid = std::fs::read_to_string(&descendant_pid_file)
+        .expect("descendant pid is written before cancellation")
+        .trim()
+        .to_owned();
     trigger.cancel();
 
-    let summary = tokio::time::timeout(std::time::Duration::from_secs(3), capture)
+    let summary = tokio::time::timeout(std::time::Duration::from_secs(4), capture)
         .await
         .expect("cancelled capture must not hang")
         .expect("capture task joins")
         .expect("capture records cancellation");
     assert!(summary.cancelled);
+    assert!(!summary.timed_out);
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(1),
+        "capture should not wait for the descendant's self-exit"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&interrupt_marker).expect("SIGINT trap ran"),
+        "SIGINT"
+    );
+    let descendant_pid = descendant_pid.parse::<libc::pid_t>().expect("numeric pid");
+    // Signal zero performs a read-only process existence check.
+    let descendant_status = unsafe { libc::kill(descendant_pid, 0) };
+    assert_eq!(descendant_status, -1, "descendant must be gone");
+    assert_eq!(
+        std::io::Error::last_os_error().raw_os_error(),
+        Some(libc::ESRCH),
+        "descendant PID must no longer exist"
+    );
 
     let manifest = TapeStore::open(&tape_root)
         .expect("reopen tape")
