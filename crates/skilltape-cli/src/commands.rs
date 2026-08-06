@@ -10,6 +10,8 @@ use crate::output;
 mod capture_command;
 #[path = "compile_command.rs"]
 mod compile_command;
+#[path = "console_command.rs"]
+mod console_command;
 #[path = "export_command.rs"]
 mod export_command;
 #[path = "run_command.rs"]
@@ -66,6 +68,14 @@ enum Command {
         provider: Option<String>,
         #[arg(long)]
         accept_proposal: bool,
+    },
+    Console {
+        #[arg(long, default_value = ".")]
+        workspace: PathBuf,
+        #[arg(long, default_value_t = 0)]
+        port: u16,
+        #[arg(long)]
+        open: bool,
     },
     Replay {
         skill_path: PathBuf,
@@ -136,6 +146,15 @@ pub fn run() -> ExitCode {
             output,
             provider,
             accept_proposal,
+        }),
+        Command::Console {
+            workspace,
+            port,
+            open,
+        } => console_command::run(console_command::ConsoleConfig {
+            workspace,
+            port,
+            open,
         }),
         Command::Replay {
             skill_path,

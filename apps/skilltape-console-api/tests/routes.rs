@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use serde_json::{json, Value};
-use skilltape_console_api::{router, ConsoleReadModel};
+use skilltape_console_api::{router, router_with_static, ConsoleReadModel};
 use skilltape_core::create_skill_template;
 use skilltape_tape::{
     EventSource, RedactionState, TapeEvent, TapeEventKind, TapeManifest, TapeStore, TAPE_SCHEMA_V1,
@@ -203,4 +203,71 @@ async fn symlinked_storage_resource_is_forbidden() {
     let (status, _body, error) = request(&root, "/api/v1/tapes/linked/events", &[]).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
     assert_eq!(error["error"]["code"], "unsafe_path");
+}
+
+#[tokio::test]
+async fn static_console_assets_are_read_only_and_path_bounded() {
+    let (_temp, root) = fixture();
+    let ui = root.join("ui");
+    fs::create_dir(&ui).expect("ui directory");
+    fs::write(ui.join("index.html"), "<main>SkillTape Console</main>").expect("index");
+    fs::write(ui.join("app.js"), "console.log('ok')").expect("asset");
+
+    let app = router_with_static(
+        ConsoleReadModel::new(&root).expect("read model"),
+        Some(ui.canonicalize().expect("canonical UI root")),
+    );
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/")
+                .body(Body::empty())
+                .expect("index request"),
+        )
+        .await
+        .expect("index response");
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response
+            .headers()
+            .get("content-type")
+            .and_then(|value| value.to_str().ok()),
+        Some("text/html; charset=utf-8")
+    );
+    assert_eq!(
+        to_bytes(response.into_body(), 1024)
+            .await
+            .expect("index body"),
+        "<main>SkillTape Console</main>"
+    );
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/app.js")
+                .body(Body::empty())
+                .expect("asset request"),
+        )
+        .await
+        .expect("asset response");
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        to_bytes(response.into_body(), 1024)
+            .await
+            .expect("asset body"),
+        "console.log('ok')"
+    );
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/../outside")
+                .body(Body::empty())
+                .expect("escape request"),
+        )
+        .await
+        .expect("escape response");
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }

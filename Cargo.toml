@@ -22,6 +22,7 @@ license = "MIT OR Apache-2.0"
 axum = "0.8"
 assert_cmd = "2"
 clap = { version = "4", features = ["derive"] }
+ctrlc = "3"
 fs2 = "0.4"
 jsonschema = "0.26"
 libc = "0.2"
@@ -35,7 +36,7 @@ serde_yaml = "0.9"
 sha2 = "0.10"
 tempfile = "3"
 thiserror = "2"
-tokio = { version = "1", features = ["io-util", "macros", "net", "process", "rt-multi-thread", "sync", "time"] }
+tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "sync", "time"] }
 tokio-util = "0.7"
 tokio-stream = "0.1"
 tower = { version = "0.5", features = ["util"] }

@@ -1,5 +1,7 @@
 use std::convert::Infallible;
+use std::path::{Component, PathBuf};
 
+use axum::body::Body;
 use axum::extract::{Path, Query, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{
@@ -100,6 +102,16 @@ impl IntoResponse for ApiError {
 }
 
 pub fn router(model: ConsoleReadModel) -> Router {
+    router_with_static(model, None)
+}
+
+#[derive(Clone, Debug)]
+struct AppState {
+    model: ConsoleReadModel,
+    static_root: Option<PathBuf>,
+}
+
+pub fn router_with_static(model: ConsoleReadModel, static_root: Option<PathBuf>) -> Router {
     Router::new()
         .route("/api/v1/workspaces", get(list_workspaces))
         .route("/api/v1/workspaces/{id}/tapes", get(list_tapes))
@@ -108,62 +120,64 @@ pub fn router(model: ConsoleReadModel) -> Router {
         .route("/api/v1/runs/{id}", get(run_document))
         .route("/api/v1/receipts/{id}", get(receipt_document))
         .route("/api/v1/runs/{id}/events", get(run_events))
-        .with_state(model)
+        .route("/", get(index))
+        .route("/{*path}", get(static_asset))
+        .with_state(AppState { model, static_root })
 }
 
 async fn list_workspaces(
-    State(model): State<ConsoleReadModel>,
+    State(state): State<AppState>,
 ) -> Result<Json<Collection<crate::read_model::WorkspaceSummary>>, ApiError> {
-    Ok(Json(model.workspaces()?))
+    Ok(Json(state.model.workspaces()?))
 }
 
 async fn list_tapes(
-    State(model): State<ConsoleReadModel>,
+    State(state): State<AppState>,
     Path(workspace_id): Path<String>,
     Query(query): Query<PageQuery>,
 ) -> Result<Json<Collection<crate::read_model::TapeSummary>>, ApiError> {
     let (offset, limit) = page(&query)?;
-    Ok(Json(model.tapes(&workspace_id, offset, limit)?))
+    Ok(Json(state.model.tapes(&workspace_id, offset, limit)?))
 }
 
 async fn tape_events(
-    State(model): State<ConsoleReadModel>,
+    State(state): State<AppState>,
     Path(tape_id): Path<String>,
     Query(query): Query<PageQuery>,
 ) -> Result<Json<TapeEvents>, ApiError> {
     let (offset, limit) = page(&query)?;
-    Ok(Json(model.tape_events(&tape_id, offset, limit)?))
+    Ok(Json(state.model.tape_events(&tape_id, offset, limit)?))
 }
 
 async fn skill_diff(
-    State(model): State<ConsoleReadModel>,
+    State(state): State<AppState>,
     Path(skill_id): Path<String>,
 ) -> Result<Json<SkillDiff>, ApiError> {
-    Ok(Json(model.skill_diff(&skill_id)?))
+    Ok(Json(state.model.skill_diff(&skill_id)?))
 }
 
 async fn run_document(
-    State(model): State<ConsoleReadModel>,
+    State(state): State<AppState>,
     Path(run_id): Path<String>,
 ) -> Result<Json<StoredDocument>, ApiError> {
-    Ok(Json(model.run(&run_id)?))
+    Ok(Json(state.model.run(&run_id)?))
 }
 
 async fn receipt_document(
-    State(model): State<ConsoleReadModel>,
+    State(state): State<AppState>,
     Path(receipt_id): Path<String>,
 ) -> Result<Json<StoredDocument>, ApiError> {
-    Ok(Json(model.receipt(&receipt_id)?))
+    Ok(Json(state.model.receipt(&receipt_id)?))
 }
 
 async fn run_events(
-    State(model): State<ConsoleReadModel>,
+    State(state): State<AppState>,
     Path(run_id): Path<String>,
     headers: HeaderMap,
 ) -> Result<Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>>, ApiError> {
     let last_event_id = parse_last_event_id(&headers)?;
-    let events = model.run_events(&run_id, last_event_id)?;
-    let last_sequence = model.last_run_sequence(&run_id)?;
+    let events = state.model.run_events(&run_id, last_event_id)?;
+    let last_sequence = state.model.last_run_sequence(&run_id)?;
     let mut output = Vec::with_capacity(events.len() + 1);
     for event in events {
         let data = serde_json::to_string(&event.document).map_err(|_| ApiError::Internal)?;
@@ -186,6 +200,65 @@ async fn run_events(
             .data(terminal.to_string())));
     }
     Ok(Sse::new(iter(output)))
+}
+
+async fn index(State(state): State<AppState>) -> Response {
+    static_asset_bytes(state.static_root.as_deref(), "index.html").await
+}
+
+async fn static_asset(State(state): State<AppState>, Path(path): Path<String>) -> Response {
+    static_asset_bytes(state.static_root.as_deref(), &path).await
+}
+
+async fn static_asset_bytes(root: Option<&std::path::Path>, relative: &str) -> Response {
+    let Some(root) = root else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let Some(path) = safe_static_path(root, relative) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    match tokio::fs::read(&path).await {
+        Ok(bytes) => (
+            [(header::CONTENT_TYPE, static_content_type(&path))],
+            Body::from(bytes),
+        )
+            .into_response(),
+        Err(_) => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+fn safe_static_path(root: &std::path::Path, relative: &str) -> Option<PathBuf> {
+    let mut path = root.to_owned();
+    for component in std::path::Path::new(relative).components() {
+        match component {
+            Component::Normal(value) => path.push(value),
+            Component::CurDir => {}
+            Component::RootDir | Component::ParentDir | Component::Prefix(_) => return None,
+        }
+    }
+    let metadata = std::fs::symlink_metadata(&path).ok()?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return None;
+    }
+    let canonical = path.canonicalize().ok()?;
+    if !canonical.starts_with(root) {
+        return None;
+    }
+    Some(path)
+}
+
+fn static_content_type(path: &std::path::Path) -> &'static str {
+    match path.extension().and_then(|extension| extension.to_str()) {
+        Some("css") => "text/css; charset=utf-8",
+        Some("html") => "text/html; charset=utf-8",
+        Some("js") | Some("mjs") => "text/javascript; charset=utf-8",
+        Some("json") => "application/json; charset=utf-8",
+        Some("svg") => "image/svg+xml",
+        Some("wasm") => "application/wasm",
+        Some("woff") => "font/woff",
+        Some("woff2") => "font/woff2",
+        _ => "application/octet-stream",
+    }
 }
 
 fn page(query: &PageQuery) -> Result<(usize, usize), ApiError> {
