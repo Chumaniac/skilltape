@@ -8,6 +8,8 @@ use crate::output;
 
 #[path = "capture_command.rs"]
 mod capture_command;
+#[path = "compile_command.rs"]
+mod compile_command;
 
 const PACKAGE_ERROR_EXIT_CODE: u8 = 2;
 const POLICY_ERROR_EXIT_CODE: u8 = 3;
@@ -52,6 +54,15 @@ enum Command {
         #[arg(long)]
         yes: bool,
     },
+    Compile {
+        tape: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+        #[arg(long)]
+        provider: Option<String>,
+        #[arg(long)]
+        accept_proposal: bool,
+    },
 }
 
 pub fn run() -> ExitCode {
@@ -85,6 +96,17 @@ pub fn run() -> ExitCode {
             max_output_bytes,
             json,
             yes,
+        }),
+        Command::Compile {
+            tape,
+            output,
+            provider,
+            accept_proposal,
+        } => compile_command::run(compile_command::CompileConfig {
+            tape,
+            output,
+            provider,
+            accept_proposal,
         }),
     }
 }
