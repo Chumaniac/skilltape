@@ -1,5 +1,7 @@
 mod deterministic;
+mod proposal;
 mod provenance;
+mod provider;
 mod steps;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -11,7 +13,11 @@ use skilltape_tape::TapeEvent;
 use thiserror::Error;
 
 pub use deterministic::DeterministicCompiler;
+pub use proposal::{apply_proposal, ProposalError, ProposalPolicy};
 pub use provenance::{CompileProvenance, StepProvenance, COMPILE_SCHEMA_V1};
+pub use provider::{
+    ProposalInput, ProposalProvider, ProposalStatus, ProviderError, WorkflowProposal,
+};
 
 #[derive(Debug, Error)]
 pub enum CompileError {
