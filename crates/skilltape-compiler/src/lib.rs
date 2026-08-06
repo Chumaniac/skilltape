@@ -1,6 +1,6 @@
 mod provenance;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -117,10 +117,26 @@ impl TapeSession {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct CompileTarget {
     pub name: String,
     pub version: String,
+}
+
+#[derive(Deserialize)]
+struct CompileTargetFields {
+    name: String,
+    version: String,
+}
+
+impl<'de> Deserialize<'de> for CompileTarget {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let fields = CompileTargetFields::deserialize(deserializer)?;
+        Self::new(fields.name, fields.version).map_err(serde::de::Error::custom)
+    }
 }
 
 impl CompileTarget {
@@ -144,11 +160,28 @@ impl CompileTarget {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct CompileRequest {
     pub tape: TapeSession,
     pub name: String,
     pub target: CompileTarget,
+}
+
+#[derive(Deserialize)]
+struct CompileRequestFields {
+    tape: TapeSession,
+    name: String,
+    target: CompileTarget,
+}
+
+impl<'de> Deserialize<'de> for CompileRequest {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let fields = CompileRequestFields::deserialize(deserializer)?;
+        Self::new(fields.tape, fields.name, fields.target).map_err(serde::de::Error::custom)
+    }
 }
 
 impl CompileRequest {
@@ -180,13 +213,41 @@ impl FixtureDraft {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct CompileOutput {
     pub workflow: Workflow,
     pub permissions: Permissions,
     pub skill_markdown: String,
     pub fixtures: FixtureDraft,
     pub provenance: Vec<StepProvenance>,
+}
+
+#[derive(Deserialize)]
+struct CompileOutputFields {
+    workflow: Workflow,
+    permissions: Permissions,
+    skill_markdown: String,
+    fixtures: FixtureDraft,
+    provenance: Vec<StepProvenance>,
+}
+
+impl<'de> Deserialize<'de> for CompileOutput {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let fields = CompileOutputFields::deserialize(deserializer)?;
+        let provenance = canonicalize_provenance(&fields.workflow, fields.provenance)
+            .map_err(serde::de::Error::custom)?;
+
+        Ok(Self {
+            workflow: fields.workflow,
+            permissions: fields.permissions,
+            skill_markdown: fields.skill_markdown,
+            fixtures: fields.fixtures,
+            provenance,
+        })
+    }
 }
 
 impl CompileOutput {
@@ -198,7 +259,8 @@ impl CompileOutput {
         fixtures: FixtureDraft,
         provenance: Vec<StepProvenance>,
     ) -> Result<Self, CompileError> {
-        let provenance = canonicalize_provenance(tape, &workflow, provenance)?;
+        let provenance = canonicalize_provenance(&workflow, provenance)?;
+        validate_tape_references(tape, &provenance)?;
         Ok(Self {
             workflow,
             permissions,
@@ -209,17 +271,29 @@ impl CompileOutput {
     }
 
     pub fn validate(&self, tape: &TapeSession) -> Result<(), CompileError> {
-        canonicalize_provenance(tape, &self.workflow, self.provenance.clone()).map(|_| ())
+        let provenance = canonicalize_provenance(&self.workflow, self.provenance.clone())?;
+        validate_tape_references(tape, &provenance)
     }
 
     pub fn provenance_document(&self, target: CompileTarget) -> CompileProvenance {
         CompileProvenance::new(target, self.provenance.clone())
     }
 
+    /// Serializes the artifact in compact canonical JSON for deterministic hashing.
+    ///
+    /// Only permission allow-lists are treated as sets: their values are sorted and
+    /// deduplicated. Workflow step order, command argument order, and fixture contents
+    /// remain significant and are serialized in their existing order/content.
     pub fn deterministic_json(&self) -> Result<Vec<u8>, CompileError> {
-        Ok(serde_json::to_vec(self)?)
+        let mut canonical = self.clone();
+        canonicalize_permission_collections(&mut canonical.permissions);
+        Ok(serde_json::to_vec(&canonical)?)
     }
 
+    /// Returns the SHA-256 hash of this artifact only.
+    ///
+    /// `CompileOutput` intentionally has no compile name or target fields, so the
+    /// `CompileRequest` envelope is not included in this hash.
     pub fn content_hash(&self) -> Result<String, CompileError> {
         let bytes = self.deterministic_json()?;
         Ok(format!("{:x}", Sha256::digest(bytes)))
@@ -235,7 +309,6 @@ pub trait Compiler {
 }
 
 fn canonicalize_provenance(
-    tape: &TapeSession,
     workflow: &Workflow,
     provenance: Vec<StepProvenance>,
 ) -> Result<Vec<StepProvenance>, CompileError> {
@@ -249,7 +322,7 @@ fn canonicalize_provenance(
         workflow_ids.push(step_id);
     }
 
-    let mut by_step = std::collections::BTreeMap::new();
+    let mut by_step = BTreeMap::new();
     for source in provenance {
         source.validate()?;
         let step_id = source.step_id.clone();
@@ -269,17 +342,38 @@ fn canonicalize_provenance(
             .ok_or_else(|| CompileError::MissingSource {
                 step_id: step_id.clone(),
             })?;
+        ordered.push(source);
+    }
+    Ok(ordered)
+}
+
+fn validate_tape_references(
+    tape: &TapeSession,
+    provenance: &[StepProvenance],
+) -> Result<(), CompileError> {
+    for source in provenance {
         for &event_sequence in &source.event_sequences {
             if tape.event(event_sequence).is_none() {
                 return Err(CompileError::UnknownSource {
-                    step_id: step_id.clone(),
+                    step_id: source.step_id.clone(),
                     event_sequence,
                 });
             }
         }
-        ordered.push(source);
     }
-    Ok(ordered)
+    Ok(())
+}
+
+fn canonicalize_permission_collections(permissions: &mut Permissions) {
+    for values in [
+        &mut permissions.filesystem.read,
+        &mut permissions.filesystem.write,
+        &mut permissions.process.executables,
+        &mut permissions.network.allow_hosts,
+    ] {
+        values.sort_unstable();
+        values.dedup();
+    }
 }
 
 fn step_id(step: &Step) -> &str {
