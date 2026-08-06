@@ -34,6 +34,11 @@ pub struct RunRequest {
 }
 
 /// Resource ceilings applied to every process invocation.
+///
+/// Replay steps execute sequentially, so the active process count never exceeds
+/// one. `max_processes` remains an explicit caller ceiling and must be at least
+/// one; values above one are looser ceilings that the sequential runner can
+/// satisfy.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ResourceLimits {
     pub max_processes: u32,
@@ -167,7 +172,7 @@ pub async fn run_skill_with_adapter<A>(
 where
     A: ProcessAdapter + ?Sized,
 {
-    validate_limits(&request.limits)?;
+    validate_limits(&request.limits, &request.package.permissions)?;
     validate_output_root(
         &request.package.root,
         &request.input_root,
@@ -609,6 +614,7 @@ fn policy_checks(
         }
         Step::Script(step) => {
             decisions.push(policy.check_path(&step.path, FileAccess::Read, permissions));
+            decisions.push(policy.check_command(&step.path, &step.args, permissions));
             for output in &step.outputs {
                 decisions.push(policy.check_path(&output.path, FileAccess::Write, permissions));
             }
@@ -663,7 +669,10 @@ fn declared_output_paths(package: &LoadedSkillPackage) -> Vec<String> {
             Step::Script(step) => {
                 paths.extend(step.outputs.iter().map(|output| output.path.clone()))
             }
-            Step::File(_) | Step::Assert(_) => {}
+            Step::File(step) => {
+                paths.insert(step.to_path.clone());
+            }
+            Step::Assert(_) => {}
         }
     }
     paths.into_iter().collect()
@@ -714,10 +723,20 @@ fn bytes_to_string(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
 }
 
-fn validate_limits(limits: &ResourceLimits) -> Result<(), RunError> {
-    if limits.max_processes == 0 {
+const MAX_ACTIVE_PROCESSES: u32 = 1;
+
+fn validate_limits(
+    limits: &ResourceLimits,
+    permissions: &skilltape_schema::Permissions,
+) -> Result<(), RunError> {
+    if limits.max_processes < MAX_ACTIVE_PROCESSES {
         return Err(RunError::InvalidLimits {
-            message: "max_processes must be greater than zero".into(),
+            message: "resource max_processes must be at least one".into(),
+        });
+    }
+    if permissions.process.max_processes < MAX_ACTIVE_PROCESSES {
+        return Err(RunError::InvalidLimits {
+            message: "package permissions process.max_processes must be at least one".into(),
         });
     }
     if limits.step_timeout.is_zero() {

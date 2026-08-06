@@ -22,6 +22,11 @@ pub(crate) enum WorkspaceError {
     MissingOutput { path: String },
     #[error("output root already exists: {path}")]
     OutputExists { path: PathBuf },
+    #[error("cannot copy directory into itself or a descendant: {source_path} -> {destination}")]
+    CopyIntoSource {
+        source_path: PathBuf,
+        destination: PathBuf,
+    },
     #[error("workspace I/O failed at {path}: {source}")]
     Io {
         path: PathBuf,
@@ -280,6 +285,24 @@ fn copy_entry(source: &Path, destination: &Path) -> Result<(), WorkspaceError> {
     ensure_no_symlink_ancestors(destination)?;
 
     if metadata.is_dir() {
+        if destination == source || destination.starts_with(source) {
+            return Err(WorkspaceError::CopyIntoSource {
+                source_path: source.to_path_buf(),
+                destination: destination.to_path_buf(),
+            });
+        }
+        if let Some(destination_metadata) = symlink_metadata(destination)? {
+            if destination_metadata.is_symlink() {
+                return Err(WorkspaceError::Symlink {
+                    path: destination.to_path_buf(),
+                });
+            }
+            if !destination_metadata.is_dir() {
+                return Err(WorkspaceError::OutputExists {
+                    path: destination.to_path_buf(),
+                });
+            }
+        }
         fs::create_dir_all(destination).map_err(|source| WorkspaceError::Io {
             path: destination.to_path_buf(),
             source,

@@ -9,7 +9,7 @@ use skilltape_core::{create_skill_template, LoadedSkillPackage, SkillPackage};
 use skilltape_policy::PolicyEngine;
 use skilltape_runner::{
     run_skill_with_adapter, ProcessAdapter, ProcessError, ProcessOutput, ProcessRequest,
-    ProcessStatus, ResourceLimits, RunEvent, RunRequest, RunStatus, StepStatus,
+    ProcessStatus, ResourceLimits, RunError, RunEvent, RunRequest, RunStatus, StepStatus,
 };
 use skilltape_schema::{FileStep, Step};
 use tempfile::{tempdir, TempDir};
@@ -165,6 +165,15 @@ fn script_package(workflow_steps: Vec<Value>, permissions: Value) -> PackageFixt
 }
 
 fn permissions(read: &[&str], write: &[&str], executables: &[&str]) -> Value {
+    permissions_with_max_processes(read, write, executables, 2)
+}
+
+fn permissions_with_max_processes(
+    read: &[&str],
+    write: &[&str],
+    executables: &[&str],
+    max_processes: u32,
+) -> Value {
     json!({
         "schema": "skilltape.dev/permissions/v1",
         "filesystem": {
@@ -173,7 +182,7 @@ fn permissions(read: &[&str], write: &[&str], executables: &[&str]) -> Value {
         },
         "process": {
             "executables": executables,
-            "max_processes": 2,
+            "max_processes": max_processes,
             "default_timeout_ms": 1000,
         },
         "network": {
@@ -507,7 +516,7 @@ async fn script_is_copied_into_the_isolated_workspace_before_spawn() {
             "args": [],
             "timeout_ms": 1000,
         })],
-        permissions(&["scripts/emit.sh"], &[], &[]),
+        permissions(&["scripts/emit.sh"], &[], &["scripts/emit.sh"]),
     );
     let adapter = FakeAdapter::new(FakeBehavior::Return(process_output(
         ProcessStatus::Exited,
@@ -529,6 +538,41 @@ async fn script_is_copied_into_the_isolated_workspace_before_spawn() {
         adapter.snapshot("scripts/emit.sh"),
         Some(b"#!/bin/sh\nprintf script-output\n".to_vec())
     );
+}
+
+#[tokio::test]
+async fn script_without_execution_permission_is_denied_before_spawn() {
+    let root = tempdir().expect("root");
+    let input = root.path().join("input");
+    fs::create_dir(&input).expect("input");
+    let fixture = script_package(
+        vec![json!({
+            "action": "script",
+            "id": "script",
+            "path": "scripts/emit.sh",
+            "args": [],
+            "timeout_ms": 1000,
+        })],
+        permissions(&["scripts/emit.sh"], &[], &[]),
+    );
+    let adapter = FakeAdapter::new(FakeBehavior::Return(process_output(
+        ProcessStatus::Exited,
+        Some(0),
+        "unexpected",
+    )));
+
+    let (summary, events) = run(
+        fixture,
+        &input,
+        &root.path().join("output"),
+        &adapter,
+        CancellationToken::new(),
+    )
+    .await;
+
+    assert_eq!(summary.status, RunStatus::Failed);
+    assert_eq!(adapter.calls(), 0);
+    assert_eq!(events[2].status, StepStatus::Denied);
 }
 
 #[tokio::test]
@@ -572,6 +616,133 @@ async fn file_move_assert_and_materialization_are_policy_guarded() {
         fs::read_to_string(output.join("result.txt")).unwrap(),
         "payload"
     );
+}
+
+#[tokio::test]
+async fn file_copy_directory_to_descendant_is_rejected_before_creation() {
+    let root = tempdir().expect("root");
+    let input = root.path().join("input");
+    fs::create_dir_all(input.join("source")).expect("source directory");
+    fs::write(input.join("source/fixture.txt"), "payload").expect("fixture");
+    let fixture = package(
+        vec![json!({
+            "action": "file",
+            "id": "recursive-copy",
+            "operation": "copy",
+            "from": "inputs/source",
+            "to": "inputs/source/nested",
+        })],
+        permissions(&["inputs/**"], &["inputs/**"], &[]),
+    );
+    let adapter = FakeAdapter::default();
+
+    let (summary, _) = run(
+        fixture,
+        &input,
+        &root.path().join("output"),
+        &adapter,
+        CancellationToken::new(),
+    )
+    .await;
+
+    assert_eq!(summary.status, RunStatus::Failed);
+    assert!(format!("{:?}", summary.failure).contains("cannot copy directory"));
+}
+
+#[tokio::test]
+async fn file_destinations_and_mkdir_materialize_without_manifest_outputs() {
+    let root = tempdir().expect("root");
+    let input = root.path().join("input");
+    fs::create_dir(&input).expect("input");
+    fs::write(input.join("source.txt"), "payload").expect("source");
+    let output = root.path().join("output");
+    let fixture = package(
+        vec![
+            json!({
+                "action": "file",
+                "id": "copy",
+                "operation": "copy",
+                "from": "inputs/source.txt",
+                "to": "outputs/result.txt",
+            }),
+            json!({
+                "action": "file",
+                "id": "mkdir",
+                "operation": "mkdir",
+                "from": "unused",
+                "to": "outputs/nested",
+            }),
+        ],
+        permissions(&["inputs/**"], &["outputs/**"], &[]),
+    );
+    let adapter = FakeAdapter::default();
+
+    let (summary, _) = run(fixture, &input, &output, &adapter, CancellationToken::new()).await;
+
+    assert_eq!(summary.status, RunStatus::Succeeded);
+    assert_eq!(
+        fs::read_to_string(output.join("result.txt")).unwrap(),
+        "payload"
+    );
+    assert!(output.join("nested").is_dir());
+}
+
+#[tokio::test]
+async fn zero_resource_or_package_process_limits_are_typed_errors() {
+    let root = tempdir().expect("root");
+    let input = root.path().join("input");
+    fs::create_dir(&input).expect("input");
+    let adapter = FakeAdapter::default();
+
+    let fixture = package(
+        vec![exec_step("print", "printf", &["x"])],
+        permissions(&[], &[], &["printf"]),
+    );
+    let mut invalid_limits = limits();
+    invalid_limits.max_processes = 0;
+    let (sender, _receiver) = mpsc::channel(4);
+    let result = run_skill_with_adapter(
+        RunRequest {
+            package: fixture.package,
+            input_root: input.clone(),
+            output_root: root.path().join("limits-output"),
+            limits: invalid_limits,
+        },
+        PolicyEngine::default(),
+        sender,
+        CancellationToken::new(),
+        &adapter,
+    )
+    .await;
+    assert!(matches!(
+        result,
+        Err(RunError::InvalidLimits { message })
+            if message.contains("resource max_processes")
+    ));
+
+    let invalid_package = package(
+        vec![exec_step("print", "printf", &["x"])],
+        permissions_with_max_processes(&[], &[], &["printf"], 0),
+    );
+    let (sender, _receiver) = mpsc::channel(4);
+    let result = run_skill_with_adapter(
+        RunRequest {
+            package: invalid_package.package,
+            input_root: input,
+            output_root: root.path().join("package-output"),
+            limits: limits(),
+        },
+        PolicyEngine::default(),
+        sender,
+        CancellationToken::new(),
+        &adapter,
+    )
+    .await;
+    assert!(matches!(
+        result,
+        Err(RunError::InvalidLimits { message })
+            if message.contains("package permissions process.max_processes")
+    ));
 }
 
 #[tokio::test]
