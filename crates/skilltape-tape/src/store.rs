@@ -64,19 +64,24 @@ impl TapeStore {
         let root = root.into();
         validate_root(&root)?;
         validate_manifest(&manifest)?;
-        if root.exists() {
-            if !root.is_dir() {
-                return Err(TapeStoreError::InvalidRoot {
-                    path: root,
-                    source: io::Error::new(io::ErrorKind::AlreadyExists, "path is not a directory"),
-                });
-            }
-            return Err(TapeStoreError::AlreadyExists { path: root });
+        if let Some(parent) = root
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+        {
+            fs::create_dir_all(parent).map_err(|source| TapeStoreError::InvalidRoot {
+                path: root.clone(),
+                source,
+            })?;
         }
-        fs::create_dir_all(&root).map_err(|source| TapeStoreError::InvalidRoot {
-            path: root.clone(),
-            source,
-        })?;
+        match fs::create_dir(&root) {
+            Ok(()) => {}
+            Err(source) if source.kind() == io::ErrorKind::AlreadyExists && root.is_dir() => {
+                return Err(TapeStoreError::AlreadyExists { path: root });
+            }
+            Err(source) => {
+                return Err(TapeStoreError::InvalidRoot { path: root, source });
+            }
+        }
         if let Err(error) = initialize_tape(&root, &manifest) {
             let _ = fs::remove_dir_all(&root);
             return Err(error);
@@ -158,6 +163,14 @@ impl TapeStore {
         if manifest.finished_at_ms.is_some() {
             return Err(TapeStoreError::AlreadyFinished);
         }
+        let event_count = read_event_file(&self.root)?.len() as u64;
+        if event_count < manifest.event_count {
+            return Err(TapeStoreError::EventCountShortfall {
+                manifest_count: manifest.event_count,
+                event_count,
+            });
+        }
+        manifest.event_count = event_count;
         manifest.finished_at_ms = Some(finished_at_ms);
         write_manifest(&self.root, &manifest)?;
         Ok(manifest)

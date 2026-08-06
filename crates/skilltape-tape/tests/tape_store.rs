@@ -87,6 +87,45 @@ fn creates_empty_tape_and_reopens_it_without_overwriting() {
 }
 
 #[test]
+fn simultaneous_creates_have_one_winner_without_losing_its_tape() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let root = temp_dir.path().join("tape-1");
+    let start = Arc::new(Barrier::new(3));
+    let mut workers = Vec::new();
+
+    for id in ["first", "second"] {
+        let root = root.clone();
+        let start = Arc::clone(&start);
+        workers.push(thread::spawn(move || {
+            start.wait();
+            TapeStore::create(root, manifest(id)).map(|store| (id, store))
+        }));
+    }
+    start.wait();
+
+    let results: Vec<_> = workers
+        .into_iter()
+        .map(|worker| worker.join().unwrap())
+        .collect();
+    assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+    assert_eq!(
+        results
+            .iter()
+            .filter(|result| matches!(result, Err(TapeStoreError::AlreadyExists { .. })))
+            .count(),
+        1
+    );
+
+    let winner_id = results
+        .iter()
+        .find_map(|result| result.as_ref().ok().map(|(id, _store)| *id))
+        .unwrap();
+    let reopened = TapeStore::open(&root).unwrap();
+    assert_eq!(reopened.read_manifest().unwrap(), manifest(winner_id));
+    assert!(reopened.read_events().unwrap().next().is_none());
+}
+
+#[test]
 fn appends_events_with_fsync_and_recovers_them_in_sequence() {
     let (_temp_dir, root, store) = create_store();
     let expected = vec![event(0), event(1)];
@@ -222,6 +261,26 @@ fn retry_after_event_fsync_repairs_manifest_without_duplicating_the_event() {
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
     assert_eq!(recovered, vec![event(0)]);
+}
+
+#[test]
+fn finish_after_event_fsync_repairs_stale_manifest() {
+    let (_temp_dir, root, store) = create_store();
+    append_raw_event(&root, &event(0));
+
+    let finished = store.finish(99).unwrap();
+
+    assert_eq!(finished.event_count, 1);
+    assert_eq!(finished.finished_at_ms, Some(99));
+    assert_eq!(store.read_manifest().unwrap(), finished);
+    assert_eq!(
+        store
+            .read_events()
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap(),
+        vec![event(0)]
+    );
 }
 
 #[test]
