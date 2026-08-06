@@ -100,3 +100,8 @@
 
 - The merge API intentionally receives filesystem timestamps from its caller because `watch_workspace` remains backward-compatible; integrating timestamp assignment into a future tape writer is outside this fix round.
 - Raw queue overflow aborts capture with an explicit error rather than dropping events, preserving correctness at the cost of requiring the caller to retry or report the incomplete capture.
+
+## Security correction
+
+- `normalize_workspace_path` now canonicalizes the nearest existing ancestor before checking canonical root containment, rejecting nonexistent descendants reached through outside symlinks while preserving lexical traversal checks and legitimate new paths under the root.
+- Added a Unix regression test for an outside symlink with a nonexistent descendant.

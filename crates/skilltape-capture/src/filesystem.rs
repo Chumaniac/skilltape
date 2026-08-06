@@ -589,17 +589,14 @@ fn normalize_workspace_path(root: &Path, path: &Path) -> Result<String, Filesyst
     if !lexical.starts_with(root) {
         return Err(FilesystemCaptureError::PathOutsideRoot(path.to_owned()));
     }
-    if absolute.exists() {
-        let resolved =
-            absolute
-                .canonicalize()
-                .map_err(|source| FilesystemCaptureError::InspectPath {
-                    path: absolute.clone(),
-                    source,
-                })?;
-        if !resolved.starts_with(root) {
-            return Err(FilesystemCaptureError::PathOutsideRoot(path.to_owned()));
+    let resolved = canonicalize_nearest_existing_ancestor(&absolute).map_err(|source| {
+        FilesystemCaptureError::InspectPath {
+            path: absolute.clone(),
+            source,
         }
+    })?;
+    if !resolved.starts_with(root) {
+        return Err(FilesystemCaptureError::PathOutsideRoot(path.to_owned()));
     }
     let relative = lexical
         .strip_prefix(root)
@@ -612,6 +609,21 @@ fn normalize_workspace_path(root: &Path, path: &Path) -> Result<String, Filesyst
         })
         .collect::<Vec<_>>()
         .join("/"))
+}
+
+fn canonicalize_nearest_existing_ancestor(path: &Path) -> std::io::Result<PathBuf> {
+    let mut candidate = path.to_owned();
+    loop {
+        match candidate.canonicalize() {
+            Ok(resolved) => return Ok(resolved),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                if !candidate.pop() {
+                    return Err(error);
+                }
+            }
+            Err(error) => return Err(error),
+        }
+    }
 }
 
 fn normalize_lexically(path: &Path) -> PathBuf {
@@ -882,6 +894,23 @@ mod tests {
         assert!(matches!(
             normalize_workspace_path(&root, &root.join("escape")),
             Err(FilesystemCaptureError::PathOutsideRoot(path)) if path == root.join("escape")
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_nonexistent_descendants_through_outside_symlinks() {
+        let temp = TempDir::new().expect("temp directory");
+        let root = temp.path().join("workspace");
+        let outside = temp.path().join("outside");
+        let path = root.join("escape/new-file/descendant.txt");
+        std::fs::create_dir(&root).expect("workspace");
+        std::fs::create_dir(&outside).expect("outside directory");
+        std::os::unix::fs::symlink(&outside, root.join("escape")).expect("symlink");
+
+        assert!(matches!(
+            normalize_workspace_path(&root, &path),
+            Err(FilesystemCaptureError::PathOutsideRoot(rejected)) if rejected == path
         ));
     }
 }
