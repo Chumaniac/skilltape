@@ -1,3 +1,6 @@
 .worktrees/
 .superpowers/sdd/
 target/
+/apps/skilltape-console/node_modules/
+/apps/skilltape-console/dist/
+/apps/skilltape-console/test-results/
