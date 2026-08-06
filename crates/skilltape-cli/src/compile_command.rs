@@ -141,18 +141,28 @@ fn ensure_output_available(output: &Path) -> Result<(), CompileCommandError> {
 }
 
 fn validate_output_parent(output: &Path) -> Result<(), CompileCommandError> {
-    let parent = output_parent(output);
-    for ancestor in parent.ancestors() {
-        match fs::symlink_metadata(ancestor) {
-            Ok(metadata) if metadata.file_type().is_symlink() => {
-                return Err(CompileCommandError::UnsafeOutput(output.to_owned()));
+    let mut parent = output_parent(output);
+    loop {
+        match fs::symlink_metadata(parent) {
+            Ok(metadata) => {
+                if metadata.file_type().is_symlink() {
+                    return Err(CompileCommandError::UnsafeOutput(output.to_owned()));
+                }
+                return Ok(());
             }
-            Ok(_) => {}
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                let Some(next) = parent.parent() else {
+                    return Ok(());
+                };
+                parent = if next.as_os_str().is_empty() {
+                    Path::new(".")
+                } else {
+                    next
+                };
+            }
             Err(error) => return Err(CompileCommandError::Io(error)),
         }
     }
-    Ok(())
 }
 
 fn compile_name(output: &Path) -> Result<String, CompileCommandError> {
