@@ -55,6 +55,8 @@ impl ProcessOutput {
 pub enum ProcessError {
     #[error("failed to spawn process")]
     SpawnFailed,
+    #[error("no supported process sandbox is available")]
+    SandboxUnavailable,
     #[error("process I/O failed: {message}")]
     Io { message: String },
 }
@@ -81,9 +83,8 @@ async fn run_process(
     request: ProcessRequest,
     cancel: CancellationToken,
 ) -> Result<ProcessOutput, ProcessError> {
-    let mut command = Command::new(&request.program);
+    let mut command = sandboxed_command(&request)?;
     command
-        .args(&request.args)
         .current_dir(&request.cwd)
         .env_clear()
         .stdin(Stdio::null())
@@ -127,8 +128,16 @@ async fn run_process(
         }
     };
 
-    let (stdout, stdout_truncated) = join_reader(stdout_task).await?;
-    let (stderr, stderr_truncated) = join_reader(stderr_task).await?;
+    let (stdout, stdout_truncated, stderr, stderr_truncated) =
+        match join_readers(stdout_task, stderr_task).await {
+            Ok((stdout, stdout_truncated, stderr, stderr_truncated)) => {
+                (stdout, stdout_truncated, stderr, stderr_truncated)
+            }
+            Err(error) if matches!(status, ProcessStatus::TimedOut | ProcessStatus::Cancelled) => {
+                (Vec::new(), true, error.to_string().into_bytes(), true)
+            }
+            Err(error) => return Err(error),
+        };
 
     Ok(ProcessOutput {
         status,
@@ -172,12 +181,150 @@ where
     Ok((output, truncated))
 }
 
+async fn join_readers(
+    mut stdout_task: tokio::task::JoinHandle<Result<(Vec<u8>, bool), ProcessError>>,
+    mut stderr_task: tokio::task::JoinHandle<Result<(Vec<u8>, bool), ProcessError>>,
+) -> Result<(Vec<u8>, bool, Vec<u8>, bool), ProcessError> {
+    let joined = async {
+        let (stdout, stdout_truncated) = join_reader(&mut stdout_task).await?;
+        let (stderr, stderr_truncated) = join_reader(&mut stderr_task).await?;
+        Ok::<_, ProcessError>((stdout, stdout_truncated, stderr, stderr_truncated))
+    };
+    match tokio::time::timeout(Duration::from_millis(500), joined).await {
+        Ok(result) => result,
+        Err(_) => {
+            stdout_task.abort();
+            stderr_task.abort();
+            Err(ProcessError::Io {
+                message: "process output readers did not close before the cleanup deadline".into(),
+            })
+        }
+    }
+}
+
 async fn join_reader(
-    task: tokio::task::JoinHandle<Result<(Vec<u8>, bool), ProcessError>>,
+    task: &mut tokio::task::JoinHandle<Result<(Vec<u8>, bool), ProcessError>>,
 ) -> Result<(Vec<u8>, bool), ProcessError> {
     task.await.map_err(|error| ProcessError::Io {
         message: error.to_string(),
     })?
+}
+
+fn sandboxed_command(request: &ProcessRequest) -> Result<Command, ProcessError> {
+    #[cfg(target_os = "macos")]
+    {
+        return macos_sandbox_command(request);
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        return linux_sandbox_command(request);
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        let _ = request;
+        Err(ProcessError::SandboxUnavailable)
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn macos_sandbox_command(request: &ProcessRequest) -> Result<Command, ProcessError> {
+    const SANDBOX_EXEC: &str = "/usr/bin/sandbox-exec";
+    if !std::path::Path::new(SANDBOX_EXEC).is_file() {
+        return Err(ProcessError::SandboxUnavailable);
+    }
+
+    let workspace = profile_path(request.cwd.to_string_lossy().as_ref());
+    let profile = format!(
+        "(version 1)\
+         (import \"system.sb\")\
+         (allow process-exec)\
+         (deny network*)\
+         (deny file-read* (subpath \"/Users\"))\
+         (deny file-read* (subpath \"/tmp\"))\
+         (deny file-read* (subpath \"/private/tmp\"))\
+         (deny file-read* (subpath \"/private/var/root\"))\
+         (deny file-write* (subpath \"/Users\"))\
+         (deny file-write* (subpath \"/tmp\"))\
+         (deny file-write* (subpath \"/private/tmp\"))\
+         (allow file-read* (subpath \"{workspace}\"))\
+         (allow file-write* (subpath \"{workspace}\"))"
+    );
+    let mut command = Command::new(SANDBOX_EXEC);
+    command
+        .arg("-p")
+        .arg(profile)
+        .arg(&request.program)
+        .args(&request.args);
+    Ok(command)
+}
+
+#[cfg(target_os = "linux")]
+fn linux_sandbox_command(request: &ProcessRequest) -> Result<Command, ProcessError> {
+    let sandbox_available = std::process::Command::new("bwrap")
+        .arg("--version")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false);
+    if !sandbox_available {
+        return Err(ProcessError::SandboxUnavailable);
+    }
+
+    let program = if request.program == request.cwd.to_string_lossy()
+        || request
+            .program
+            .starts_with(&format!("{}/", request.cwd.display()))
+    {
+        format!(
+            "/workspace{}",
+            &request.program[request.cwd.as_os_str().len()..]
+        )
+    } else {
+        request.program.clone()
+    };
+
+    let mut command = Command::new("bwrap");
+    command
+        .args([
+            "--die-with-parent",
+            "--new-session",
+            "--unshare-all",
+            "--proc",
+            "/proc",
+            "--dev",
+            "/dev",
+            "--tmpfs",
+            "/tmp",
+            "--clearenv",
+            "--setenv",
+            "PATH",
+            "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        ])
+        .arg("--ro-bind")
+        .args(["/usr", "/usr"])
+        .arg("--ro-bind")
+        .args(["/bin", "/bin"])
+        .arg("--ro-bind")
+        .args(["/lib", "/lib"])
+        .arg("--ro-bind")
+        .args(["/lib64", "/lib64"])
+        .arg("--ro-bind")
+        .args(["/etc", "/etc"])
+        .arg("--bind")
+        .args([request.cwd.to_string_lossy().as_ref(), "/workspace"])
+        .arg("--chdir")
+        .arg("/workspace")
+        .arg("--")
+        .arg(program)
+        .args(&request.args);
+    Ok(command)
+}
+
+fn profile_path(path: &str) -> String {
+    path.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
 async fn terminate_child(child: &mut Child) -> Result<Option<i32>, ProcessError> {
