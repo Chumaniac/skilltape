@@ -6,6 +6,7 @@ members = [
   "crates/skilltape-compiler",
   "crates/skilltape-core",
   "crates/skilltape-cli",
+  "crates/skilltape-policy",
 ]
 resolver = "2"
 

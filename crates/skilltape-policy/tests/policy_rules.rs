@@ -1,0 +1,252 @@
+use skilltape_policy::{FileAccess, PolicyDecision, PolicyEngine, PolicyRules, RiskLevel};
+use skilltape_schema::{
+    FilesystemPermissions, NetworkPermissions, Permissions, ProcessPermissions, SecretPermissions,
+};
+
+fn permissions(
+    read: &[&str],
+    write: &[&str],
+    executables: &[&str],
+    network_enabled: bool,
+    allow_hosts: &[&str],
+    read_environment: bool,
+) -> Permissions {
+    Permissions {
+        schema: "skilltape.dev/permissions/v1".to_owned(),
+        filesystem: FilesystemPermissions {
+            read: read.iter().map(|value| (*value).to_owned()).collect(),
+            write: write.iter().map(|value| (*value).to_owned()).collect(),
+        },
+        process: ProcessPermissions {
+            executables: executables
+                .iter()
+                .map(|value| (*value).to_owned())
+                .collect(),
+            max_processes: 1,
+            default_timeout_ms: 30_000,
+        },
+        network: NetworkPermissions {
+            enabled: network_enabled,
+            allow_hosts: allow_hosts
+                .iter()
+                .map(|value| (*value).to_owned())
+                .collect(),
+        },
+        secrets: SecretPermissions { read_environment },
+    }
+}
+
+#[test]
+fn allows_declared_safe_commands_and_denies_undeclared_executables() {
+    let engine = PolicyEngine::default();
+    let permissions = permissions(&[], &[], &["printf"], false, &[], false);
+
+    let allowed = engine.check_command("printf", &["hello".to_owned()], &permissions);
+    assert_decision(&allowed, true, "POLICY_ALLOWED", RiskLevel::Low);
+
+    let denied = engine.check_command("python", &[], &permissions);
+    assert_decision(&denied, false, "PKG004", RiskLevel::High);
+}
+
+#[test]
+fn denies_dangerous_commands_even_when_declared() {
+    let engine = PolicyEngine::default();
+    let permissions = permissions(&[], &[], &["rm", "sh"], false, &[], false);
+
+    let recursive_delete =
+        engine.check_command("rm", &["-rf".to_owned(), "output".to_owned()], &permissions);
+    assert_decision(
+        &recursive_delete,
+        false,
+        "POLICY_COMMAND_DANGEROUS",
+        RiskLevel::Critical,
+    );
+
+    let shell = engine.check_command(
+        "sh",
+        &["-c".to_owned(), "echo hello".to_owned()],
+        &permissions,
+    );
+    assert_decision(
+        &shell,
+        false,
+        "POLICY_COMMAND_DANGEROUS",
+        RiskLevel::Critical,
+    );
+}
+
+#[test]
+fn path_checks_use_workspace_relative_scope_boundaries() {
+    let engine = PolicyEngine::default();
+    let permissions = permissions(&["inputs/**"], &["outputs/**"], &[], false, &[], false);
+
+    let read = engine.check_path("inputs/source.txt", FileAccess::Read, &permissions);
+    assert_decision(&read, true, "POLICY_ALLOWED", RiskLevel::Low);
+
+    let boundary = engine.check_path("inputs-other/source.txt", FileAccess::Read, &permissions);
+    assert_decision(&boundary, false, "PKG005", RiskLevel::High);
+
+    let wrong_access = engine.check_path("inputs/source.txt", FileAccess::Write, &permissions);
+    assert_decision(&wrong_access, false, "PKG006", RiskLevel::High);
+}
+
+#[test]
+fn path_checks_reject_absolute_drive_and_traversal_forms() {
+    let engine = PolicyEngine::default();
+    let permissions = permissions(&["**"], &["**"], &[], false, &[], false);
+
+    for unsafe_path in [
+        "",
+        "/tmp/file",
+        "\\\\server\\share\\file",
+        "C:\\tmp\\file",
+        "folder/../secret",
+        "folder\\..\\secret",
+    ] {
+        let decision = engine.check_path(unsafe_path, FileAccess::Read, &permissions);
+        assert_decision(&decision, false, "PKG007", RiskLevel::High);
+    }
+}
+
+#[test]
+fn network_requires_enablement_and_exact_or_subdomain_allowlist() {
+    let engine = PolicyEngine::default();
+    let disabled = permissions(&[], &[], &[], false, &[], false);
+    let decision = engine.check_network("api.example.com", &disabled);
+    assert_decision(&decision, false, "POLICY_NETWORK_DISABLED", RiskLevel::High);
+
+    let enabled = permissions(&[], &[], &[], true, &["example.com", "api.internal"], false);
+    let exact = engine.check_network("example.com", &enabled);
+    assert_decision(&exact, true, "POLICY_ALLOWED", RiskLevel::Medium);
+
+    let subdomain = engine.check_network("v1.api.internal", &enabled);
+    assert_decision(&subdomain, true, "POLICY_ALLOWED", RiskLevel::Medium);
+
+    let boundary = engine.check_network("notexample.com", &enabled);
+    assert_decision(
+        &boundary,
+        false,
+        "POLICY_NETWORK_HOST_NOT_ALLOWED",
+        RiskLevel::High,
+    );
+}
+
+#[test]
+fn network_rejects_malformed_hosts_without_echoing_them() {
+    let engine = PolicyEngine::default();
+    let permissions = permissions(&[], &[], &[], true, &["example.com"], false);
+
+    for host in ["", "https://example.com", "example.com:443", "bad host"] {
+        let decision = engine.check_network(host, &permissions);
+        assert_decision(
+            &decision,
+            false,
+            "POLICY_NETWORK_INVALID_HOST",
+            RiskLevel::High,
+        );
+        if !host.is_empty() {
+            assert!(!decision.reason.contains(host));
+        }
+    }
+}
+
+#[test]
+fn environment_is_denied_by_default_and_secret_names_stay_denied() {
+    let engine = PolicyEngine::default();
+    let disabled = permissions(&[], &[], &[], false, &[], false);
+    let disabled_decision = engine.check_environment("LANG", &disabled);
+    assert_decision(
+        &disabled_decision,
+        false,
+        "POLICY_ENVIRONMENT_DISABLED",
+        RiskLevel::High,
+    );
+
+    let enabled = permissions(&[], &[], &[], false, &[], true);
+    let ordinary = engine.check_environment("LANG", &enabled);
+    assert_decision(&ordinary, true, "POLICY_ALLOWED", RiskLevel::Medium);
+
+    let secret = engine.check_environment("AWS_SECRET_ACCESS_KEY", &enabled);
+    assert_decision(
+        &secret,
+        false,
+        "POLICY_SECRET_IDENTIFIER",
+        RiskLevel::Critical,
+    );
+    assert!(!secret.reason.contains("AWS_SECRET_ACCESS_KEY"));
+}
+
+#[test]
+fn environment_rejects_empty_names_and_never_echoes_secret_inputs() {
+    let engine = PolicyEngine::default();
+    let permissions = permissions(&[], &[], &[], false, &[], true);
+
+    let empty = engine.check_environment("", &permissions);
+    assert_decision(&empty, false, "POLICY_ENVIRONMENT_INVALID", RiskLevel::High);
+
+    let secret = engine.check_environment("DB_PASSWORD", &permissions);
+    assert_decision(
+        &secret,
+        false,
+        "POLICY_SECRET_IDENTIFIER",
+        RiskLevel::Critical,
+    );
+    assert!(!secret.reason.contains("DB_PASSWORD"));
+}
+
+#[test]
+fn decisions_are_serializable_comparable_and_stable() {
+    let engine = PolicyEngine::default();
+    let permissions = permissions(&[], &[], &["printf"], false, &[], false);
+    let first = engine.check_command("printf", &[], &permissions);
+    let second = engine.check_command("printf", &[], &permissions);
+    assert_eq!(first, second);
+    assert_eq!(first, first.clone());
+
+    let encoded = serde_json::to_string(&first).expect("decision JSON");
+    assert_eq!(
+        encoded,
+        r#"{"allowed":true,"code":"POLICY_ALLOWED","reason":"allowed","risk":"low"}"#
+    );
+}
+
+#[test]
+fn custom_rules_extend_danger_and_secret_vocabulary_deterministically() {
+    let rules = PolicyRules::default()
+        .with_denied_program("internal-tool")
+        .with_denied_argument_fragment("--unsafe-mode")
+        .with_secret_identifier("private_material");
+    let engine = PolicyEngine::new(rules);
+    let permissions = permissions(&[], &[], &["internal-tool", "printf"], false, &[], true);
+
+    let program = engine.check_command("internal-tool", &[], &permissions);
+    assert_decision(
+        &program,
+        false,
+        "POLICY_COMMAND_DANGEROUS",
+        RiskLevel::Critical,
+    );
+
+    let argument = engine.check_command("printf", &["--unsafe-mode".to_owned()], &permissions);
+    assert_decision(
+        &argument,
+        false,
+        "POLICY_COMMAND_DANGEROUS",
+        RiskLevel::Critical,
+    );
+
+    let secret = engine.check_environment("PRIVATE_MATERIAL", &permissions);
+    assert_decision(
+        &secret,
+        false,
+        "POLICY_SECRET_IDENTIFIER",
+        RiskLevel::Critical,
+    );
+}
+
+fn assert_decision(decision: &PolicyDecision, allowed: bool, code: &str, risk: RiskLevel) {
+    assert_eq!(decision.allowed, allowed);
+    assert_eq!(decision.code, code);
+    assert_eq!(decision.risk, risk);
+    assert!(!decision.reason.is_empty());
+}
