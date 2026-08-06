@@ -82,14 +82,27 @@ pub(crate) fn compile_steps(tape: &TapeSession) -> Result<StepCompilation, Compi
                     });
                 }
                 let change = parse_filesystem_event(event)?;
-                let operation_index = if let Some(index) = filesystem_operations.get(&change.path) {
-                    *index
-                } else {
-                    let index = operations.len();
-                    let path = change.path.clone();
-                    operations.push(Operation::Filesystem(change));
-                    filesystem_operations.insert(path, index);
-                    index
+                let operation_index = match filesystem_operations.get(&change.path).copied() {
+                    Some(index)
+                        if !matches!(change.kind, FilesystemOperationKind::Moved)
+                            && !matches!(
+                                operations.get(index),
+                                Some(Operation::Filesystem(operation))
+                                    if matches!(
+                                        operation.kind,
+                                        FilesystemOperationKind::Moved
+                                    )
+                            ) =>
+                    {
+                        index
+                    }
+                    _ => {
+                        let index = operations.len();
+                        let path = change.path.clone();
+                        operations.push(Operation::Filesystem(change));
+                        filesystem_operations.insert(path, index);
+                        index
+                    }
                 };
 
                 if let Some(Operation::Filesystem(operation)) = operations.get_mut(operation_index)

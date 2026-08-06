@@ -255,6 +255,80 @@ fn filesystem_events_deduplicate_paths_and_preserve_metadata_only() {
 }
 
 #[test]
+fn move_then_modified_destination_keeps_move_step_provenance_and_permissions() {
+    let tape = vec![
+        event(
+            0,
+            TapeEventKind::FilesystemChanged,
+            EventSource::Filesystem,
+            json!({
+                "kind": "moved",
+                "path": "src/new.rs",
+                "previous_path": "src/old.rs",
+                "content_hash": "hash-moved",
+                "size": 18
+            }),
+        ),
+        event(
+            1,
+            TapeEventKind::FilesystemChanged,
+            EventSource::Filesystem,
+            json!({
+                "kind": "modified",
+                "path": "src/new.rs",
+                "content_hash": "hash-after",
+                "size": 24
+            }),
+        ),
+    ];
+
+    let output = DeterministicCompiler
+        .compile(request(tape, "move-modify-skill"))
+        .expect("move then modify tape should compile");
+
+    assert_eq!(output.workflow.steps.len(), 2);
+    assert!(matches!(
+        &output.workflow.steps[0],
+        Step::File(step)
+            if step.id == "file-0001"
+                && step.operation == "move"
+                && step.from_path == "src/old.rs"
+                && step.to_path == "src/new.rs"
+    ));
+    assert!(matches!(
+        &output.workflow.steps[1],
+        Step::Assert(step)
+            if step.id == "assert-0002"
+                && step.assertion.assertion_type == "file_hash"
+                && step.assertion.path.as_deref() == Some("src/new.rs")
+                && step.assertion.hash.as_deref() == Some("hash-after")
+    ));
+    assert_eq!(
+        output
+            .provenance
+            .iter()
+            .map(|source| source.event_sequences.clone())
+            .collect::<Vec<_>>(),
+        vec![vec![0], vec![1]]
+    );
+    assert_eq!(output.provenance[0].step_id, "file-0001");
+    assert_eq!(
+        output.provenance[0].source_summary,
+        "filesystem moved `src/old.rs` to `src/new.rs`"
+    );
+    assert_eq!(output.provenance[1].step_id, "assert-0002");
+    assert_eq!(
+        output.provenance[1].source_summary,
+        "filesystem modified `src/new.rs`"
+    );
+    assert_eq!(
+        output.permissions.filesystem.read,
+        ["src/new.rs", "src/old.rs"]
+    );
+    assert_eq!(output.permissions.filesystem.write, ["src/new.rs"]);
+}
+
+#[test]
 fn generated_package_support_files_load_and_lint_cleanly() {
     let output = DeterministicCompiler
         .compile(request(terminal_tape(), "lintable-skill"))
