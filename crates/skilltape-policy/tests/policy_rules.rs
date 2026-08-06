@@ -119,6 +119,118 @@ fn denies_windows_shell_interpreters_even_when_declared() {
 }
 
 #[test]
+fn denies_declared_windows_shell_aliases_and_path_variants() {
+    let engine = PolicyEngine::default();
+    let cases = [
+        ("cmd", vec!["/c".to_owned(), "echo hello".to_owned()]),
+        ("cmd.exe", vec!["/k".to_owned(), "echo hello".to_owned()]),
+        (
+            r"C:\Windows\System32\CMD.EXE",
+            vec!["/c".to_owned(), "echo hello".to_owned()],
+        ),
+        (
+            "CoMmAnD.CoM",
+            vec!["/c".to_owned(), "echo hello".to_owned()],
+        ),
+        (
+            "C:/Windows/System32/command.com",
+            vec!["/k".to_owned(), "echo hello".to_owned()],
+        ),
+        (
+            "powershell",
+            vec!["-Command".to_owned(), "Write-Output hello".to_owned()],
+        ),
+        (
+            "PowerShell.EXE",
+            vec!["-Command".to_owned(), "Write-Output hello".to_owned()],
+        ),
+        (
+            r"C:\Windows\System32\PowerShell.EXE",
+            vec!["-Command".to_owned(), "Write-Output hello".to_owned()],
+        ),
+        (
+            "pwsh",
+            vec!["-Command".to_owned(), "Write-Output hello".to_owned()],
+        ),
+        (
+            "PwSh.ExE",
+            vec!["-Command".to_owned(), "Write-Output hello".to_owned()],
+        ),
+        (
+            r"C:\Program Files\PowerShell\7\pwsh.exe",
+            vec!["-Command".to_owned(), "Write-Output hello".to_owned()],
+        ),
+    ];
+    let executables = cases
+        .iter()
+        .map(|(program, _)| (*program).to_owned())
+        .collect::<Vec<_>>();
+    let permissions = permissions(
+        &[],
+        &[],
+        &executables.iter().map(String::as_str).collect::<Vec<_>>(),
+        false,
+        &[],
+        false,
+    );
+
+    for (program, args) in cases {
+        let decision = engine.check_command(program, &args, &permissions);
+        assert_decision(
+            &decision,
+            false,
+            "POLICY_COMMAND_DANGEROUS",
+            RiskLevel::Critical,
+        );
+    }
+}
+
+#[test]
+fn preserves_dangerous_command_detection_without_rejecting_safe_text() {
+    let engine = PolicyEngine::default();
+    let permissions = permissions(
+        &[],
+        &[],
+        &[
+            "printf",
+            "rm",
+            "dd",
+            "mkfs.ext4",
+            "shutdown",
+            "reboot",
+            "poweroff",
+        ],
+        false,
+        &[],
+        false,
+    );
+
+    let safe_text = engine.check_command("printf", &["shutdown".to_owned()], &permissions);
+    assert_decision(&safe_text, true, "POLICY_ALLOWED", RiskLevel::Low);
+
+    for (program, args) in [
+        ("shutdown", vec!["now".to_owned()]),
+        ("reboot", vec!["now".to_owned()]),
+        ("poweroff", Vec::new()),
+        ("rm", vec!["-rf".to_owned(), "output".to_owned()]),
+        ("rm", vec!["-fr".to_owned(), "output".to_owned()]),
+        (
+            "dd",
+            vec!["if=/dev/zero".to_owned(), "of=output".to_owned()],
+        ),
+        ("mkfs.ext4", vec!["disk.img".to_owned()]),
+    ] {
+        let decision = engine.check_command(program, &args, &permissions);
+        assert_decision(
+            &decision,
+            false,
+            "POLICY_COMMAND_DANGEROUS",
+            RiskLevel::Critical,
+        );
+    }
+}
+
+#[test]
 fn path_checks_use_workspace_relative_scope_boundaries() {
     let engine = PolicyEngine::default();
     let permissions = permissions(&["inputs/**"], &["outputs/**"], &[], false, &[], false);

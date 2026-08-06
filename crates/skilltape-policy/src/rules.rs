@@ -26,6 +26,7 @@ impl Default for PolicyRules {
                 "chmod",
                 "chown",
                 "chgrp",
+                "cmd",
                 "cmd.exe",
                 "command.com",
                 "doas",
@@ -35,6 +36,10 @@ impl Default for PolicyRules {
                 "mount",
                 "pkill",
                 "poweroff",
+                "powershell",
+                "powershell.exe",
+                "pwsh",
+                "pwsh.exe",
                 "reboot",
                 "shutdown",
                 "sudo",
@@ -44,12 +49,10 @@ impl Default for PolicyRules {
             .into_iter()
             .map(str::to_owned)
             .collect(),
-            denied_argument_fragments: [
-                "dd if=", "mkfs.", "rm -rf", "rm -fr", "shutdown", "reboot", "poweroff",
-            ]
-            .into_iter()
-            .map(str::to_owned)
-            .collect(),
+            denied_argument_fragments: ["dd if=", "mkfs.", "rm -rf", "rm -fr"]
+                .into_iter()
+                .map(str::to_owned)
+                .collect(),
             secret_identifiers: BTreeSet::new(),
         }
     }
