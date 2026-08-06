@@ -11,3 +11,6 @@ sha2.workspace = true
 skilltape-schema = { path = "../skilltape-schema" }
 skilltape-tape = { path = "../skilltape-tape" }
 thiserror.workspace = true
+
+[dev-dependencies]
+skilltape-core = { path = "../skilltape-core" }

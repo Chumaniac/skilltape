@@ -1,4 +1,6 @@
+mod deterministic;
 mod provenance;
+mod steps;
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -8,6 +10,7 @@ use skilltape_schema::{Permissions, Step, Workflow};
 use skilltape_tape::TapeEvent;
 use thiserror::Error;
 
+pub use deterministic::DeterministicCompiler;
 pub use provenance::{CompileProvenance, StepProvenance, COMPILE_SCHEMA_V1};
 
 #[derive(Debug, Error)]
@@ -52,6 +55,22 @@ pub enum CompileError {
     },
     #[error("JSON serialization failed: {0}")]
     Serialization(#[from] serde_json::Error),
+    #[error("malformed {event_kind} payload at sequence {sequence}: field `{field}` is missing or invalid")]
+    MalformedPayload {
+        sequence: u64,
+        event_kind: String,
+        field: String,
+    },
+    #[error("unsupported {event_kind} payload at sequence {sequence}: {value}")]
+    UnsupportedPayload {
+        sequence: u64,
+        event_kind: String,
+        value: String,
+    },
+    #[error("unsafe path at sequence {sequence}: `{path}`")]
+    UnsafePath { sequence: u64, path: String },
+    #[error("ambiguous terminal grouping at sequence {sequence}: {reason}")]
+    AmbiguousTerminalGrouping { sequence: u64, reason: String },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
