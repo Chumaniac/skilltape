@@ -213,12 +213,12 @@ async fn join_reader(
 fn sandboxed_command(request: &ProcessRequest) -> Result<Command, ProcessError> {
     #[cfg(target_os = "macos")]
     {
-        return macos_sandbox_command(request);
+        macos_sandbox_command(request)
     }
 
     #[cfg(target_os = "linux")]
     {
-        return linux_sandbox_command(request);
+        linux_sandbox_command(request)
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
