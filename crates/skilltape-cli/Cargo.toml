@@ -17,6 +17,7 @@ sha2.workspace = true
 skilltape-capture = { path = "../skilltape-capture" }
 skilltape-compiler = { path = "../skilltape-compiler" }
 skilltape-core = { path = "../skilltape-core" }
+skilltape-export = { path = "../skilltape-export" }
 skilltape-policy = { path = "../skilltape-policy" }
 skilltape-runner = { path = "../skilltape-runner" }
 skilltape-tape = { path = "../skilltape-tape" }
@@ -29,3 +30,4 @@ thiserror.workspace = true
 [dev-dependencies]
 assert_cmd.workspace = true
 predicates.workspace = true
+serde_yaml.workspace = true

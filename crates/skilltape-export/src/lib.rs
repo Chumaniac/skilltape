@@ -8,9 +8,11 @@ use skilltape_core::LoadedSkillPackage;
 use thiserror::Error;
 
 mod generic;
+mod registry;
 
 pub use claude_code::ClaudeCodeExporter;
 pub use generic::GenericExporter;
+pub use registry::{exporter_for, supported_targets, RegistryError};
 
 mod claude_code;
 

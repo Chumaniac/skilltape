@@ -10,6 +10,8 @@ use crate::output;
 mod capture_command;
 #[path = "compile_command.rs"]
 mod compile_command;
+#[path = "export_command.rs"]
+mod export_command;
 #[path = "run_command.rs"]
 mod run_command;
 
@@ -81,6 +83,15 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    Export {
+        skill_path: PathBuf,
+        #[arg(long)]
+        target: String,
+        #[arg(long)]
+        output: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 pub fn run() -> ExitCode {
@@ -144,6 +155,17 @@ pub fn run() -> ExitCode {
             skill_path,
             input,
             receipt,
+            json,
+        }),
+        Command::Export {
+            skill_path,
+            target,
+            output,
+            json,
+        } => export_command::run(export_command::ExportConfig {
+            skill_path,
+            target,
+            output,
             json,
         }),
     }
