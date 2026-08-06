@@ -264,11 +264,7 @@ fn deserialized_output_rejects_duplicate_provenance() {
         StepProvenance::new("second", vec![1], "second command").unwrap(),
     ]);
     let first = value["provenance"][0].clone();
-    value["provenance"] = serde_json::json!([
-        first.clone(),
-        first,
-        value["provenance"][1].clone()
-    ]);
+    value["provenance"] = serde_json::json!([first.clone(), first, value["provenance"][1].clone()]);
 
     assert!(serde_json::from_value::<CompileOutput>(value).is_err());
 }
@@ -406,8 +402,14 @@ fn permission_collection_order_and_duplicates_do_not_change_hash() {
     )
     .unwrap();
 
-    assert_eq!(first.deterministic_json().unwrap(), second.deterministic_json().unwrap());
-    assert_eq!(first.content_hash().unwrap(), second.content_hash().unwrap());
+    assert_eq!(
+        first.deterministic_json().unwrap(),
+        second.deterministic_json().unwrap()
+    );
+    assert_eq!(
+        first.content_hash().unwrap(),
+        second.content_hash().unwrap()
+    );
 }
 
 #[test]
@@ -458,7 +460,10 @@ fn deterministic_hash_preserves_workflow_and_command_order() {
     )
     .unwrap();
 
-    assert_ne!(ordered.content_hash().unwrap(), reordered.content_hash().unwrap());
+    assert_ne!(
+        ordered.content_hash().unwrap(),
+        reordered.content_hash().unwrap()
+    );
 
     let mut changed_args_workflow = workflow();
     if let Step::Exec(step) = &mut changed_args_workflow.steps[0] {
@@ -475,7 +480,10 @@ fn deterministic_hash_preserves_workflow_and_command_order() {
     )
     .unwrap();
 
-    assert_ne!(ordered.content_hash().unwrap(), changed_args.content_hash().unwrap());
+    assert_ne!(
+        ordered.content_hash().unwrap(),
+        changed_args.content_hash().unwrap()
+    );
 }
 
 #[test]
@@ -504,7 +512,10 @@ fn content_hash_is_artifact_only_and_excludes_request_envelope() {
     .unwrap();
 
     assert_ne!(first_request.name, second_request.name);
-    assert_ne!(first_request.target.identity(), second_request.target.identity());
+    assert_ne!(
+        first_request.target.identity(),
+        second_request.target.identity()
+    );
     assert_eq!(artifact_hash, artifact.content_hash().unwrap());
 }
 
