@@ -170,6 +170,12 @@ impl TapeStore {
                 event_count,
             });
         }
+        if event_count > manifest.event_count + 1 {
+            return Err(TapeStoreError::EventCountExceeded {
+                manifest_count: manifest.event_count,
+                minimum_event_count: event_count,
+            });
+        }
         manifest.event_count = event_count;
         manifest.finished_at_ms = Some(finished_at_ms);
         write_manifest(&self.root, &manifest)?;

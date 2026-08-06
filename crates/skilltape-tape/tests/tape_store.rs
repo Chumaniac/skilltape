@@ -284,6 +284,22 @@ fn finish_after_event_fsync_repairs_stale_manifest() {
 }
 
 #[test]
+fn finish_rejects_more_than_one_unreconciled_event() {
+    let (_temp_dir, root, store) = create_store();
+    append_raw_event(&root, &event(0));
+    append_raw_event(&root, &event(1));
+
+    assert!(matches!(
+        store.finish(99),
+        Err(TapeStoreError::EventCountExceeded {
+            manifest_count: 0,
+            minimum_event_count: 2,
+        })
+    ));
+    assert_eq!(store.read_manifest().unwrap().finished_at_ms, None);
+}
+
+#[test]
 fn recovery_reports_when_manifest_claims_more_events_than_jsonl_contains() {
     let (_temp_dir, root, store) = create_store();
     store.append(&event(0)).unwrap();
