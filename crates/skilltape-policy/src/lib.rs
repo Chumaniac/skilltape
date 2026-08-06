@@ -279,6 +279,18 @@ fn is_dangerous_command(program: &str, args: &[String]) -> bool {
         return recursive && force;
     }
 
+    if program == "dd" {
+        return args.iter().any(|argument| {
+            argument
+                .get(..3)
+                .is_some_and(|prefix| prefix.eq_ignore_ascii_case("if="))
+        });
+    }
+
+    if program == "mkfs" || program.starts_with("mkfs.") {
+        return true;
+    }
+
     false
 }
 

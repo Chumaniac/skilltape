@@ -49,10 +49,10 @@ impl Default for PolicyRules {
             .into_iter()
             .map(str::to_owned)
             .collect(),
-            denied_argument_fragments: ["dd if=", "mkfs.", "rm -rf", "rm -fr"]
-                .into_iter()
-                .map(str::to_owned)
-                .collect(),
+            // Built-in dangerous commands are checked with command-aware
+            // rules in `PolicyEngine`; these custom fragments must not turn
+            // arbitrary text passed to a benign program into a denial.
+            denied_argument_fragments: BTreeSet::new(),
             secret_identifiers: BTreeSet::new(),
         }
     }
@@ -69,7 +69,9 @@ impl PolicyRules {
     }
 
     /// Adds a case-insensitive fragment matched against the normalized command
-    /// line. Fragments are intended for organization-specific deny rules.
+    /// line. Custom fragments are intentionally broad and are intended for
+    /// organization-specific deny rules; built-in dangerous commands use
+    /// command-aware checks instead.
     pub fn with_denied_argument_fragment(mut self, fragment: impl Into<String>) -> Self {
         let fragment = fragment.into().trim().to_ascii_lowercase();
         if !fragment.is_empty() {

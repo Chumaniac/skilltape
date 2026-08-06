@@ -231,6 +231,45 @@ fn preserves_dangerous_command_detection_without_rejecting_safe_text() {
 }
 
 #[test]
+fn built_in_dangerous_rules_are_contextual_not_argument_substrings() {
+    let engine = PolicyEngine::default();
+    let permissions = permissions(
+        &[],
+        &[],
+        &["printf", "rm", "dd", "mkfs", "mkfs.ext4"],
+        false,
+        &[],
+        false,
+    );
+
+    for text in ["rm -rf", "dd if=/dev/zero", "mkfs.ext4"] {
+        let decision = engine.check_command("printf", &[text.to_owned()], &permissions);
+        assert_decision(&decision, true, "POLICY_ALLOWED", RiskLevel::Low);
+    }
+
+    let dd_without_input = engine.check_command("dd", &["of=output".to_owned()], &permissions);
+    assert_decision(&dd_without_input, true, "POLICY_ALLOWED", RiskLevel::Low);
+
+    for (program, args) in [
+        ("rm", vec!["-rf".to_owned(), "output".to_owned()]),
+        (
+            "dd",
+            vec!["if=/dev/zero".to_owned(), "of=output".to_owned()],
+        ),
+        ("mkfs", vec!["disk.img".to_owned()]),
+        ("mkfs.ext4", vec!["disk.img".to_owned()]),
+    ] {
+        let decision = engine.check_command(program, &args, &permissions);
+        assert_decision(
+            &decision,
+            false,
+            "POLICY_COMMAND_DANGEROUS",
+            RiskLevel::Critical,
+        );
+    }
+}
+
+#[test]
 fn path_checks_use_workspace_relative_scope_boundaries() {
     let engine = PolicyEngine::default();
     let permissions = permissions(&["inputs/**"], &["outputs/**"], &[], false, &[], false);
