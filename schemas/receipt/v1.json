@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skilltape.dev/schemas/receipt/v1.json",
+  "type": "object",
+  "required": ["schema", "run_id", "skill_hash", "status", "steps", "assertions", "policy_decisions"],
+  "properties": {
+    "schema": { "const": "skilltape.dev/receipt/v1" },
+    "run_id": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "skill_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "status": { "type": "string", "enum": ["succeeded", "run_failed", "cancelled", "assertion_failed"] },
+    "steps": { "type": "array", "items": { "$ref": "#/$defs/step" } },
+    "assertions": { "type": "array", "items": { "$ref": "#/$defs/assertion" } },
+    "policy_decisions": { "type": "array", "items": { "$ref": "#/$defs/policy" } }
+  },
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "step": {
+      "type": "object",
+      "required": ["step_id", "status", "exit_code", "stdout_sha256", "stdout_bytes", "stdout_truncated", "stderr_sha256", "stderr_bytes", "stderr_truncated"],
+      "properties": {
+        "step_id": { "type": "string", "minLength": 1 },
+        "status": { "type": "string", "enum": ["succeeded", "failed", "denied", "timed_out", "cancelled", "spawn_failed"] },
+        "exit_code": { "type": ["integer", "null"] },
+        "stdout_sha256": { "$ref": "#/$defs/digest" },
+        "stdout_bytes": { "type": "integer", "minimum": 0 },
+        "stdout_truncated": { "type": "boolean" },
+        "stderr_sha256": { "$ref": "#/$defs/digest" },
+        "stderr_bytes": { "type": "integer", "minimum": 0 },
+        "stderr_truncated": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "assertion": {
+      "type": "object",
+      "required": ["kind", "target", "passed", "reason"],
+      "properties": {
+        "kind": { "type": "string", "enum": ["file_exists", "file_hash", "file_text_contains", "command_exit"] },
+        "target": { "type": "string", "minLength": 1 },
+        "passed": { "type": "boolean" },
+        "reason": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "policy": {
+      "type": "object",
+      "required": ["step_id", "phase", "allowed", "code", "reason", "risk"],
+      "properties": {
+        "step_id": { "type": "string", "minLength": 1 },
+        "phase": { "type": "string", "enum": ["before", "after"] },
+        "allowed": { "type": "boolean" },
+        "code": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string", "minLength": 1 },
+        "risk": { "type": "string", "enum": ["low", "medium", "high", "critical"] }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

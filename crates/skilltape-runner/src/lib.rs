@@ -109,7 +109,9 @@ pub struct StepSummary {
     pub status: StepStatus,
     pub exit_code: Option<i32>,
     pub stdout: String,
+    pub stdout_truncated: bool,
     pub stderr: String,
+    pub stderr_truncated: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -247,7 +249,9 @@ where
                 status: StepStatus::Denied,
                 exit_code: None,
                 stdout: String::new(),
+                stdout_truncated: false,
                 stderr: String::new(),
+                stderr_truncated: false,
             });
             emit_event(
                 &events,
@@ -278,7 +282,9 @@ where
             status: execution.status,
             exit_code: execution.exit_code,
             stdout: bytes_to_string(&execution.stdout),
+            stdout_truncated: execution.stdout_truncated,
             stderr: bytes_to_string(&execution.stderr),
+            stderr_truncated: execution.stderr_truncated,
         });
         emit_event(
             &events,

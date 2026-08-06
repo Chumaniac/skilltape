@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skilltape.dev/schemas/run/v1.json",
+  "type": "object",
+  "required": ["schema", "sequence", "step_id", "status", "stdout_sha256", "stdout_bytes", "stderr_sha256", "stderr_bytes", "exit_code"],
+  "properties": {
+    "schema": { "const": "skilltape.dev/run/v1" },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "step_id": { "type": "string", "minLength": 1 },
+    "status": { "type": "string", "enum": ["run_started", "started", "succeeded", "failed", "denied", "timed_out", "cancelled", "spawn_failed", "run_succeeded", "run_failed", "run_cancelled"] },
+    "stdout_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "stdout_bytes": { "type": "integer", "minimum": 0 },
+    "stderr_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "stderr_bytes": { "type": "integer", "minimum": 0 },
+    "exit_code": { "type": ["integer", "null"] }
+  },
+  "additionalProperties": false
+}
