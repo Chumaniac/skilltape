@@ -3,6 +3,7 @@ members = [
   "crates/skilltape-capture",
   "crates/skilltape-tape",
   "crates/skilltape-schema",
+  "crates/skilltape-compiler",
   "crates/skilltape-core",
   "crates/skilltape-cli",
 ]

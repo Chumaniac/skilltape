@@ -1,0 +1,13 @@
+[package]
+name = "skilltape-compiler"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+skilltape-schema = { path = "../skilltape-schema" }
+skilltape-tape = { path = "../skilltape-tape" }
+thiserror.workspace = true
