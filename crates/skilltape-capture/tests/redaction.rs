@@ -9,6 +9,22 @@ const PASSWORD: &str = "correct-horse-battery-staple";
 const CUSTOM_SECRET: &str = "custom-raw-secret-42";
 const PATTERN_SECRET: &str = "vault://production/payment-token";
 
+const STANDALONE_TOKEN_FIXTURES: &[(&str, &str)] = &[
+    ("openai_project", "sk-proj-abcdefghijklmnop1234567890"),
+    (
+        "github_personal",
+        "ghp_abcdefghijklmnopqrstuvwxyz0123456789",
+    ),
+    ("github_oauth", "gho_abcdefghijklmnopqrstuvwxyz0123456789"),
+    ("github_user", "ghu_abcdefghijklmnopqrstuvwxyz0123456789"),
+    ("github_server", "ghs_abcdefghijklmnopqrstuvwxyz0123456789"),
+    ("github_refresh", "ghr_abcdefghijklmnopqrstuvwxyz0123456789"),
+    (
+        "github_fine_grained",
+        "github_pat_11AA22BB33_ccccddddEEEEffffGGGGhhhh",
+    ),
+];
+
 fn config() -> RedactionConfig {
     RedactionConfig {
         secret_names: BTreeSet::from(["private_note".to_owned()]),
@@ -52,6 +68,30 @@ fn redacts_built_in_and_configured_secret_forms_without_retaining_plaintext() {
 }
 
 #[test]
+fn redacts_common_standalone_token_families() {
+    let input = STANDALONE_TOKEN_FIXTURES
+        .iter()
+        .map(|(label, token)| format!("{label}={token}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let redacted = redact_text(&input, &RedactionConfig::default());
+    let observable = format!("{}\n{redacted:?}", redacted.text);
+
+    for (_, token) in STANDALONE_TOKEN_FIXTURES {
+        assert!(!observable.contains(token), "standalone token leaked");
+    }
+    assert_eq!(
+        redacted
+            .redactions
+            .iter()
+            .map(|item| item.name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["api_key"; STANDALONE_TOKEN_FIXTURES.len()]
+    );
+}
+
+#[test]
 fn truncates_redacted_output_at_a_unicode_boundary() {
     let config = RedactionConfig {
         max_output_bytes: 7,
@@ -64,6 +104,26 @@ fn truncates_redacted_output_at_a_unicode_boundary() {
     assert_eq!(redacted.text.len(), 6);
     assert!(redacted.truncated);
     assert_eq!(redacted.original_bytes, 14);
+}
+
+#[test]
+fn bounds_very_large_output_and_stops_metadata_after_truncation() {
+    const OUTPUT_LIMIT: usize = 1_025;
+    const LATE_SECRET: &str = "sk-live-late-fixture-123456";
+
+    let input = format!("{}é {LATE_SECRET}", "a".repeat(8 * 1024 * 1024));
+    let config = RedactionConfig {
+        max_output_bytes: OUTPUT_LIMIT,
+        ..RedactionConfig::default()
+    };
+
+    let redacted = redact_text(&input, &config);
+
+    assert_eq!(redacted.text.len(), OUTPUT_LIMIT);
+    assert_eq!(redacted.text, "a".repeat(OUTPUT_LIMIT));
+    assert!(redacted.truncated);
+    assert!(redacted.redactions.is_empty());
+    assert!(!format!("{redacted:?}").contains(LATE_SECRET));
 }
 
 #[test]
