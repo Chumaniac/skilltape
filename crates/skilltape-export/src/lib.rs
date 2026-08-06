@@ -9,7 +9,10 @@ use thiserror::Error;
 
 mod generic;
 
+pub use claude_code::ClaudeCodeExporter;
 pub use generic::GenericExporter;
+
+mod claude_code;
 
 /// Exporter boundary shared by generic and platform-specific targets.
 pub trait Exporter {
@@ -37,6 +40,10 @@ pub enum ExportError {
     OutputExists { path: PathBuf },
     #[error("export output path is unsafe: {path}")]
     UnsafeOutput { path: PathBuf },
+    #[error("export target is not declared by the package: {target}")]
+    TargetNotDeclared { target: String },
+    #[error("package name is unsafe for the target layout: {name}")]
+    InvalidTargetName { name: String },
     #[error("export source path is unsafe: {path}")]
     UnsafeSource { path: String },
     #[error("export source file is missing: {path}")]

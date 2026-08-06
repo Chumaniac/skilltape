@@ -276,7 +276,10 @@ fn copy_file(
     Ok(())
 }
 
-fn validate_output(package: &LoadedSkillPackage, output: &Path) -> Result<(), ExportError> {
+pub(crate) fn validate_output(
+    package: &LoadedSkillPackage,
+    output: &Path,
+) -> Result<(), ExportError> {
     if output.as_os_str().is_empty()
         || output
             .components()
@@ -298,7 +301,7 @@ fn validate_output(package: &LoadedSkillPackage, output: &Path) -> Result<(), Ex
     Ok(())
 }
 
-fn create_parent(parent: &Path, output: &Path) -> Result<(), ExportError> {
+pub(crate) fn create_parent(parent: &Path, output: &Path) -> Result<(), ExportError> {
     if !ancestors_are_safe(parent) {
         return Err(ExportError::UnsafeOutput {
             path: output.to_owned(),
@@ -316,7 +319,7 @@ fn create_parent(parent: &Path, output: &Path) -> Result<(), ExportError> {
     Ok(())
 }
 
-fn ensure_output_absent(output: &Path) -> Result<(), ExportError> {
+pub(crate) fn ensure_output_absent(output: &Path) -> Result<(), ExportError> {
     match fs::symlink_metadata(output) {
         Ok(_) => Err(ExportError::OutputExists {
             path: output.to_owned(),
