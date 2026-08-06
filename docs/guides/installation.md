@@ -11,6 +11,8 @@ cargo build --release -p skilltape-cli -p skilltape-console-api
 cargo install --path crates/skilltape-cli
 ```
 
+Replay/Verify 还会启动受限的本地执行器：Linux 需要 `bwrap`（Debian/Ubuntu 可安装 `bubblewrap`），macOS 需要系统提供的 `/usr/bin/sandbox-exec`。没有对应 sandbox 时，Capture、Compile、Lint 和 Export 仍可使用，但 Replay/Verify 会安全地失败并提示环境不可用。
+
 只使用 Capture、Compile、Lint、Replay、Verify 或 Export 时，安装 `skilltape` 即可。要从源码启动 Console：
 
 ```bash

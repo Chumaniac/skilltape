@@ -12,7 +12,7 @@ Capture → Tape → Compile → Lint/Policy → Replay → Verify/Receipt → E
 
 ## 五分钟本地试跑
 
-需要 Rust stable。源码构建方式和预构建 release 安装方式见[安装指南](docs/guides/installation.md)。
+需要 Rust stable；Linux 上执行 Replay/Verify 还需要 `bubblewrap`，macOS 使用系统的 `/usr/bin/sandbox-exec`。源码构建方式和预构建 release 安装方式见[安装指南](docs/guides/installation.md)。
 
 ```bash
 git clone <your-skilltape-repository>

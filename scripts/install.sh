@@ -54,9 +54,9 @@ tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/skilltape-install.XXXXXX")"
 staged=""
 cleanup() {
   if [[ -n "$staged" && -e "$staged" ]]; then
-    rm -f -- "$staged"
+    rm -f "$staged"
   fi
-  rm -rf -- "$tmp_dir"
+  rm -rf "$tmp_dir"
 }
 trap cleanup EXIT
 
@@ -103,7 +103,7 @@ fi
 
 extract_dir="$tmp_dir/extracted"
 mkdir -p "$extract_dir"
-tar --extract --gzip --file "$archive" --directory "$extract_dir" --no-same-owner --no-overwrite-dir
+tar -xzf "$archive" -C "$extract_dir"
 candidate="$(find "$extract_dir" -type f -name skilltape -print -quit)"
 if [[ -z "$candidate" ]]; then
   echo "release archive does not contain a skilltape binary" >&2
@@ -112,9 +112,9 @@ fi
 
 mkdir -p "$install_dir"
 staged="$install_dir/.skilltape.tmp.$$"
-cp -- "$candidate" "$staged"
+cp "$candidate" "$staged"
 chmod 0755 "$staged"
-mv -f -- "$staged" "$install_dir/skilltape"
+mv -f "$staged" "$install_dir/skilltape"
 staged=""
 
 echo "Installed skilltape $version for $target at $install_dir/skilltape"

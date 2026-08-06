@@ -34,6 +34,9 @@ $releaseBase = $env:SKILLTAPE_RELEASE_BASE_URL
 if ([string]::IsNullOrWhiteSpace($releaseBase)) {
     throw "Set SKILLTAPE_RELEASE_BASE_URL to a release URL ending in /releases/download."
 }
+if (-not $releaseBase.StartsWith("https://", [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "SKILLTAPE_RELEASE_BASE_URL must use HTTPS."
+}
 
 $Version = $Version.TrimStart('v')
 $asset = "skilltape-v$Version-$Target.zip"
