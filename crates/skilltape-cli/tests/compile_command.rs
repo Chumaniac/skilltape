@@ -176,6 +176,35 @@ fn compile_rejects_existing_symlink_output_without_following_it() {
         .is_symlink());
 }
 
+#[cfg(unix)]
+#[test]
+fn compile_rejects_symlinked_output_parent_without_publishing_outside_it() {
+    let temp = TempDir::new().expect("temp directory");
+    let tape = temp.path().join("tape");
+    let outside = temp.path().join("outside");
+    let linked_parent = temp.path().join("linked-parent");
+    let output = linked_parent.join("compiled-skill");
+    create_tape(&tape);
+    fs::create_dir_all(&outside).expect("outside");
+    fs::write(outside.join("keep.txt"), b"outside marker").expect("outside marker");
+    std::os::unix::fs::symlink(&outside, &linked_parent).expect("parent symlink");
+
+    compile(&tape, &output, &[])
+        .code(2)
+        .stderr(predicates::str::contains("unsafe"));
+
+    assert_eq!(
+        fs::read(outside.join("keep.txt")).expect("outside marker"),
+        b"outside marker"
+    );
+    assert!(!outside.join("compiled-skill").exists());
+    assert!(linked_parent
+        .symlink_metadata()
+        .expect("parent symlink metadata")
+        .file_type()
+        .is_symlink());
+}
+
 #[test]
 fn compile_reports_invalid_tape_as_input_failure_without_output() {
     let temp = TempDir::new().expect("temp directory");

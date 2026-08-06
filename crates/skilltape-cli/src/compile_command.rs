@@ -91,6 +91,7 @@ fn compile(config: CompileConfig) -> Result<(), CompileCommandError> {
 
     validate_output_path(&config.output)?;
     ensure_output_available(&config.output)?;
+    validate_output_parent(&config.output)?;
     let name = compile_name(&config.output)?;
     let target = CompileTarget::new(TARGET_NAME, TARGET_VERSION)?;
 
@@ -137,6 +138,21 @@ fn ensure_output_available(output: &Path) -> Result<(), CompileCommandError> {
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(CompileCommandError::Io(error)),
     }
+}
+
+fn validate_output_parent(output: &Path) -> Result<(), CompileCommandError> {
+    let parent = output_parent(output);
+    for ancestor in parent.ancestors() {
+        match fs::symlink_metadata(ancestor) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(CompileCommandError::UnsafeOutput(output.to_owned()));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(CompileCommandError::Io(error)),
+        }
+    }
+    Ok(())
 }
 
 fn compile_name(output: &Path) -> Result<String, CompileCommandError> {
