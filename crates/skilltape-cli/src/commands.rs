@@ -6,6 +6,9 @@ use skilltape_core::{create_skill_template, Diagnostic, LintReport, SkillPackage
 
 use crate::output;
 
+#[path = "capture_command.rs"]
+mod capture_command;
+
 const PACKAGE_ERROR_EXIT_CODE: u8 = 2;
 const POLICY_ERROR_EXIT_CODE: u8 = 3;
 
@@ -32,9 +35,31 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    Capture {
+        name: String,
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        #[arg(long)]
+        command: Option<String>,
+        #[arg(long)]
+        output: Option<PathBuf>,
+        #[arg(long, action = clap::ArgAction::Append)]
+        allow_env: Vec<String>,
+        #[arg(long, default_value_t = 64 * 1024)]
+        max_output_bytes: usize,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        yes: bool,
+    },
 }
 
 pub fn run() -> ExitCode {
+    let _interrupt_guard = if std::env::args().nth(1).as_deref() == Some("capture") {
+        Some(capture_command::InterruptGuard::install())
+    } else {
+        None
+    };
     match Cli::parse().command {
         Command::Init {
             name,
@@ -42,6 +67,25 @@ pub fn run() -> ExitCode {
             force,
         } => init(name, output, force),
         Command::Lint { path, strict, json } => lint(path, strict, json),
+        Command::Capture {
+            name,
+            workspace,
+            command,
+            output,
+            allow_env,
+            max_output_bytes,
+            json,
+            yes,
+        } => capture_command::run(capture_command::CaptureConfig {
+            name,
+            workspace,
+            command,
+            output,
+            allow_env,
+            max_output_bytes,
+            json,
+            yes,
+        }),
     }
 }
 
