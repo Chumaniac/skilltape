@@ -13,10 +13,14 @@ clap.workspace = true
 libc.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 skilltape-capture = { path = "../skilltape-capture" }
 skilltape-compiler = { path = "../skilltape-compiler" }
 skilltape-core = { path = "../skilltape-core" }
+skilltape-policy = { path = "../skilltape-policy" }
+skilltape-runner = { path = "../skilltape-runner" }
 skilltape-tape = { path = "../skilltape-tape" }
+skilltape-verify = { path = "../skilltape-verify" }
 tempfile.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true

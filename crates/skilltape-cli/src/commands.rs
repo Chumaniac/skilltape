@@ -10,6 +10,8 @@ use crate::output;
 mod capture_command;
 #[path = "compile_command.rs"]
 mod compile_command;
+#[path = "run_command.rs"]
+mod run_command;
 
 const PACKAGE_ERROR_EXIT_CODE: u8 = 2;
 const POLICY_ERROR_EXIT_CODE: u8 = 3;
@@ -63,6 +65,22 @@ enum Command {
         #[arg(long)]
         accept_proposal: bool,
     },
+    Replay {
+        skill_path: PathBuf,
+        #[arg(long)]
+        input: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    Verify {
+        skill_path: PathBuf,
+        #[arg(long)]
+        input: Option<PathBuf>,
+        #[arg(long)]
+        receipt: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 pub fn run() -> ExitCode {
@@ -107,6 +125,26 @@ pub fn run() -> ExitCode {
             output,
             provider,
             accept_proposal,
+        }),
+        Command::Replay {
+            skill_path,
+            input,
+            json,
+        } => run_command::replay(run_command::ReplayConfig {
+            skill_path,
+            input,
+            json,
+        }),
+        Command::Verify {
+            skill_path,
+            input,
+            receipt,
+            json,
+        } => run_command::verify(run_command::VerifyConfig {
+            skill_path,
+            input,
+            receipt,
+            json,
         }),
     }
 }
