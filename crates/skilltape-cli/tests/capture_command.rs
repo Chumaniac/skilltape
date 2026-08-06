@@ -232,3 +232,30 @@ fn capture_rejects_unsafe_output_paths() {
     .code(1)
     .stderr(predicates::str::contains("unsafe"));
 }
+
+#[cfg(unix)]
+#[test]
+fn capture_rejects_default_output_through_external_symlink() {
+    let temp = TempDir::new().expect("temp directory");
+    let workspace = temp.path().join("workspace");
+    let outside = temp.path().join("outside");
+    fs::create_dir(&workspace).expect("workspace");
+    fs::create_dir(&outside).expect("outside");
+    let script = executable_script(&workspace, "capture.sh", "printf should-not-run");
+    std::os::unix::fs::symlink(&outside, workspace.join(".skilltape")).expect("symlink");
+
+    run_capture(
+        &workspace,
+        &[
+            "capture",
+            "symlink-escape",
+            "--command",
+            script.to_str().expect("script path"),
+            "--yes",
+        ],
+    )
+    .code(1)
+    .stderr(predicates::str::contains("unsafe"));
+
+    assert!(!outside.join("tapes/symlink-escape").exists());
+}

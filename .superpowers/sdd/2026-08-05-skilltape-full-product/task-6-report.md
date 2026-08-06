@@ -15,3 +15,17 @@
 
 - `PATH=/Users/chumanic/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo test -p skilltape-cli --test capture_command capture_cancels_on_sigint_and_returns_nonzero -- --nocapture --test-threads=1` — 1 passed, 0 failed; cancelled Tape finalized with 6 events.
 - `Cargo.lock` remains untracked and pre-existing Task 2/4 report changes are excluded from this commit.
+
+## Review fix round
+
+- Replaced the clippy `to_string_in_format_args` violation in JSON error reporting with idiomatic display formatting.
+- Default output validation now canonicalizes the nearest existing ancestor and rejects `.skilltape`/`tapes` symlink escapes outside the canonical workspace, including a final check immediately before `TapeStore::create`; explicit output paths retain their existing behavior.
+- Added a focused Unix CLI regression test for a default-output symlink escape. The cancellation readiness test remains unchanged.
+
+## Review fix verification
+
+- Direct `rustfmt --edition 2021` completed successfully for the changed Rust files.
+- `PATH=/Users/chumanic/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo test -p skilltape-cli --test capture_command -- --nocapture --test-threads=1` — 8 passed, 0 failed.
+- `PATH=/Users/chumanic/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo clippy -p skilltape-cli --all-targets -- -D warnings` — passed with 0 warnings.
+- `PATH=/Users/chumanic/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo test --workspace` — all workspace tests passed.
+- Final immediate rerun: capture CLI tests — 8 passed, 0 failed; scoped clippy — passed with `-D warnings`.

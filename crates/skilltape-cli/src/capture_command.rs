@@ -164,6 +164,7 @@ async fn capture(config: CaptureConfig) -> Result<CaptureJsonSummary, CaptureCom
     }
 
     let workspace = resolve_workspace(config.workspace)?;
+    let use_default_output = config.output.is_none();
     let output = resolve_output(config.output, &workspace, &config.name)?;
     let command = config
         .command
@@ -285,6 +286,12 @@ async fn capture(config: CaptureConfig) -> Result<CaptureJsonSummary, CaptureCom
         tape_events,
         Duration::from_millis(40),
     );
+    if use_default_output {
+        if let Err(error) = validate_default_output(&output, &workspace) {
+            let _ = std::fs::remove_dir_all(&staging_root);
+            return Err(error);
+        }
+    }
     let final_store = match TapeStore::create(&output, manifest) {
         Ok(store) => store,
         Err(error) => {
@@ -391,6 +398,7 @@ fn resolve_output(
     workspace: &Path,
     name: &str,
 ) -> Result<PathBuf, CaptureCommandError> {
+    let is_default = path.is_none();
     let output = path.unwrap_or_else(|| workspace.join(".skilltape/tapes").join(name));
     if output
         .components()
@@ -411,7 +419,35 @@ fn resolve_output(
             Err(CaptureCommandError::OutputExists(output))
         };
     }
+    if is_default {
+        validate_default_output(&output, workspace)?;
+    }
     Ok(output)
+}
+
+fn validate_default_output(output: &Path, workspace: &Path) -> Result<(), CaptureCommandError> {
+    let resolved = canonicalize_nearest_existing_ancestor(output)
+        .map_err(|_| CaptureCommandError::UnsafeOutput(output.to_owned()))?;
+    if resolved.starts_with(workspace) {
+        Ok(())
+    } else {
+        Err(CaptureCommandError::UnsafeOutput(output.to_owned()))
+    }
+}
+
+fn canonicalize_nearest_existing_ancestor(path: &Path) -> std::io::Result<PathBuf> {
+    let mut candidate = path.to_owned();
+    loop {
+        match candidate.canonicalize() {
+            Ok(resolved) => return Ok(resolved),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                if !candidate.pop() {
+                    return Err(error);
+                }
+            }
+            Err(error) => return Err(error),
+        }
+    }
 }
 
 fn workspace_name(workspace: &Path) -> String {
@@ -447,10 +483,7 @@ fn now_ms() -> u64 {
 
 fn report_error(json_output: bool, message: &str) {
     if json_output {
-        println!(
-            "{}",
-            serde_json::json!({"ok": false, "error": message}).to_string()
-        );
+        println!("{}", serde_json::json!({"ok": false, "error": message}));
     }
     eprintln!("{message}");
 }
