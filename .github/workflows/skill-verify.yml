@@ -1,0 +1,34 @@
+name: SkillTape Verify
+
+on:
+  workflow_dispatch:
+    inputs:
+      skill_path:
+        description: "Repository-relative Skill package path"
+        required: true
+        default: examples/minimal-skill
+
+permissions:
+  contents: read
+
+jobs:
+  lint-local-skill:
+    name: Lint local Skill package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build local SkillTape CLI
+        run: cargo build -p skilltape-cli
+
+      - name: Lint the selected local Skill
+        env:
+          SKILL_PATH: ${{ inputs.skill_path }}
+        run: ./target/debug/skilltape lint "$SKILL_PATH" --strict
+
+      # This template deliberately has no upload-artifact step. Tape, Receipt,
+      # logs, environment values, and provider credentials stay on the runner.
