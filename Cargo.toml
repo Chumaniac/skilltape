@@ -9,6 +9,7 @@ members = [
   "crates/skilltape-policy",
   "crates/skilltape-runner",
   "crates/skilltape-verify",
+  "crates/skilltape-export",
 ]
 resolver = "2"
 
