@@ -80,3 +80,23 @@
 - PollWatcher has no native rename tracker. One create/remove pair in the same batch is safely treated as `Moved`; multiple simultaneous pairs are intentionally left as separate `Created`/`Deleted` changes instead of guessing the pairing.
 - `watch_workspace` provides deterministic filesystem-channel ordering. Cross-source PTY/filesystem time-window merging remains a caller-level integration because Task 4 exposes no combined event-stream API in this crate.
 - `Cargo.lock` remains untracked and will not be staged, as requested. Pre-existing Task 2 and Task 4 report edits are also excluded from this commit.
+
+## Fix round 2
+
+- Added the public `merge_capture_timeline` API with timestamped filesystem changes, tape events, configurable time-window batching, and deterministic timestamp/source/event-key ordering.
+- Changed `RenameMode::Any` to infer `Moved` only for exactly one existing destination and one missing source; ambiguous batches now emit conservative `Created`/`Deleted` changes without positional pairing.
+- Treated a `NotFound` race between metadata and `File::open` as missing metadata/hash while preserving other inspection errors.
+- Replaced the unbounded raw notify queue with a capacity-64 queue. Overflow is surfaced as a typed `RawEventOverflow` error and is observed while idle, batching, hashing, or blocked on public output; cancellation remains selectable in each state.
+- Added focused coverage for merge/window/tie and mixed-kind ordering, ambiguous rename batches, lexical escape, disappearance/open races, blocked output cancellation, batching cancellation, and raw queue overflow.
+
+### Fix-round verification
+
+- Explicit rustup `cargo test -p skilltape-capture --test filesystem_capture --quiet`: 9 passed, 0 failed.
+- Explicit rustup `cargo test --workspace --quiet` with isolated `CARGO_TARGET_DIR=/private/tmp/skilltape-task5-target`: all workspace targets passed.
+- Direct rustup `rustfmt --edition 2021 --check` on changed Rust files: passed.
+- Explicit rustup `cargo clippy -p skilltape-capture --all-targets -- -D warnings`: passed with no warnings.
+
+### Residual concern
+
+- The merge API intentionally receives filesystem timestamps from its caller because `watch_workspace` remains backward-compatible; integrating timestamp assignment into a future tape writer is outside this fix round.
+- Raw queue overflow aborts capture with an explicit error rather than dropping events, preserving correctness at the cost of requiring the caller to retry or report the incomplete capture.

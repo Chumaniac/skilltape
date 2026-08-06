@@ -4,8 +4,10 @@ use std::time::Duration;
 
 use sha2::{Digest, Sha256};
 use skilltape_capture::{
-    watch_workspace, FilesystemCaptureError, FilesystemChange, FilesystemChangeKind,
+    merge_capture_timeline, watch_workspace, FilesystemCaptureError, FilesystemChange,
+    FilesystemChangeKind, TimelineEvent, TimelineFilesystemChange,
 };
+use skilltape_tape::{EventSource, RedactionState, TapeEvent, TapeEventKind};
 use tempfile::TempDir;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
@@ -241,6 +243,129 @@ async fn cancellation_stops_an_idle_watcher_and_closes_its_channel() {
         .expect("watcher task joins")
         .expect("watcher returns success");
     assert_eq!(watcher.events.recv().await, None);
+}
+
+#[test]
+fn merges_filesystem_and_tape_events_within_the_requested_window() {
+    let timeline = merge_capture_timeline(
+        [TimelineFilesystemChange {
+            occurred_at_ms: 1_000,
+            change: change(FilesystemChangeKind::Created, "notes.txt"),
+        }],
+        [tape_event(1_025, 2)],
+        Duration::from_millis(25),
+    );
+
+    assert_eq!(timeline.len(), 1);
+    assert_eq!(timeline[0].start_at_ms, 1_000);
+    assert!(matches!(
+        timeline[0].events[0],
+        TimelineEvent::Filesystem(_)
+    ));
+    assert!(matches!(timeline[0].events[1], TimelineEvent::Tape(_)));
+}
+
+#[test]
+fn starts_a_new_timeline_batch_outside_the_requested_window() {
+    let timeline = merge_capture_timeline(
+        [TimelineFilesystemChange {
+            occurred_at_ms: 1_000,
+            change: change(FilesystemChangeKind::Created, "notes.txt"),
+        }],
+        [tape_event(1_026, 2)],
+        Duration::from_millis(25),
+    );
+
+    assert_eq!(timeline.len(), 2);
+    assert_eq!(timeline[0].events.len(), 1);
+    assert_eq!(timeline[1].events.len(), 1);
+}
+
+#[test]
+fn orders_tied_events_by_source_and_stable_event_key() {
+    let timeline = merge_capture_timeline(
+        [
+            TimelineFilesystemChange {
+                occurred_at_ms: 1_000,
+                change: change(FilesystemChangeKind::Created, "z-last.txt"),
+            },
+            TimelineFilesystemChange {
+                occurred_at_ms: 1_000,
+                change: change(FilesystemChangeKind::Created, "a-first.txt"),
+            },
+        ],
+        [tape_event(1_000, 1), tape_event(1_000, 0)],
+        Duration::ZERO,
+    );
+
+    let labels = timeline[0]
+        .events
+        .iter()
+        .map(|event| match event {
+            TimelineEvent::Filesystem(event) => event.change.path.clone(),
+            TimelineEvent::Tape(event) => format!("tape-{}", event.sequence),
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(labels, ["a-first.txt", "z-last.txt", "tape-0", "tape-1"]);
+}
+
+#[test]
+fn orders_mixed_filesystem_kinds_deterministically() {
+    let timeline = merge_capture_timeline(
+        [
+            TimelineFilesystemChange {
+                occurred_at_ms: 1_000,
+                change: change(FilesystemChangeKind::Deleted, "same.txt"),
+            },
+            TimelineFilesystemChange {
+                occurred_at_ms: 1_000,
+                change: change(FilesystemChangeKind::Created, "same.txt"),
+            },
+            TimelineFilesystemChange {
+                occurred_at_ms: 1_000,
+                change: change(FilesystemChangeKind::Modified, "same.txt"),
+            },
+        ],
+        [],
+        Duration::ZERO,
+    );
+
+    assert_eq!(
+        timeline[0]
+            .events
+            .iter()
+            .map(|event| match event {
+                TimelineEvent::Filesystem(event) => event.change.kind,
+                TimelineEvent::Tape(_) => panic!("unexpected tape event"),
+            })
+            .collect::<Vec<_>>(),
+        vec![
+            FilesystemChangeKind::Created,
+            FilesystemChangeKind::Modified,
+            FilesystemChangeKind::Deleted,
+        ]
+    );
+}
+
+fn change(kind: FilesystemChangeKind, path: &str) -> FilesystemChange {
+    FilesystemChange {
+        kind,
+        path: path.to_owned(),
+        previous_path: None,
+        content_hash: None,
+        size: None,
+    }
+}
+
+fn tape_event(occurred_at_ms: u64, sequence: u64) -> TapeEvent {
+    TapeEvent {
+        sequence,
+        occurred_at_ms,
+        kind: TapeEventKind::TerminalCommand,
+        source: EventSource::Shell,
+        payload: serde_json::json!({"sequence": sequence}),
+        redaction: RedactionState::Unredacted,
+    }
 }
 
 fn sha256(bytes: &[u8]) -> String {
