@@ -235,7 +235,10 @@ fn macos_sandbox_command(request: &ProcessRequest) -> Result<Command, ProcessErr
         return Err(ProcessError::SandboxUnavailable);
     }
 
-    let workspace = profile_path(request.cwd.to_string_lossy().as_ref());
+    let canonical_workspace = request.cwd.canonicalize().map_err(|_| ProcessError::Io {
+        message: "sandbox workspace is unavailable".into(),
+    })?;
+    let workspace = profile_path(canonical_workspace.to_string_lossy().as_ref());
     let profile = format!(
         "(version 1)\
          (import \"system.sb\")\
@@ -248,6 +251,8 @@ fn macos_sandbox_command(request: &ProcessRequest) -> Result<Command, ProcessErr
          (deny file-write* (subpath \"/Users\"))\
          (deny file-write* (subpath \"/tmp\"))\
          (deny file-write* (subpath \"/private/tmp\"))\
+         (deny file-read* (subpath \"/private/var/folders\"))\
+         (deny file-write* (subpath \"/private/var/folders\"))\
          (allow file-read* (subpath \"{workspace}\"))\
          (allow file-write* (subpath \"{workspace}\"))"
     );
