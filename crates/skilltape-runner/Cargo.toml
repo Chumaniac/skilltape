@@ -1,0 +1,19 @@
+[package]
+name = "skilltape-runner"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde_json.workspace = true
+sha2.workspace = true
+skilltape-core = { path = "../skilltape-core" }
+skilltape-policy = { path = "../skilltape-policy" }
+skilltape-schema = { path = "../skilltape-schema" }
+tempfile.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
