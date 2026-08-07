@@ -6,7 +6,7 @@ A Tape is SkillTape's immutable, recoverable, auditable record. A Tape is a dire
 tape_<id>/
 ├── manifest.json
 ├── events.jsonl
-└── .store.lock              # 运行时锁，不是业务事件
+└── .store.lock              # runtime lock, not a business event
 ```
 
 `manifest.json` uses the fixed schema `skilltape.dev/tape/v1` and contains `id`, `started_at_ms`, `finished_at_ms`, `platform`, the workspace-relative `workspace_root`, and `event_count`. Each line of `events.jsonl` is a JSON `TapeEvent` governed by the `skilltape.dev/tape/v1` event contract.
