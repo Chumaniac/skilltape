@@ -38,6 +38,14 @@ skip a security gate to make an implementation pass.
   review approval; request a fresh review for security-sensitive changes.
 - Use `SECURITY.md` for vulnerability reports rather than public exploit details.
 
+## English documentation
+
+All natural-language repository content must be English. Follow the
+[documentation style guide](docs/documentation-style.md) for headings,
+product vocabulary, normative wording, links, status, dates, and security
+copy. Documentation changes must run the repository-wide language scan and
+Markdown link audit described in that guide before opening a pull request.
+
 ## Documentation and release changes
 
 Update the README, the relevant guide, CHANGELOG, and release-readiness evidence
