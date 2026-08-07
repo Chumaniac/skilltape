@@ -50,6 +50,11 @@ class ReleaseWorkflowTests(unittest.TestCase):
         for fragment in required_fragments:
             self.assertIn(fragment, workflow, f"missing Windows installer fragment: {fragment}")
 
+    def test_release_workflow_uses_a_supported_intel_macos_runner(self) -> None:
+        workflow = WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("os: macos-15-intel", workflow)
+        self.assertNotIn("os: macos-13", workflow)
+
     def test_powershell_installer_supports_authenticated_release_downloads(self) -> None:
         installer = INSTALLER.read_text(encoding="utf-8")
         self.assertIn("SKILLTAPE_RELEASE_TOKEN", installer)
