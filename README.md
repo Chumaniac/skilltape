@@ -56,6 +56,8 @@ cargo build --locked --release -p skilltape-cli -p skilltape-console-api
 
 CLI 默认只绑定 `127.0.0.1`，退出时会回收 API 子进程；如需自动打开浏览器，追加 `--open`。UI 未构建时，Console 会给出明确错误，不会伪装成已启动。
 
+Release archive 同时包含 `skilltape`、`skilltape-console-api` 和 `console/` 静态 UI。安装脚本会把两个 binary 放入安装目录，并把 `console/` 放在其父目录；安装后无需源码 checkout 即可运行 `skilltape console`。如果需要覆盖自动发现路径，可设置 `SKILLTAPE_CONSOLE_API_BIN` 或 `SKILLTAPE_CONSOLE_UI_DIST`。
+
 ## CLI 命令
 
 | 命令 | 作用 |
@@ -73,7 +75,8 @@ CLI 默认只绑定 `127.0.0.1`，退出时会回收 API 子进程；如需自�
 
 ## CI 与 Skill 仓库集成
 
-- `.github/workflows/ci.yml` 运行 fmt、Clippy、workspace tests、有效 example lint 和无效 fixture 的预期失败断言。
+- `.github/workflows/ci.yml` 运行 fmt、Clippy、workspace tests、有效 example lint、无效 fixture 的预期失败断言以及 release/installer fixture gates。
+- `.github/workflows/release.yml` 在 `v*` tag 或手动版本输入上构建 Linux、macOS 和 Windows archive，生成 `checksums.txt`，并只在最终 publish job 使用 `contents: write`。
 - `.github/workflows/skill-verify.yml` 是只运行本地 CLI 的模板，不上传 Tape、Receipt、日志或秘密。
 - release 安装脚本要求固定版本、下载 checksum 并在校验成功前不替换已有 binary；具体参数见[安装指南](docs/guides/installation.md)。
 

@@ -20,8 +20,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install stable Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: 1.97.1
           components: rustfmt, clippy
 
       - name: Install Linux replay sandbox
@@ -63,6 +64,14 @@ jobs:
           set -e
           test "$rc" -eq 3
 
+      - name: Validate release and installer fixtures
+        shell: bash
+        run: |
+          python3 scripts/test_release_package.py
+          python3 scripts/test_release_workflow.py
+          bash -n scripts/install.sh scripts/test_install.sh scripts/smoke_console.sh
+          bash scripts/test_install.sh
+
   console:
     name: Console (${{ matrix.os }})
     strategy:
@@ -84,8 +93,13 @@ jobs:
       - name: Install Console dependencies
         run: npm ci --prefix apps/skilltape-console
 
-      - name: Install Playwright Chromium
+      - name: Install Playwright Chromium with Linux dependencies
+        if: runner.os == 'Linux'
         run: npx --prefix apps/skilltape-console playwright install --with-deps chromium
+
+      - name: Install Playwright Chromium
+        if: runner.os == 'macOS'
+        run: npx --prefix apps/skilltape-console playwright install chromium
 
       - name: Build Console
         run: npm --prefix apps/skilltape-console run build

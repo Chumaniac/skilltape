@@ -33,6 +33,19 @@ skilltape-v<version>-<target>.zip      # Windows
 checksums.txt
 ```
 
+每个 archive 的内容为：
+
+```text
+skilltape-v<version>-<target>/
+├── skilltape
+├── skilltape-console-api
+└── console/
+    ├── index.html
+    └── assets/
+```
+
+安装后，CLI 和 API companion 位于安装目录，`console/` 位于安装目录的父目录。例如默认 Unix 目录为 `$HOME/.local/bin/skilltape`、`$HOME/.local/bin/skilltape-console-api` 和 `$HOME/.local/console/index.html`。安装器会先下载、校验 checksum、检查三类资产并完成 staging，再执行替换；下载、校验、解压或 staging 失败时不会覆盖已有 CLI。
+
 当前安装脚本要求显式设置 release 下载根地址，避免在仓库 owner、镜像或私有 release 未确定时误下到错误项目：
 
 ```bash
@@ -55,7 +68,9 @@ $env:SKILLTAPE_VERSION = "0.1.0"
 .\scripts\install.ps1
 ```
 
-脚本会下载 archive 和 `checksums.txt` 到随机临时目录，比较目标 asset 的 SHA-256，校验 archive 中的 `skilltape` binary，并在最后一步才原子替换目标文件。下载失败、checksum 不匹配、archive 中缺少 binary 或权限失败时，已有 binary 不会被覆盖。版本、下载根地址和 target 都可以固定，脚本不会读取或写入 token、cookie、环境秘密或项目 `.env`。
+Release workflow 位于 `.github/workflows/release.yml`，由 `v*` tag 或手动版本输入触发，覆盖 Linux x86_64、macOS x86_64/arm64 和 Windows x86_64。当前工作树没有配置 Git remote；启用发布前需要先配置目标 GitHub repository、tag 策略和发布权限。workflow 不上传 Tape、Receipt、日志、环境变量或 provider credential。
+
+脚本会下载 archive 和 `checksums.txt` 到随机临时目录，比较目标 asset 的 SHA-256，校验 archive 中的 CLI、API companion 和 Console UI，并在全部资产 staging 后替换目标文件。下载失败、checksum 不匹配、archive 中缺少资产或权限失败时，已有 binary 不会被覆盖。版本、下载根地址和 target 都可以固定，脚本不会读取或写入 token、cookie、环境秘密或项目 `.env`。
 
 ## Capture → Compile → Verify
 
@@ -95,6 +110,9 @@ cargo run --locked -p skilltape-cli -- lint examples/minimal-skill
 npm ci --prefix apps/skilltape-console
 npm --prefix apps/skilltape-console run build
 npm --prefix apps/skilltape-console test
+python3 scripts/test_release_package.py
+python3 scripts/test_release_workflow.py
+bash scripts/test_install.sh
 ```
 
 无效 fixture 应明确失败（当前 policy code 为 3）：
