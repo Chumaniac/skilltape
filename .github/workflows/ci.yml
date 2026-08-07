@@ -35,7 +35,7 @@ jobs:
         if: matrix.os == 'macos-14'
         run: |
           test -x /usr/bin/sandbox-exec
-          /usr/bin/sandbox-exec -p '(version 1) (allow process-exec)' /usr/bin/true
+          /usr/bin/sandbox-exec -p '(version 1) (import "system.sb") (allow process-exec)' /usr/bin/true
 
       - name: Check formatting
         run: cargo fmt --all -- --check
