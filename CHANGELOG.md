@@ -2,12 +2,13 @@
 
 All notable changes to SkillTape are documented here.
 
-## [0.1.0] - Unreleased
+## [0.1.0] - 2026-08-07
 
-The implementation is merged on `main` at commit
-`bdd82937fc652190917a8259098bc92ae48553cb`, and CI run `31149247700` is
-green. The versioned GitHub Release remains unpublished pending final
-release-matrix and Windows installer verification.
+The implementation and release workflow are merged on `main` at commit
+`14ef710a4fbaa4859a3b9627c79df90ed2f5fe28`, and CI run `31162165176` is
+green. The release workflow builds four target archives, publishes checksums,
+and runs a Windows PowerShell installer smoke test against the published
+release.
 
 ### Added
 

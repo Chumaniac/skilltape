@@ -1,4 +1,4 @@
-# Release Readiness — 0.1.0 RC
+# Release Readiness — 0.1.0
 
 Date: 2026-08-07
 
@@ -8,12 +8,14 @@ release documentation.
 
 ## Current merged-main evidence
 
-- The implementation is merged on `main` at commit
-  `bdd82937fc652190917a8259098bc92ae48553cb`.
-- CI run `31149247700` is green for the merged implementation.
+- The implementation and release workflow are merged on `main` at commit
+  `14ef710a4fbaa4859a3b9627c79df90ed2f5fe28`.
+- CI run `31162165176` is green for the merged implementation and release
+  workflow.
 - The merged implementation includes interactive Capture, locked dependencies,
   installed Console discovery, release packaging, installers, smoke
-  verification, and the tag-driven workflow.
+  verification, the tag-driven workflow, and a Windows PowerShell installer
+  smoke job for published release assets.
 - No release tag or versioned GitHub Release has been published.
 
 ## Local verification evidence
@@ -37,8 +39,8 @@ The following local checks passed for the implementation:
       matrix targets and retain only the intended archive/checksum assets:
       `x86_64-unknown-linux-gnu`, `x86_64-apple-darwin`,
       `aarch64-apple-darwin`, and `x86_64-pc-windows-msvc`.
-- [ ] Execute the Windows installer fixture on Windows PowerShell and record
-      the result; local macOS cannot provide this evidence.
+- [ ] Execute and record the Windows PowerShell installer smoke job against
+      the published release assets.
 - [ ] Review the generated `checksums.txt` and archive contents from the exact
       tag commit.
 - [ ] Review [CHANGELOG](../CHANGELOG.md) and [security notes](../SECURITY.md),
