@@ -8,10 +8,16 @@ use skilltape_core::LoadedSkillPackage;
 use thiserror::Error;
 
 mod generic;
+mod plugin;
 mod registry;
 
 pub use claude_code::ClaudeCodeExporter;
 pub use generic::GenericExporter;
+pub use plugin::{
+    run_plugin, validate_plugin_manifest, validate_request, ExportRequest, PluginError,
+    PluginExportManifest, PluginRun, EXPORT_MANIFEST_SCHEMA_V1, EXPORT_REQUEST_SCHEMA_V1,
+    PLUGIN_INVALID_INPUT_EXIT_CODE, PLUGIN_POLICY_FAILURE_EXIT_CODE,
+};
 pub use registry::{exporter_for, supported_targets, RegistryError};
 
 mod claude_code;
