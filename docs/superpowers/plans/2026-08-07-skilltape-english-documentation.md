@@ -289,7 +289,6 @@
 
   ```bash
   git grep -n --perl-regexp '[\x{3400}-\x{4DBF}\x{4E00}-\x{9FFF}]' -- . ':!Cargo.lock' || true
-  rg -n -i '(描述|说明|状态|目标|待办|未完成|草稿|安装与本地 CI)' --glob '!target/**' --glob '!node_modules/**' . || true
   ```
 
   For each match, translate natural-language text to English while leaving arbitrary fixture bytes and protocol values unchanged. If a match is a false positive from an unrelated Unicode symbol, document that it is not Han text and leave it untouched.
