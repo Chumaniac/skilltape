@@ -188,6 +188,7 @@ jobs:
         shell: pwsh
         env:
           SKILLTAPE_RELEASE_BASE_URL: https://github.com/${{ github.repository }}/releases/download
+          SKILLTAPE_RELEASE_API_BASE_URL: https://api.github.com/repos/${{ github.repository }}
           SKILLTAPE_RELEASE_TOKEN: ${{ github.token }}
         run: |
           $installDir = Join-Path $env:RUNNER_TEMP "skilltape-install\bin"

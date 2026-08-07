@@ -38,6 +38,11 @@ if ([string]::IsNullOrWhiteSpace($releaseBase)) {
 if (-not $releaseBase.StartsWith("https://", [System.StringComparison]::OrdinalIgnoreCase)) {
     throw "SKILLTAPE_RELEASE_BASE_URL must use HTTPS."
 }
+$releaseApiBase = $env:SKILLTAPE_RELEASE_API_BASE_URL
+if (-not [string]::IsNullOrWhiteSpace($releaseApiBase) -and
+    -not $releaseApiBase.StartsWith("https://", [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "SKILLTAPE_RELEASE_API_BASE_URL must use HTTPS."
+}
 if ([string]::IsNullOrWhiteSpace($ReleaseToken)) {
     $ReleaseToken = $env:SKILLTAPE_RELEASE_TOKEN
 }
@@ -52,6 +57,32 @@ $asset = "skilltape-v$Version-$Target.zip"
 $releaseRoot = "$($releaseBase.TrimEnd('/'))/v$Version"
 $archiveUrl = "$releaseRoot/$asset"
 $checksumsUrl = "$releaseRoot/checksums.txt"
+if (-not [string]::IsNullOrWhiteSpace($releaseApiBase)) {
+    $apiHeaders = @{
+        "Accept" = "application/vnd.github+json"
+        "User-Agent" = "skilltape-installer"
+        "X-GitHub-Api-Version" = "2022-11-28"
+    }
+    if (-not [string]::IsNullOrWhiteSpace($ReleaseToken)) {
+        $apiHeaders["Authorization"] = "Bearer $ReleaseToken"
+    }
+    $releaseMetadataUrl = "$($releaseApiBase.TrimEnd('/'))/releases/tags/v$Version"
+    $releaseMetadata = Invoke-RestMethod -Uri $releaseMetadataUrl -Headers $apiHeaders -Method Get
+    $archiveAsset = @($releaseMetadata.assets) |
+        Where-Object { $_.name -eq $asset } |
+        Select-Object -First 1
+    $checksumsAsset = @($releaseMetadata.assets) |
+        Where-Object { $_.name -eq "checksums.txt" } |
+        Select-Object -First 1
+    if ($null -eq $archiveAsset -or $null -eq $checksumsAsset) {
+        throw "GitHub release v$Version does not contain the required Windows assets."
+    }
+    $archiveUrl = $archiveAsset.url
+    $checksumsUrl = $checksumsAsset.url
+    $downloadHeaders["Accept"] = "application/octet-stream"
+    $downloadHeaders["User-Agent"] = "skilltape-installer"
+    $downloadHeaders["X-GitHub-Api-Version"] = "2022-11-28"
+}
 $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("skilltape-install-" + [guid]::NewGuid().ToString("N"))
 $stagedCli = $null
 $stagedApi = $null

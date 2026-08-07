@@ -45,6 +45,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
             "runs-on: windows-latest",
             "scripts/install.ps1",
             "SKILLTAPE_RELEASE_BASE_URL",
+            "SKILLTAPE_RELEASE_API_BASE_URL",
             "SKILLTAPE_RELEASE_TOKEN",
             "skilltape-console-api.exe",
             "console\\index.html",
@@ -61,6 +62,11 @@ class ReleaseWorkflowTests(unittest.TestCase):
     def test_powershell_installer_supports_authenticated_release_downloads(self) -> None:
         installer = INSTALLER.read_text(encoding="utf-8")
         self.assertIn("SKILLTAPE_RELEASE_TOKEN", installer)
+        self.assertIn("SKILLTAPE_RELEASE_API_BASE_URL", installer)
+        self.assertIn("releases/tags", installer)
+        self.assertIn("$archiveAsset.url", installer)
+        self.assertIn("$checksumsAsset.url", installer)
+        self.assertIn("application/octet-stream", installer)
         self.assertIn("Authorization", installer)
 
 
