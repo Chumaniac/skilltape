@@ -126,18 +126,34 @@ fn validate_workspace(path: &Path) -> Result<PathBuf, ConsoleError> {
 }
 
 fn resolve_ui_dist() -> Result<PathBuf, ConsoleError> {
-    if let Some(value) = env::var_os(UI_DIST_ENV) {
-        return validate_ui_dist(PathBuf::from(value));
+    let override_path = env::var_os(UI_DIST_ENV).map(PathBuf::from);
+    let current_dir = env::current_dir().ok();
+    let current_exe = env::current_exe().ok();
+    resolve_ui_dist_from(
+        override_path.as_deref(),
+        current_dir.as_deref(),
+        current_exe.as_deref(),
+    )
+}
+
+fn resolve_ui_dist_from(
+    override_path: Option<&Path>,
+    current_dir: Option<&Path>,
+    current_exe: Option<&Path>,
+) -> Result<PathBuf, ConsoleError> {
+    if let Some(path) = override_path {
+        return validate_ui_dist(path.to_owned());
     }
 
     let mut candidates = Vec::new();
-    if let Ok(current_dir) = env::current_dir() {
+    if let Some(current_dir) = current_dir {
         candidates.push(current_dir.join("apps/skilltape-console/dist"));
         candidates.push(current_dir.join("skilltape-console/dist"));
     }
-    if let Ok(current_exe) = env::current_exe() {
+    if let Some(current_exe) = current_exe {
         for ancestor in current_exe.ancestors() {
             candidates.push(ancestor.join("apps/skilltape-console/dist"));
+            candidates.push(ancestor.join("console"));
         }
     }
 
@@ -320,5 +336,27 @@ fn exit_code(code: Option<i32>) -> ExitCode {
     match code.and_then(|value| u8::try_from(value).ok()) {
         Some(value) => ExitCode::from(value),
         None => ExitCode::FAILURE,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn installed_ui_dist_is_found_next_to_the_cli_directory() {
+        let temp = TempDir::new().expect("temporary directory");
+        let bin = temp.path().join("bin");
+        let console = temp.path().join("console");
+        fs::create_dir_all(&bin).expect("bin directory");
+        fs::create_dir_all(&console).expect("console directory");
+        let executable = bin.join(api_binary_name());
+        fs::write(&executable, b"api").expect("API fixture");
+        fs::write(console.join("index.html"), b"<main>Console</main>").expect("index");
+
+        let resolved = resolve_ui_dist_from(None, None, Some(&executable)).expect("UI dist");
+
+        assert_eq!(resolved, console.canonicalize().expect("canonical console"));
     }
 }
