@@ -26,6 +26,9 @@ class ReleaseWorkflowTests(unittest.TestCase):
             "actions/upload-artifact@v4",
             "sha256sum",
             "GITHUB_TOKEN",
+            'gh release view "$tag" --repo "$GITHUB_REPOSITORY"',
+            'gh release upload "$tag" --repo "$GITHUB_REPOSITORY"',
+            'gh release create "$tag" --repo "$GITHUB_REPOSITORY"',
             "contents: read",
             "contents: write",
         ]

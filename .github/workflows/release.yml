@@ -150,10 +150,10 @@ jobs:
         shell: bash
         run: |
           tag="${{ steps.release.outputs.tag }}"
-          if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" release-assets/* --clobber
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" --repo "$GITHUB_REPOSITORY" release-assets/* --clobber
           else
-            gh release create "$tag" release-assets/* \
+            gh release create "$tag" --repo "$GITHUB_REPOSITORY" release-assets/* \
               --title "SkillTape $tag" \
               --generate-notes
           fi
