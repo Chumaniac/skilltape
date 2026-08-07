@@ -145,7 +145,7 @@ fn replay_sandbox_available() -> bool {
     #[cfg(target_os = "macos")]
     {
         return ProcessCommand::new("/usr/bin/sandbox-exec")
-            .args(["-p", "(version 1) (allow process-exec)", "/bin/true"])
+            .args(["-p", "(version 1) (allow process-exec)", "/usr/bin/true"])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()

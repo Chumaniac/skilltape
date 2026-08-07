@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-14]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Check out repository
@@ -32,8 +32,10 @@ jobs:
           sudo apt-get install --yes bubblewrap
 
       - name: Check macOS replay sandbox
-        if: matrix.os == 'macos-latest'
-        run: test -x /usr/bin/sandbox-exec
+        if: matrix.os == 'macos-14'
+        run: |
+          test -x /usr/bin/sandbox-exec
+          /usr/bin/sandbox-exec -p '(version 1) (allow process-exec)' /usr/bin/true
 
       - name: Check formatting
         run: cargo fmt --all -- --check

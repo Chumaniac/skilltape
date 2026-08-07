@@ -328,6 +328,7 @@ fn linux_sandbox_command(request: &ProcessRequest) -> Result<Command, ProcessErr
     Ok(command)
 }
 
+#[cfg(target_os = "macos")]
 fn profile_path(path: &str) -> String {
     path.replace('\\', "\\\\").replace('"', "\\\"")
 }
