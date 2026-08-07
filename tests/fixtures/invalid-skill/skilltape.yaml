@@ -1,7 +1,7 @@
 schema: skilltape.dev/skill/v1
 name: invalid-skill
 version: 0.1.0
-description: An invalid SkillTape package for lint tests.
+description: An intentionally invalid SkillTape package used to test lint policy diagnostics.
 engine:
   min_version: 0.1.0
 entrypoint:

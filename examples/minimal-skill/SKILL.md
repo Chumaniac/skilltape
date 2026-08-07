@@ -1,3 +1,4 @@
 # minimal-skill
 
-Run the declared workflow to write a small text output in the workspace.
+This valid example declares a `printf` workflow step that writes a small text
+output to `fixtures/output/message.txt` in the workspace.
