@@ -4,8 +4,9 @@ All notable changes to SkillTape are documented here.
 
 ## [0.1.0] - Unreleased
 
-This is the first delivery candidate and has not been published to a remote
-repository from the current worktree.
+This is the first delivery candidate. The implementation is available in the
+GitHub repository and Draft PR; the versioned GitHub Release remains
+unpublished pending final release-matrix and Windows installer verification.
 
 ### Added
 

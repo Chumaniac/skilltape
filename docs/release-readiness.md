@@ -16,14 +16,18 @@ Date: 2026-08-07
 - Release workflow static checks and Ruby YAML parsing passed.
 - Unix HTTPS installer fixture passed; checksum failure preserved the old CLI.
 - Real release Console smoke passed for loopback API JSON and static UI HTML.
+- GitHub remote `Chumaniac/skilltape` is configured and the implementation is
+  pushed on `codex/skilltape-foundation` with Draft PR #1.
+- Hosted CI passed on both push and pull request runs for Linux/macOS Rust and
+  Linux/macOS Console: runs `31146656434` and `31146658048`.
 
 ## Required before publishing
 
-- [ ] Configure and verify the authoritative GitHub remote and repository owner.
+- [x] Configure and verify the authoritative GitHub remote and repository owner.
 - [ ] Run the release workflow on all four matrix targets and retain only the
       intended archive/checksum assets.
-- [ ] Confirm hosted Linux has bubblewrap/user namespaces and hosted macOS has
-      `/usr/bin/sandbox-exec`; record the actual CI run URLs.
+- [x] Confirm hosted Linux has bubblewrap/user namespaces and hosted macOS has
+      `/usr/bin/sandbox-exec`; record the actual CI run IDs above.
 - [ ] Execute the Windows installer fixture on Windows PowerShell and record
       the result; local macOS cannot provide this evidence.
 - [ ] Review the generated `checksums.txt` and archive contents from the exact
@@ -33,8 +37,8 @@ Date: 2026-08-07
 
 ## Explicit known limitations
 
-- No Git remote is configured in this worktree, so no push, tag, or release
-  publication was performed.
+- The implementation branch and Draft PR are pushed, but no release tag or
+  GitHub Release has been published yet.
 - Windows Replay/Verify remains fail-closed because no equivalent restricted
   executor is implemented.
 - The Console browser tests use mocked API responses; the real network path is
