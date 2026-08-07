@@ -158,8 +158,43 @@ fn replay_sandbox_available() -> bool {
 
     #[cfg(target_os = "linux")]
     {
+        let Ok(probe_root) = TempDir::new() else {
+            return false;
+        };
         return ProcessCommand::new("bwrap")
-            .arg("--version")
+            .args([
+                "--die-with-parent",
+                "--new-session",
+                "--unshare-all",
+                "--proc",
+                "/proc",
+                "--dev",
+                "/dev",
+                "--tmpfs",
+                "/tmp",
+                "--clearenv",
+                "--setenv",
+                "PATH",
+                "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "--ro-bind",
+                "/usr",
+                "/usr",
+                "--ro-bind",
+                "/bin",
+                "/bin",
+                "--ro-bind",
+                "/lib",
+                "/lib",
+                "--ro-bind",
+                "/lib64",
+                "/lib64",
+                "--ro-bind",
+                "/etc",
+                "/etc",
+                "--bind",
+            ])
+            .arg(probe_root.path())
+            .args(["/workspace", "--chdir", "/workspace", "--", "/bin/true"])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()

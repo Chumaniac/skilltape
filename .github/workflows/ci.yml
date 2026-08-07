@@ -30,6 +30,33 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes bubblewrap
+          # Ubuntu 24.04's AppArmor policy can block bubblewrap from
+          # configuring the loopback-only network namespace on hosted runners.
+          if test -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+          if test -e /proc/sys/kernel/unprivileged_userns_clone; then
+            sudo sysctl -w kernel.unprivileged_userns_clone=1
+          fi
+          probe_root="$(mktemp -d)"
+          bwrap \
+            --die-with-parent \
+            --new-session \
+            --unshare-all \
+            --proc /proc \
+            --dev /dev \
+            --tmpfs /tmp \
+            --clearenv \
+            --setenv PATH /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+            --ro-bind /usr /usr \
+            --ro-bind /bin /bin \
+            --ro-bind /lib /lib \
+            --ro-bind /lib64 /lib64 \
+            --ro-bind /etc /etc \
+            --bind "$probe_root" /workspace \
+            --chdir /workspace \
+            -- \
+            /bin/true
 
       - name: Check macOS replay sandbox
         if: matrix.os == 'macos-14'
