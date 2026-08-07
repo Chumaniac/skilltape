@@ -1,10 +1,12 @@
 # Historical execution reports
 
 This directory archives task and diagnostic reports from earlier SkillTape
-implementation work. The reports are historical execution evidence, not
-current implementation requirements. Their dates, task identifiers, recorded
-commands, outputs, commit references, and limitations are preserved for
-traceability.
+implementation work. These files are historical execution evidence, not
+current implementation requirements. For current requirements and status, use
+the [documentation index](../../README.md), [installation guide](../../guides/installation.md),
+and [release-readiness page](../../release-readiness.md). The reports' dates,
+task identifiers, recorded commands, outputs, commit references, and
+limitations are preserved for traceability.
 
 ## 2026-08-04 SkillTape foundation
 

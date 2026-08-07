@@ -271,7 +271,7 @@ git commit -m "ci: add target release workflow"
 
 - [ ] Step 1: Document packaged Console use
 
-Add archive contents, installed paths, API/UI environment override troubleshooting, and exact checksum/install commands. State that the local repository has no configured remote and release publication requires a configured GitHub repository.
+Add archive contents, installed paths, API/UI environment override troubleshooting, and exact checksum/install commands. Use the [installation guide](../../guides/installation.md) for package and installation details, link current status to the [release-readiness page](../../release-readiness.md), and link the [release workflow](../../../.github/workflows/release.yml) without changing its `v*` tag/manual-dispatch triggers or publication behavior.
 
 - [ ] Step 2: Run the complete local gate
 

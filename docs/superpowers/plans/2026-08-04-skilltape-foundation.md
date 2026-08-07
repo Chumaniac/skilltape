@@ -23,12 +23,10 @@
 
 ## Scope Decomposition
 
-The complete design spans independent subsystems. This plan intentionally covers only the package contract and CLI foundation so it produces a working, reviewable deliverable. Follow-up plans should be created as separate documents before each subsystem is implemented:
+The complete design spans independent subsystems. This plan intentionally covers only the package contract and CLI foundation so it produces a working, reviewable deliverable. Follow-up work is consolidated in these tracked records:
 
-- `docs/superpowers/plans/2026-08-04-skilltape-capture.md`
-- `docs/superpowers/plans/2026-08-04-skilltape-compiler.md`
-- `docs/superpowers/plans/2026-08-04-skilltape-verify.md`
-- `docs/superpowers/plans/2026-08-04-skilltape-console.md`
+- [Full product implementation plan](2026-08-05-skilltape-full-product.md) covers Capture, Compiler, Policy, Runner, Verify, Receipt, Export, and Local Console.
+- [Console release implementation plan](2026-08-07-skilltape-console-release.md) covers packaged Console assets, installation, discovery, and release verification.
 
 ## File Map
 
@@ -925,7 +923,7 @@ Expected: the branch is `main`, there are no uncommitted changes, and every task
 
 - [ ] **Step 3: Record the foundation result**
 
-Update the root README with the verified commands and the next plan filename `docs/superpowers/plans/2026-08-04-skilltape-capture.md`.
+Update the root README with the verified commands and the [documentation index](../../README.md).
 
 - [ ] **Step 4: Commit the final handoff note**
 

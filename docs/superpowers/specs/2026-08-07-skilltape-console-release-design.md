@@ -100,6 +100,11 @@ publishes the assets to the tag release. The workflow has `contents: write`
 only on this final job; build jobs retain read-only permissions. No secret is
 passed to build or test commands.
 
+For current installation and release status, see the [installation guide](../../guides/installation.md),
+[release-readiness page](../../release-readiness.md), and [release workflow](../../../.github/workflows/release.yml).
+The workflow's `v*` tag and manual-dispatch triggers and its publication behavior
+are the current release contract.
+
 ## Verification strategy
 
 The release gates are layered:
@@ -125,9 +130,9 @@ constraints for Replay/Verify and are not hidden by the release workflow.
 - Missing API or UI assets fail before the CLI starts a child process.
 - Any checksum, extraction, or staging error leaves the destination binaries
   unchanged.
-- The repository currently has no configured Git remote; release publishing is
-  therefore implemented as a workflow definition and must be enabled only
-  after a remote and GitHub release policy are supplied.
+- The repository has a configured Git remote, but no versioned GitHub Release has
+  been published yet. Release readiness and explicit release-tag approval are
+  tracked on the [release-readiness page](../../release-readiness.md).
 - Cross-compiling the Windows target and installing Playwright browsers are
   CI-only checks; local macOS verification must not be presented as proof for
   those targets.
