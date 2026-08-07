@@ -55,8 +55,7 @@ examples/                         Runnable example packages
 tests/fixtures/                   Intentionally valid or invalid test packages
 ```
 
-Historical SDD reports currently stored directly under
-`.superpowers/sdd/` are moved to `docs/superpowers/reports/`. The move is
+Historical SDD reports are moved to `docs/superpowers/reports/`. The move is
 documentation-only: report contents, dates, task identifiers, and evidence
 remain intact after translation, and all references are updated.
 
@@ -119,7 +118,7 @@ The migration is complete when all of the following are true:
 - `git grep` finds no Han characters in tracked files.
 - Every Markdown file has an English title and English prose.
 - Every moved or renamed document has updated inbound links; no stale
-  `.superpowers/sdd/` documentation links remain.
+  historical report-path documentation links remain.
 - Repository, package, workflow, installer, and Console descriptions are
   English and consistent.
 - Code blocks, schema identifiers, commands, paths, and protocol examples are

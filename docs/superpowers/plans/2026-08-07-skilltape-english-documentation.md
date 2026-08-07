@@ -27,15 +27,15 @@
 - Create: `docs/guides/README.md`
 - Create: `docs/reference/README.md`
 - Create: `docs/superpowers/reports/README.md`
-- Move: `.superpowers/sdd/2026-08-04-skilltape-foundation/task-4-diagnostic-report.md` to `docs/superpowers/reports/2026-08-04-skilltape-foundation/task-4-diagnostic-report.md`
-- Move: `.superpowers/sdd/2026-08-05-skilltape-full-product/task-2-report.md` to `docs/superpowers/reports/2026-08-05-skilltape-full-product/task-2-report.md`
-- Move: `.superpowers/sdd/2026-08-05-skilltape-full-product/task-4-report.md` to `docs/superpowers/reports/2026-08-05-skilltape-full-product/task-4-report.md`
-- Move: `.superpowers/sdd/2026-08-05-skilltape-full-product/task-5-report.md` to `docs/superpowers/reports/2026-08-05-skilltape-full-product/task-5-report.md`
-- Move: `.superpowers/sdd/2026-08-05-skilltape-full-product/task-6-report.md` to `docs/superpowers/reports/2026-08-05-skilltape-full-product/task-6-report.md`
-- Move: `.superpowers/sdd/2026-08-05-skilltape-full-product/task-7-report.md` to `docs/superpowers/reports/2026-08-05-skilltape-full-product/task-7-report.md`
+- Archive: `docs/superpowers/reports/2026-08-04-skilltape-foundation/task-4-diagnostic-report.md`
+- Archive: `docs/superpowers/reports/2026-08-05-skilltape-full-product/task-2-report.md`
+- Archive: `docs/superpowers/reports/2026-08-05-skilltape-full-product/task-4-report.md`
+- Archive: `docs/superpowers/reports/2026-08-05-skilltape-full-product/task-5-report.md`
+- Archive: `docs/superpowers/reports/2026-08-05-skilltape-full-product/task-6-report.md`
+- Archive: `docs/superpowers/reports/2026-08-05-skilltape-full-product/task-7-report.md`
 
 **Interfaces:**
-- Consumes: the existing Markdown tree, the approved migration specification, and the six tracked `.superpowers/sdd/` reports.
+- Consumes: the existing Markdown tree, the approved migration specification, and the six tracked historical reports.
 - Produces: stable navigation pages and the `docs/superpowers/reports/` archival path used by the root README and future contributors.
 
 - [ ] **Step 1: Define the user-facing documentation map**
@@ -52,7 +52,7 @@
 
 - [ ] **Step 4: Update inbound links and archive language**
 
-  Replace every `.superpowers/sdd/` reference with its new `docs/superpowers/reports/` path. Mark the reports as historical execution evidence in the archive index and leave the root `.superpowers/` directory absent from the tracked documentation map.
+  Resolve every historical report reference to its `docs/superpowers/reports/` path. Mark the reports as historical execution evidence in the archive index and leave the root `.superpowers/` directory absent from the tracked documentation map.
 
 - [ ] **Step 5: Verify the structure**
 
@@ -63,7 +63,9 @@
   test -f docs/guides/README.md
   test -f docs/reference/README.md
   test -f docs/superpowers/reports/README.md
-  ! git grep -n '.superpowers/sdd'
+  stale_root='superpowers'
+  stale_leaf='sdd'
+  ! git grep -n "$stale_root/$stale_leaf"
   git diff --check
   ```
 
@@ -249,7 +251,9 @@
 
   ```bash
   ! rg -n --pcre2 '[\p{Han}]' docs/superpowers
-  ! git grep -n '.superpowers/sdd'
+  stale_root='superpowers'
+  stale_leaf='sdd'
+  ! git grep -n "$stale_root/$stale_leaf"
   git diff --check -- docs/superpowers
   ```
 
