@@ -98,6 +98,9 @@ fn capture_persists_only_secret_free_output_and_environment_metadata() {
 #[test]
 fn verify_receipt_contains_digests_but_never_raw_command_output() {
     if !replay_sandbox_available() {
+        if std::env::var_os("CI").is_some() {
+            panic!("platform replay sandbox is unavailable in CI");
+        }
         eprintln!("skipping receipt execution test: platform replay sandbox is unavailable");
         return;
     }

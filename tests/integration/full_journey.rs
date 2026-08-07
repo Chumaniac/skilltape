@@ -8,6 +8,9 @@ use tempfile::TempDir;
 #[test]
 fn capture_compile_lint_verify_receipt_and_export_form_one_offline_journey() {
     if !replay_sandbox_available() {
+        if std::env::var_os("CI").is_some() {
+            panic!("platform replay sandbox is unavailable in CI");
+        }
         eprintln!("skipping full journey: platform replay sandbox is unavailable");
         return;
     }
