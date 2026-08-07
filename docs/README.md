@@ -45,7 +45,7 @@ path by audience, or browse the documentation sections below.
 - [Guides](guides/README.md) — installation and operational guidance.
 - [Reference](reference/README.md) — stable formats, APIs, and schema families.
 - [Design records](design/2026-08-04-skilltape-design.md) — historical product and architecture decisions.
-- [Approved specifications](superpowers/specs/2026-08-05-skilltape-full-product-design.md) — product and implementation specifications.
+- [Specification records](superpowers/specs/2026-08-05-skilltape-full-product-design.md) — product and implementation specifications.
 - [Implementation plans](superpowers/plans/2026-08-04-skilltape-foundation.md) — execution plans and checklists.
 - [Historical execution reports](superpowers/reports/README.md) — archived task and diagnostic evidence.
 

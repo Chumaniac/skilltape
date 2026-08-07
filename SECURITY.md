@@ -53,7 +53,8 @@ real credentials into tests, Issues, commit messages, or logs.
 | Linux | Supported | Requires `bwrap`/`bubblewrap` and an available user namespace | `bwrap --unshare-all` isolates network, environment, and filesystem; CI preinstalls bubblewrap |
 | Windows | Supports non-execution commands and package operations | Fails closed and returns sandbox unavailable | Release packages may use the Windows installer; Replay/Verify support is not claimed until an equivalent restricted executor is integrated |
 
-The complete release gates run only on the Linux and macOS matrix. PTY terminal
+Complete product and security CI gates run on the Linux and macOS matrix, while
+the release packaging matrix covers Linux, macOS, and Windows. PTY terminal
 size, signal semantics, and filesystem-watcher event coalescing may differ by
 platform; Tape and Receipt schemas must not depend on the exact time values of
 these nondeterministic fields.

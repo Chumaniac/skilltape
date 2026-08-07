@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> Archival note: This pre-migration plan preserves its historical setup, remote guidance, dates, task evidence, commands, and intent. Current implementation and release facts are tracked in [docs/release-readiness.md](../../release-readiness.md).
+
 **Goal:** Expand the current Foundation MVP into a local-first, capturable, compilable, reviewable, replayable, verifiable, and exportable full SkillTape product flow.
 
 **Architecture:** The Rust workspace owns the deterministic core for Tape, Capture, Compiler, Policy, Runner, Verify, Receipt, and Export; the CLI is the primary product entry point. The optional Local Console reads the same Tape, Skill, and Receipt through a versioned local HTTP API, without duplicating business logic or becoming a runtime dependency of the CLI/SDK.

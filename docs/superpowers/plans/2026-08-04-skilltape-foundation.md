@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> Archival note: This pre-migration plan preserves its historical setup, remote guidance, dates, task evidence, commands, and intent. Current implementation and release facts are tracked in [docs/release-readiness.md](../../release-readiness.md).
+
 **Goal:** Build the first independently testable SkillTape vertical slice: a Rust workspace that can create, load, and lint a portable Skill package using the versioned `skilltape.yaml`, `workflow.yaml`, `permissions.json`, and `skilltape.lock` contracts.
 
 **Architecture:** The foundation uses a Cargo workspace with a schema crate containing typed domain models and JSON Schema validation, a core crate owning package I/O and cross-file validation, and a CLI crate exposing `init` and `lint`. The implementation does not include capture, LLM providers, replay, or Web UI yet; later plans will consume the stable package and diagnostic interfaces created here.

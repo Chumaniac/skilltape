@@ -1,5 +1,5 @@
 .worktrees/
-.superpowers/
+.superpowers/sdd/
 target/
 __pycache__/
 /apps/skilltape-console/node_modules/

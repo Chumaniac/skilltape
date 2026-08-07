@@ -4,6 +4,8 @@
 > Date: 2026-08-05
 > Product form: local-first CLI/SDK at the core, with an optional local Web Console companion
 
+> Archival note: This pre-migration specification preserves its historical status, dates, task evidence, commands, and intent. Current implementation and release facts are tracked in [docs/release-readiness.md](../../release-readiness.md).
+
 ## 1. Product Definition
 
 SkillTape is a local-first toolchain that turns “a real piece of work completed by a person” into an “auditable, replayable, shareable Agent Skill.”
