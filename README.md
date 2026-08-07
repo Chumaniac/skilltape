@@ -1,24 +1,32 @@
 # SkillTape
 
-SkillTape 是一个 local-first、可回放验证的 Agent Skill 编译器。它把一次真实的终端和文件工作流记录为可脱敏、可审查的 Tape，再确定性编译成可回放、可验证、可提交到 GitHub 的 Skill 包。
+SkillTape is a local-first, replay-verifiable Agent Skill compiler. It records
+real terminal and filesystem workflows as redactable, reviewable Tapes, then
+deterministically compiles them into replayable, verifiable Skill packages that
+can be committed to GitHub.
 
-核心闭环是：
+The core loop is:
 
 ```text
 Capture → Tape → Compile → Lint/Policy → Replay → Verify/Receipt → Export
 ```
 
-核心运行时不需要云服务或模型 provider。模型 proposal 只能补充描述，不能绕过 schema、权限或 policy 门禁。
+The core runtime does not require a cloud service or model provider. A model
+proposal may supplement descriptions, but it cannot bypass schema, permission,
+or policy gates.
 
-## 五分钟本地试跑
+## Five-minute local run
 
-需要 Rust 1.97.1；Linux 上执行 Replay/Verify 还需要 `bubblewrap`，macOS 使用系统的 `/usr/bin/sandbox-exec`。源码构建方式和预构建 release 安装方式见[安装指南](docs/guides/installation.md)。
+Rust 1.97.1 is required. Replay/Verify on Linux also requires `bubblewrap`,
+while macOS uses the system `/usr/bin/sandbox-exec`. See the
+[installation guide](docs/guides/installation.md) for source builds and
+prebuilt release installation.
 
 ```bash
 git clone <your-skilltape-repository>
 cd skilltape
 
-# 构建 CLI；核心命令不需要 Node.js 或云服务
+# Build the CLI; core commands do not require Node.js or cloud services
 cargo install --locked --path crates/skilltape-cli
 
 demo_workspace="$(mktemp -d)"
@@ -36,15 +44,26 @@ skilltape export "$demo_workspace/demo-skill" \
   --output "$demo_workspace/exported-skill"
 ```
 
-`capture --yes` 是明确的本地确认；Capture 默认不保存原始秘密环境变量，Tape 输出也应视为本地敏感工件。提交仓库前请检查 `.gitignore`、Tape、Receipt 和导出目录。
+`capture --yes` is explicit local confirmation. Capture does not persist raw
+secret environment-variable values by default, and Tape output should still be
+treated as a sensitive local artifact. Before committing to a repository,
+inspect `.gitignore`, Tapes, Receipts, and export directories.
 
-需要记录人工交互时省略 `--command`，Capture 会启动当前用户的 shell；也可以对指定程序追加 `--interactive`。交互期间的实时 PTY 输出写入 stderr，因而和 `--json` 一起使用时 stdout 仍保持为单个 JSON 摘要。每次捕获的 Tape manifest 都使用独立 ID，即使输出目录不同、名称相同也不会复用 ID。
+To record a human interaction, omit `--command` and Capture starts the current
+user's shell. You can also append `--interactive` to a specified program. Live
+PTY output during an interactive session is written to stderr, so stdout
+remains a single JSON summary when used with `--json`. Every captured Tape
+manifest uses an independent ID; IDs are not reused even when output
+directories differ but names match.
 
 ## Console
 
-Console 是可选的只读本地查看器，展示 Capture 时间线、Workflow/权限 Diff、运行状态和 Receipt。它不会在浏览器中执行命令，也不会修改 workspace。
+Console is an optional read-only local viewer for Capture timelines,
+Workflow/permission diffs, run status, and Receipts. It does not execute
+commands in the browser or modify the workspace.
 
-从源码运行 Console 还需要构建 UI 和 API companion binary：
+Running Console from source also requires building the UI and API companion
+binary:
 
 ```bash
 npm ci --prefix apps/skilltape-console
@@ -54,53 +73,65 @@ cargo build --locked --release -p skilltape-cli -p skilltape-console-api
 ./target/release/skilltape console --workspace .
 ```
 
-CLI 默认只绑定 `127.0.0.1`，退出时会回收 API 子进程；如需自动打开浏览器，追加 `--open`。UI 未构建时，Console 会给出明确错误，不会伪装成已启动。
+The CLI binds to `127.0.0.1` by default and reclaims the API child process on
+exit; append `--open` to open a browser automatically. If the UI has not been
+built, Console reports an explicit error instead of pretending to have started.
 
-Release archive 同时包含 `skilltape`、`skilltape-console-api` 和 `console/` 静态 UI。安装脚本会把两个 binary 放入安装目录，并把 `console/` 放在其父目录；安装后无需源码 checkout 即可运行 `skilltape console`。如果需要覆盖自动发现路径，可设置 `SKILLTAPE_CONSOLE_API_BIN` 或 `SKILLTAPE_CONSOLE_UI_DIST`。
+Release archives include `skilltape`, `skilltape-console-api`, and the static
+`console/` UI. The installer places both binaries in the installation directory
+and `console/` in its parent; after installation, `skilltape console` runs
+without a source checkout. To override automatic discovery, set
+`SKILLTAPE_CONSOLE_API_BIN` or `SKILLTAPE_CONSOLE_UI_DIST`.
 
-## CLI 命令
+## CLI commands
 
-| 命令 | 作用 |
+| Command | Purpose |
 | --- | --- |
-| `skilltape init <name> --output <dir>` | 创建最小 Skill 包模板 |
-| `skilltape lint <skill> [--strict] [--json]` | 校验 schema、路径、权限、policy 和 lockfile |
-| `skilltape capture <name> [--workspace <dir>] [--command <program>] [--interactive] --yes` | 记录终端和文件变化为 Tape；省略 `--command` 时进入当前 shell，指定程序需交互输入时追加 `--interactive` |
-| `skilltape compile <tape> --output <dir>` | 无模型确定性编译 Skill 包 |
-| `skilltape replay <skill> [--input <json>]` | 在隔离临时工作区中回放并输出脱敏摘要 |
-| `skilltape verify <skill> [--receipt <json>] [--json]` | 回放、执行断言并生成 Receipt |
-| `skilltape export <skill> --target <target> --output <dir>` | 通过 lint 门禁导出通用或平台包 |
-| `skilltape console [--workspace <dir>] [--port <port>] [--open]` | 启动只读本地 Console |
+| `skilltape init <name> --output <dir>` | Create a minimal Skill package template |
+| `skilltape lint <skill> [--strict] [--json]` | Validate schema, paths, permissions, policy, and lockfile |
+| `skilltape capture <name> [--workspace <dir>] [--command <program>] [--interactive] --yes` | Record terminal and filesystem changes as a Tape; omit `--command` to enter the current shell, or append `--interactive` when the specified program reads from the terminal |
+| `skilltape compile <tape> --output <dir>` | Deterministically compile a Skill package without a model |
+| `skilltape replay <skill> [--input <json>]` | Replay in an isolated temporary workspace and output a redacted summary |
+| `skilltape verify <skill> [--receipt <json>] [--json]` | Replay, run assertions, and generate a Receipt |
+| `skilltape export <skill> --target <target> --output <dir>` | Export a generic or platform package through the lint gate |
+| `skilltape console [--workspace <dir>] [--port <port>] [--open]` | Start the read-only local Console |
 
-所有命令都可以通过 `cargo run -p skilltape-cli -- ...` 从源码执行。失败的输入通常返回 code 2，policy/export/verify 失败返回非零 code；CI 应断言失败而不是忽略它。
+Every command can be run from source with `cargo run -p skilltape-cli -- ...`.
+Invalid input usually returns code 2; policy/export/verify failures return a
+non-zero code. CI should assert failures rather than ignore them.
 
-## CI 与 Skill 仓库集成
+## CI and Skill repository integration
 
-- `.github/workflows/ci.yml` 运行 fmt、Clippy、workspace tests、有效 example lint、无效 fixture 的预期失败断言以及 release/installer fixture gates。
-- `.github/workflows/release.yml` 在 `v*` tag 或手动版本输入上构建 Linux、macOS 和 Windows archive，生成 `checksums.txt`，并只在最终 publish job 使用 `contents: write`。
-- `.github/workflows/skill-verify.yml` 是只运行本地 CLI 的模板，不上传 Tape、Receipt、日志或秘密。
-- release 安装脚本要求固定版本、下载 checksum 并在校验成功前不替换已有 binary；具体参数见[安装指南](docs/guides/installation.md)。
+- `.github/workflows/ci.yml` runs fmt, Clippy, workspace tests, valid-example lint, expected-failure assertions for invalid fixtures, and release/installer fixture gates.
+- `.github/workflows/release.yml` builds Linux, macOS, and Windows archives on a `v*` tag or manual version input, generates `checksums.txt`, and grants `contents: write` only to the final publish job.
+- `.github/workflows/skill-verify.yml` is a template that runs only the local CLI; it does not upload Tapes, Receipts, logs, or secrets.
+- The release installation script requires a fixed version, downloads a checksum, and does not replace an existing binary until verification succeeds; see the [installation guide](docs/guides/installation.md) for the exact parameters.
+- The implementation is merged on `main` at `bdd82937fc652190917a8259098bc92ae48553cb`; CI run `31149247700` is green, and no versioned GitHub Release has been published.
 
-## 安全、兼容性与基准
+## Security, compatibility, and benchmarks
 
-- [安全模型与漏洞披露](SECURITY.md)：说明 sandbox 边界、秘密处理、平台差异和版本策略。
-- [安装与平台前提](docs/guides/installation.md)：Linux Replay/Verify 需要 `bubblewrap`，macOS 使用 `/usr/bin/sandbox-exec`。
-- `cargo bench -p skilltape-cli --bench capture_compile` 提供 10k Tape 事件、100-step Workflow 和可选 1GB 稀疏日志场景；它只输出观测值，不以未经校准的固定阈值阻断功能测试。运行大日志场景时设置 `SKILLTAPE_BENCHMARK_LARGE=1`。
+- [Security model and vulnerability disclosure](SECURITY.md) explains the sandbox boundary, secret handling, platform differences, and version policy.
+- [Installation and platform prerequisites](docs/guides/installation.md): Linux Replay/Verify requires `bubblewrap`, while macOS uses `/usr/bin/sandbox-exec`.
+- `cargo bench -p skilltape-cli --bench capture_compile` provides 10k Tape events, a 100-step Workflow, and an optional 1GB sparse-log scenario; it reports observations only and does not block functional tests with an uncalibrated fixed threshold. Set `SKILLTAPE_BENCHMARK_LARGE=1` for the large-log scenario.
 
-CI 的完整产品门禁覆盖 Linux 和 macOS；Windows 当前可用于 Capture/Compile/Lint/Export，Replay/Verify 需要后续接入等价的受限执行器。
+The complete product CI gates cover Linux and macOS. Windows currently
+supports Capture/Compile/Lint/Export; Replay/Verify fails closed until a future
+equivalent restricted executor is integrated.
 
-## 设计目标
+## Design goals
 
-- 本地优先，不强制云端服务。
-- LLM 只能生成受约束的结构化 Workflow IR，不能直接执行任意 Shell。
-- 默认拒绝未声明的文件、网络、进程和秘密访问权限。
-- 通过 fixtures、受控回放和 Receipt 证明 Skill 的执行结果。
-- 使用 Git、JSON/YAML 和适配器连接不同 Agent 平台。
+- Local-first operation without a mandatory cloud service.
+- LLMs may generate constrained structured Workflow IR, but cannot execute arbitrary Shell directly.
+- Deny undeclared file, network, process, and secret access by default.
+- Use fixtures, controlled replay, and Receipts to prove Skill execution results.
+- Connect different Agent platforms through Git, JSON/YAML, and adapters.
 
-## 文档
+## Documentation
 
-- [安装、release 和 GitHub Actions](docs/guides/installation.md)
+- [Documentation index](docs/README.md) — audience-oriented paths through the complete documentation set.
+- [Installation, releases, and GitHub Actions](docs/guides/installation.md)
 - [Release readiness checklist](docs/release-readiness.md)
-- [贡献指南](CONTRIBUTING.md)
-- [变更记录](CHANGELOG.md)
-- [完整产品设计](docs/superpowers/specs/2026-08-05-skilltape-full-product-design.md)
-- [实现计划](docs/superpowers/plans/2026-08-05-skilltape-full-product.md)
+- [Contributing guide](CONTRIBUTING.md)
+- [Changelog](CHANGELOG.md)
+- [Complete product design](docs/superpowers/specs/2026-08-05-skilltape-full-product-design.md)
+- [Implementation plan](docs/superpowers/plans/2026-08-05-skilltape-full-product.md)

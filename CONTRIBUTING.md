@@ -3,7 +3,7 @@
 ## Development prerequisites
 
 - Rust 1.97.1; the repository `rust-toolchain.toml` selects the pinned toolchain.
-- Node.js 22 for the Console; use `npm ci --prefix apps/skilltape-console`.
+- Node.js 22 for Console; use `npm ci --prefix apps/skilltape-console`.
 - Linux Replay/Verify development requires `bubblewrap`; macOS requires
   `/usr/bin/sandbox-exec`. Windows intentionally fails closed for those commands.
 
@@ -23,7 +23,7 @@ python3 scripts/test_release_workflow.py
 bash scripts/test_install.sh
 ```
 
-For changes to Capture, runner, policy, receipts, exporters, or Console
+For changes to Capture, the runner, policy, Receipts, exporters, or Console
 process boundaries, add a regression test first. Do not weaken an assertion or
 skip a security gate to make an implementation pass.
 
@@ -40,11 +40,11 @@ skip a security gate to make an implementation pass.
 
 ## Documentation and release changes
 
-Update README, the relevant guide, CHANGELOG, and release-readiness evidence
+Update the README, the relevant guide, CHANGELOG, and release-readiness evidence
 when user-facing behavior or platform prerequisites change. Release archives
-must be produced with `scripts/package_release.py`; do not hand-edit an
-archive or publish without checksums.
+must be produced with `scripts/package_release.py`; do not hand-edit an archive
+or publish without checksums.
 
-The repository currently has no configured Git remote. A release workflow may
-be tested locally for syntax and fixtures, but publishing requires an explicit
-GitHub repository, tag, and permission decision.
+The release workflow may be tested locally for syntax and fixtures, but
+publishing requires an explicit GitHub repository, release tag, and permission
+decision.
