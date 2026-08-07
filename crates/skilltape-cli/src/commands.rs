@@ -50,6 +50,8 @@ enum Command {
         #[arg(long)]
         command: Option<String>,
         #[arg(long)]
+        interactive: bool,
+        #[arg(long)]
         output: Option<PathBuf>,
         #[arg(long, action = clap::ArgAction::Append)]
         allow_env: Vec<String>,
@@ -121,6 +123,7 @@ pub fn run() -> ExitCode {
             name,
             workspace,
             command,
+            interactive,
             output,
             allow_env,
             max_output_bytes,
@@ -130,6 +133,7 @@ pub fn run() -> ExitCode {
             name,
             workspace,
             command,
+            interactive,
             output,
             allow_env,
             max_output_bytes,

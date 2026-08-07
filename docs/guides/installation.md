@@ -81,6 +81,8 @@ skilltape export "$demo_workspace/demo-skill" \
 
 `--command` 接收一个可执行程序名；需要参数时应先把它封装为受控脚本并在 Skill 的 permissions/workflow 中声明。不要把未审查的自然语言直接拼成 Shell 命令。
 
+要捕获人工操作流程，可以省略 `--command`，Capture 会启动当前用户的 shell，并在输入 `exit` 后结束；若指定的程序本身需要从终端读取输入，则添加 `--interactive`。交互模式将实时终端输出发送到 stderr，避免污染 `--json` 的 stdout 摘要；Tape manifest 的 `id` 每次运行都会唯一生成。
+
 ## 本地验证
 
 与 CI 一致的本地门禁：

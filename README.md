@@ -38,6 +38,8 @@ skilltape export "$demo_workspace/demo-skill" \
 
 `capture --yes` 是明确的本地确认；Capture 默认不保存原始秘密环境变量，Tape 输出也应视为本地敏感工件。提交仓库前请检查 `.gitignore`、Tape、Receipt 和导出目录。
 
+需要记录人工交互时省略 `--command`，Capture 会启动当前用户的 shell；也可以对指定程序追加 `--interactive`。交互期间的实时 PTY 输出写入 stderr，因而和 `--json` 一起使用时 stdout 仍保持为单个 JSON 摘要。每次捕获的 Tape manifest 都使用独立 ID，即使输出目录不同、名称相同也不会复用 ID。
+
 ## Console
 
 Console 是可选的只读本地查看器，展示 Capture 时间线、Workflow/权限 Diff、运行状态和 Receipt。它不会在浏览器中执行命令，也不会修改 workspace。
@@ -60,7 +62,7 @@ CLI 默认只绑定 `127.0.0.1`，退出时会回收 API 子进程；如需自�
 | --- | --- |
 | `skilltape init <name> --output <dir>` | 创建最小 Skill 包模板 |
 | `skilltape lint <skill> [--strict] [--json]` | 校验 schema、路径、权限、policy 和 lockfile |
-| `skilltape capture <name> --workspace <dir> --command <program> --yes` | 记录终端和文件变化为 Tape |
+| `skilltape capture <name> [--workspace <dir>] [--command <program>] [--interactive] --yes` | 记录终端和文件变化为 Tape；省略 `--command` 时进入当前 shell，指定程序需交互输入时追加 `--interactive` |
 | `skilltape compile <tape> --output <dir>` | 无模型确定性编译 Skill 包 |
 | `skilltape replay <skill> [--input <json>]` | 在隔离临时工作区中回放并输出脱敏摘要 |
 | `skilltape verify <skill> [--receipt <json>] [--json]` | 回放、执行断言并生成 Receipt |

@@ -1,7 +1,7 @@
 use std::future::Future;
 use std::path::{Component, Path, PathBuf};
 use std::process::ExitCode;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
@@ -22,6 +22,7 @@ const CAPTURE_CANCELLED_EXIT_CODE: u8 = 130;
 
 #[cfg(unix)]
 static INTERRUPTED: AtomicBool = AtomicBool::new(false);
+static TAPE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[cfg(unix)]
 extern "C" fn handle_interrupt(_: libc::c_int) {
@@ -62,6 +63,7 @@ pub(crate) struct CaptureConfig {
     pub name: String,
     pub workspace: Option<PathBuf>,
     pub command: Option<String>,
+    pub interactive: bool,
     pub output: Option<PathBuf>,
     pub allow_env: Vec<String>,
     pub max_output_bytes: usize,
@@ -166,6 +168,7 @@ async fn capture(config: CaptureConfig) -> Result<CaptureJsonSummary, CaptureCom
     let workspace = resolve_workspace(config.workspace)?;
     let use_default_output = config.output.is_none();
     let output = resolve_output(config.output, &workspace, &config.name)?;
+    let interactive = config.interactive || config.command.is_none();
     let command = config
         .command
         .unwrap_or_else(|| std::env::var("SHELL").unwrap_or_else(|_| "sh".to_owned()));
@@ -174,7 +177,7 @@ async fn capture(config: CaptureConfig) -> Result<CaptureJsonSummary, CaptureCom
     }
 
     let started_at_ms = now_ms();
-    let id = format!("tape_{}", config.name);
+    let id = next_tape_id(started_at_ms);
     let manifest = TapeManifest {
         schema: TAPE_SCHEMA_V1.to_owned(),
         id: id.clone(),
@@ -222,6 +225,7 @@ async fn capture(config: CaptureConfig) -> Result<CaptureJsonSummary, CaptureCom
             workspace: workspace.clone(),
             env_allowlist: config.allow_env,
             output_limit: config.max_output_bytes,
+            interactive,
         },
         staging_store,
         cancel.clone(),
@@ -479,6 +483,14 @@ fn now_ms() -> u64 {
         .unwrap_or_default()
         .as_millis()
         .min(u64::MAX as u128) as u64
+}
+
+fn next_tape_id(started_at_ms: u64) -> String {
+    let sequence = TAPE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    format!(
+        "tape_{started_at_ms:020}-{:020}-{sequence:020}",
+        std::process::id()
+    )
 }
 
 fn report_error(json_output: bool, message: &str) {

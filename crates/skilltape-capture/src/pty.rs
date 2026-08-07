@@ -1,4 +1,6 @@
-use std::io::Read;
+use std::io::{Read, Write};
+#[cfg(unix)]
+use std::os::fd::AsRawFd;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -15,6 +17,7 @@ pub(crate) struct PtyRequest {
     pub args: Vec<String>,
     pub workspace: std::path::PathBuf,
     pub output_limit: usize,
+    pub interactive: bool,
     pub terminal_size: TerminalSize,
     pub timeout: Duration,
 }
@@ -64,6 +67,10 @@ impl PtyAdapter for PortablePtyAdapter {
             .master
             .try_clone_reader()
             .map_err(|error| CaptureError::Pty(error.to_string()))?;
+        let writer = pair
+            .master
+            .take_writer()
+            .map_err(|error| CaptureError::Pty(error.to_string()))?;
 
         let mut command = CommandBuilder::new(request.command);
         command.args(request.args);
@@ -74,8 +81,18 @@ impl PtyAdapter for PortablePtyAdapter {
             .map_err(|error| CaptureError::Pty(error.to_string()))?;
         drop(pair.slave);
 
+        let input_cancel = CancellationToken::new();
+        let input_thread = if request.interactive {
+            let input_cancel = input_cancel.clone();
+            Some(thread::spawn(move || forward_stdin(writer, input_cancel)))
+        } else {
+            drop(writer);
+            None
+        };
         let output_limit = request.output_limit;
-        let reader_thread = thread::spawn(move || read_bounded(&mut reader, output_limit));
+        let echo_output = request.interactive;
+        let reader_thread =
+            thread::spawn(move || read_bounded(&mut reader, output_limit, echo_output));
         let mut cancelled = false;
         let mut timed_out = false;
         let deadline = Instant::now()
@@ -94,10 +111,12 @@ impl PtyAdapter for PortablePtyAdapter {
             if stop_requested_at.is_none() && status.is_none() {
                 if cancel.is_cancelled() {
                     cancelled = true;
+                    input_cancel.cancel();
                     interrupt_child(child.as_mut(), process_id).map_err(CaptureError::Io)?;
                     stop_requested_at = Some(now);
                 } else if now >= deadline {
                     timed_out = true;
+                    input_cancel.cancel();
                     interrupt_child(child.as_mut(), process_id).map_err(CaptureError::Io)?;
                     stop_requested_at = Some(now);
                 }
@@ -118,6 +137,12 @@ impl PtyAdapter for PortablePtyAdapter {
             thread::sleep(POLL_INTERVAL);
         }
         let status = status.expect("capture loop exits only after child status is available");
+        input_cancel.cancel();
+        if let Some(input_thread) = input_thread {
+            input_thread
+                .join()
+                .map_err(|_| CaptureError::Pty("PTY input thread panicked".to_owned()))?;
+        }
         let (output, output_bytes, output_truncated) = reader_thread
             .join()
             .map_err(|_| CaptureError::Pty("PTY reader thread panicked".to_owned()))?
@@ -196,14 +221,86 @@ fn signal_process_group(process_id: u32, signal: libc::c_int) -> std::io::Result
     }
 }
 
-fn read_bounded(reader: &mut dyn Read, limit: usize) -> std::io::Result<(Vec<u8>, usize, bool)> {
+fn forward_stdin(mut writer: Box<dyn Write + Send>, cancel: CancellationToken) {
+    #[cfg(unix)]
+    {
+        let stdin = std::io::stdin();
+        let stdin_fd = stdin.as_raw_fd();
+        let mut buffer = [0_u8; 8 * 1024];
+        loop {
+            if cancel.is_cancelled() {
+                break;
+            }
+            let mut pollfd = libc::pollfd {
+                fd: stdin_fd,
+                events: libc::POLLIN,
+                revents: 0,
+            };
+            let result = unsafe { libc::poll(&mut pollfd, 1, 50) };
+            if result < 0 {
+                if std::io::Error::last_os_error().raw_os_error() == Some(libc::EINTR) {
+                    continue;
+                }
+                break;
+            }
+            if result == 0 {
+                continue;
+            }
+            if pollfd.revents & (libc::POLLIN | libc::POLLHUP) == 0 {
+                continue;
+            }
+            let mut stdin = &stdin;
+            match stdin.read(&mut buffer) {
+                Ok(0) => break,
+                Ok(read) => {
+                    if writer.write_all(&buffer[..read]).is_err() {
+                        break;
+                    }
+                    let _ = writer.flush();
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(_) => break,
+            }
+        }
+    }
+
+    #[cfg(not(unix))]
+    {
+        let mut stdin = std::io::stdin().lock();
+        let mut buffer = [0_u8; 8 * 1024];
+        while !cancel.is_cancelled() {
+            match stdin.read(&mut buffer) {
+                Ok(0) => break,
+                Ok(read) => {
+                    if writer.write_all(&buffer[..read]).is_err() {
+                        break;
+                    }
+                    let _ = writer.flush();
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(_) => break,
+            }
+        }
+    }
+}
+
+fn read_bounded(
+    reader: &mut dyn Read,
+    limit: usize,
+    echo_output: bool,
+) -> std::io::Result<(Vec<u8>, usize, bool)> {
     let mut retained = Vec::with_capacity(limit.min(8 * 1024));
     let mut total = 0usize;
     let mut buffer = [0_u8; 8 * 1024];
+    let mut stderr = std::io::stderr().lock();
     loop {
         match reader.read(&mut buffer) {
             Ok(0) => break,
             Ok(read) => {
+                if echo_output {
+                    stderr.write_all(&buffer[..read])?;
+                    stderr.flush()?;
+                }
                 total = total.saturating_add(read);
                 let keep = read.min(limit.saturating_sub(retained.len()));
                 retained.extend_from_slice(&buffer[..keep]);
@@ -256,7 +353,7 @@ mod tests {
 
     #[test]
     fn read_bounded_propagates_non_eof_errors() {
-        let error = read_bounded(&mut ErrorReader { raw_os_error: None }, 1024)
+        let error = read_bounded(&mut ErrorReader { raw_os_error: None }, 1024, false)
             .expect_err("non-EOF read errors must be returned");
 
         assert_eq!(error.kind(), std::io::ErrorKind::Other);
@@ -271,6 +368,7 @@ mod tests {
                 raw_os_error: Some(libc::EIO),
             },
             1024,
+            false,
         )
         .expect("EIO is the normal Unix PTY closure condition");
 

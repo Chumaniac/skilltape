@@ -21,6 +21,7 @@ pub struct CaptureOptions {
     pub workspace: PathBuf,
     pub env_allowlist: Vec<String>,
     pub output_limit: usize,
+    pub interactive: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -167,6 +168,7 @@ pub(crate) async fn capture_terminal_with_adapter<A: PtyAdapter>(
         args: options.args,
         workspace: options.workspace,
         output_limit: options.output_limit,
+        interactive: options.interactive,
         terminal_size,
         timeout,
     };
@@ -462,6 +464,7 @@ mod tests {
                 workspace,
                 env_allowlist: vec![],
                 output_limit: 1024,
+                interactive: false,
             },
             store,
             cancel,
@@ -505,6 +508,7 @@ mod tests {
                 workspace,
                 env_allowlist: vec![],
                 output_limit: 1024,
+                interactive: false,
             },
             store,
             CancellationToken::new(),
@@ -550,6 +554,7 @@ mod tests {
                 workspace: workspace.clone(),
                 env_allowlist: vec![],
                 output_limit: 321,
+                interactive: false,
             },
             store,
             CancellationToken::new(),
@@ -601,6 +606,7 @@ mod tests {
                 workspace,
                 env_allowlist: vec![],
                 output_limit: 1024,
+                interactive: false,
             },
             store,
             CancellationToken::new(),

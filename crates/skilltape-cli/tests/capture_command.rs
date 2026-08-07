@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::Duration;
 
 use assert_cmd::cargo::CommandCargoExt;
 use serde_json::Value;
@@ -81,6 +82,85 @@ fn capture_writes_the_requested_output_and_json_summary() {
     assert_eq!(summary["cancelled"], false);
     assert!(summary["event_count"].as_u64().expect("event count") >= 4);
     assert!(output.join("events.jsonl").is_file());
+}
+
+#[test]
+fn capture_assigns_unique_ids_to_repeated_runs() {
+    let temp = TempDir::new().expect("temp directory");
+    let workspace = temp.path().join("workspace");
+    fs::create_dir(&workspace).expect("workspace");
+    let script = executable_script(&workspace, "capture.sh", "printf 'repeatable output\\n'");
+    let first_output = temp.path().join("tapes/first");
+    let second_output = temp.path().join("tapes/second");
+
+    for output in [&first_output, &second_output] {
+        run_capture(
+            &workspace,
+            &[
+                "capture",
+                "same-name",
+                "--command",
+                script.to_str().expect("script path"),
+                "--output",
+                output.to_str().expect("output path"),
+                "--yes",
+            ],
+        )
+        .success();
+    }
+
+    let first_manifest: Value =
+        serde_json::from_slice(&fs::read(first_output.join("manifest.json")).expect("manifest"))
+            .expect("first manifest JSON");
+    let second_manifest: Value =
+        serde_json::from_slice(&fs::read(second_output.join("manifest.json")).expect("manifest"))
+            .expect("second manifest JSON");
+    assert_ne!(first_manifest["id"], second_manifest["id"]);
+    assert!(first_manifest["id"]
+        .as_str()
+        .expect("first tape id")
+        .starts_with("tape_"));
+}
+
+#[cfg(unix)]
+#[test]
+fn interactive_capture_forwards_stdin_to_the_pty_and_keeps_json_clean() {
+    let temp = TempDir::new().expect("temp directory");
+    let workspace = temp.path().join("workspace");
+    fs::create_dir(&workspace).expect("workspace");
+    let script = executable_script(
+        &workspace,
+        "interactive.sh",
+        "IFS= read -r line; printf 'received:%s\\n' \"$line\"",
+    );
+    let output = temp.path().join("tapes/interactive-demo");
+
+    let mut command = assert_cmd::Command::cargo_bin("skilltape").expect("binary");
+    let result = command
+        .current_dir(&workspace)
+        .args([
+            "capture",
+            "interactive-demo",
+            "--command",
+            script.to_str().expect("script path"),
+            "--interactive",
+            "--output",
+            output.to_str().expect("output path"),
+            "--json",
+            "--yes",
+        ])
+        .write_stdin("hello from stdin\n")
+        .timeout(Duration::from_secs(5))
+        .output()
+        .expect("interactive capture process");
+
+    assert!(result.status.success(), "stderr: {:?}", result.stderr);
+    let summary: Value = serde_json::from_slice(&result.stdout).expect("clean JSON summary");
+    assert_eq!(summary["name"], "interactive-demo");
+    assert!(String::from_utf8_lossy(&result.stderr).contains("received:hello from stdin"));
+
+    let events = fs::read_to_string(output.join("events.jsonl")).expect("events");
+    assert!(events.contains("received:hello from stdin"));
 }
 
 #[test]
