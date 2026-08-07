@@ -1,0 +1,159 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version without the leading v
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: macos-13
+            target: x86_64-apple-darwin
+          - os: macos-14
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Select pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+          targets: ${{ matrix.target }}
+
+      - name: Install Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/skilltape-console/package-lock.json
+
+      - name: Install Python 3
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Console dependencies
+        run: npm ci --prefix apps/skilltape-console
+
+      - name: Build Console UI
+        run: npm --prefix apps/skilltape-console run build
+
+      - name: Resolve release version
+        id: version
+        env:
+          RELEASE_VERSION_INPUT: ${{ inputs.version }}
+        shell: bash
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="$RELEASE_VERSION_INPUT"
+          fi
+          if [[ -z "$version" || "$version" == *[!A-Za-z0-9._-]* ]]; then
+            echo "release version must be a non-empty safe path component" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build Rust binaries
+        run: cargo build --locked --release --target "${{ matrix.target }}" -p skilltape-cli -p skilltape-console-api
+
+      - name: Package release archive
+        shell: bash
+        run: |
+          python scripts/package_release.py \
+            --version "${{ steps.version.outputs.version }}" \
+            --target "${{ matrix.target }}" \
+            --binary-dir "target/${{ matrix.target }}/release" \
+            --ui-dist apps/skilltape-console/dist \
+            --output-dir release
+
+      - name: Smoke test packaged Console
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          SKILLTAPE_CONSOLE_API_BIN="target/${{ matrix.target }}/release/skilltape-console-api" \
+          SKILLTAPE_CONSOLE_UI_DIST=apps/skilltape-console/dist \
+          bash scripts/smoke_console.sh "$(mktemp -d)"
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.target }}
+          path: release/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs: build
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Resolve release tag
+        id: release
+        env:
+          RELEASE_VERSION_INPUT: ${{ inputs.version }}
+        shell: bash
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="$RELEASE_VERSION_INPUT"
+          fi
+          if [[ -z "$version" || "$version" == *[!A-Za-z0-9._-]* ]]; then
+            echo "release version must be a non-empty safe path component" >&2
+            exit 1
+          fi
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - name: Generate checksums
+        working-directory: release-assets
+        shell: bash
+        run: |
+          find . -maxdepth 1 -type f -name 'skilltape-v*' -print0 \
+            | sort -z \
+            | xargs -0 sha256sum > checksums.txt
+          test -s checksums.txt
+
+      - name: Publish GitHub release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          tag="${{ steps.release.outputs.tag }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" release-assets/* --clobber
+          else
+            gh release create "$tag" release-assets/* \
+              --title "SkillTape $tag" \
+              --generate-notes
+          fi
