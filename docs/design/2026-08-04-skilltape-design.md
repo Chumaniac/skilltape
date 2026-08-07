@@ -1,140 +1,142 @@
-# SkillTape 完整设计方案
+# Complete SkillTape Product Design
 
-> 状态：设计稿 v0.1  
-> 日期：2026-08-04  
-> 项目：独立开源仓库，不依赖 GenkoyAI  
-> 工作名称：SkillTape
+> Status: Design draft v0.1
+> Date: 2026-08-04
+> Project: Standalone open-source repository, independent of GenkoyAI
+> Working name: SkillTape
 
-## 1. 摘要
+> Archival note: This is a historical design record. Its research and proposed design decisions are dated and do not assert that every described capability shipped. Current implementation and release status are tracked in [docs/release-readiness.md](../release-readiness.md).
 
-SkillTape 是一个 local-first、可回放验证的 Agent Skill 编译器。
+## 1. Summary
 
-它捕获用户真实完成的一次终端和文件工作流，将其编译成一个可审计、可复用、可提交到 GitHub 的 Agent Skill 包。Skill 包同时包含：
+SkillTape is a local-first, replay-verifiable Agent Skill compiler.
 
-- 面向 Agent 的 `SKILL.md`
-- 面向运行时的 `workflow.yaml`
-- 面向安全审查的 `permissions.json`
-- 面向验证的 fixtures、断言和 Receipt
+It captures a real terminal and filesystem workflow completed by a user and compiles it into an auditable, reusable Agent Skill package that can be committed to GitHub. The Skill package includes:
 
-核心产品承诺：
+- `SKILL.md` for Agents
+- `workflow.yaml` for runtime execution
+- `permissions.json` for security review
+- fixtures, assertions, and a Receipt for verification
 
-> 一次真实操作，生成一个有证据、能回放、可分享的 Agent Skill。
+Core product promise:
 
-SkillTape 不把 LLM 当作直接执行器。LLM 只能帮助理解轨迹和生成结构化 Workflow IR；所有实际命令、文件访问和网络访问都必须经过 Schema、权限策略和回放器。
+> One real operation produces an evidence-backed, replayable, shareable Agent Skill.
 
-## 2. 研究依据与产品判断
+SkillTape does not treat the LLM as a direct executor. The LLM may only help interpret the trace and generate structured Workflow IR; all actual command, file, and network access must pass through the schema, permission policy, and Replay.
 
-本方案参考 2026-08-04 GitHub Trending 日榜、周榜和月榜：
+## 2. Research Basis and Product Judgments
 
-- [GitHub 日榜](https://github.com/trending?since=daily)
-- [GitHub 周榜](https://github.com/trending?since=weekly)
-- [GitHub 月榜](https://github.com/trending?since=monthly)
+This design references the GitHub Trending daily, weekly, and monthly lists as of 2026-08-04:
 
-当前可见趋势显示，Agent Skills、模型网关、Agent 记忆、浏览器/桌面操作、本地推理和多模态工具的增长集中度较高。由此得到的产品选择是：
+- [GitHub daily trending list](https://github.com/trending?since=daily)
+- [GitHub weekly trending list](https://github.com/trending?since=weekly)
+- [GitHub monthly trending list](https://github.com/trending?since=monthly)
 
-1. 以开发者工具和 Agent 基础设施作为早期 Star 的主要入口。
-2. 用可视化轨迹、Diff 和 Receipt 形成普通用户也能理解的演示体验。
-3. 以本地运行、开源格式和多平台适配避免供应商锁定。
-4. 把“可验证”作为区别于普通 Prompt/Skill 生成器的核心价值。
+The visible trends at the time suggested concentrated growth in Agent Skills, model gateways, Agent memory, browser/desktop operations, local inference, and multimodal tools. The resulting product choices were:
 
-这只是提高早期传播概率的设计判断，不保证任何具体 Star 数量。
+1. Use developer tools and Agent infrastructure as the primary entry point for early Stars.
+2. Use visualized traces, Diffs, and Receipts to create a demonstration experience that ordinary users can understand.
+3. Use local execution, open formats, and multi-platform adapters to avoid vendor lock-in.
+4. Make “verifiable” the core value that distinguishes SkillTape from ordinary Prompt/Skill generators.
 
-## 3. 产品定位与目标用户
+These are design judgments intended to increase the probability of early adoption, not guarantees of any specific number of Stars.
 
-### 3.1 主要用户
+## 3. Product Positioning and Target Users
 
-第一用户群是开发者和 AI 工作流作者：
+### 3.1 Primary Users
 
-- 为 Claude Code、Codex、Cursor、Cline 或其他 Agent 编写 Skill
-- 不想手写复杂工作流说明
-- 需要验证 Skill 是否真的有效
-- 希望把个人经验发布成可 Fork 的开源项目
+The first user group is developers and AI workflow authors:
 
-第二用户群是高级非开发者：
+- Write Skills for Claude Code, Codex, Cursor, Cline, or other Agents
+- Avoid hand-writing complex workflow instructions
+- Need to verify that a Skill actually works
+- Want to publish personal expertise as an open-source project that others can Fork
 
-- 批量整理文件
-- 处理 PDF 和文档
-- 生成报告
-- 清洗数据
-- 复用办公流程
+The second user group is advanced non-developers:
 
-普通用户不需要理解内部 IR；他们可以通过本地 Web UI 完成录制、审查和执行。
+- Batch-organize files
+- Process PDFs and documents
+- Generate reports
+- Clean data
+- Reuse office workflows
 
-### 3.2 核心问题
+Ordinary users do not need to understand the internal IR; they can use the local Web UI to Capture, review, and run workflows.
 
-目前的 AI Skill/Agent 工作流通常存在四个问题：
+### 3.2 Core Problems
 
-1. Skill 主要是一段文档，无法证明实际可执行。
-2. 生成的命令可能扩大文件、网络或进程权限。
-3. 工作流依赖作者本机环境，难以复现。
-4. 其他人很难通过 GitHub Review 判断 Skill 是否可信。
+Current AI Skill/Agent workflows usually have four problems:
 
-SkillTape 的解决方式是把一次工作拆成：
+1. A Skill is mainly a document and cannot prove that it is executable in practice.
+2. Generated commands may expand file, network, or process permissions.
+3. Workflows depend on the author's local environment and are difficult to reproduce.
+4. Other people have difficulty judging whether a Skill is trustworthy through GitHub Review.
+
+SkillTape addresses this by breaking one task into:
 
 ```text
-操作轨迹 → 结构化工作流 → 权限策略 → 回放结果
+Operation trace → structured workflow → permission policy → Replay result
 ```
 
-### 3.3 非目标
+### 3.3 Non-Goals
 
-MVP 不做：
+The proposed MVP does not include:
 
-- 云端 Skill 市场
-- 用户账号和计费
-- 自建大模型
-- 多 Agent 协同编排
-- 全功能桌面 RPA
-- 一开始支持任意 GUI 操作
-- 一开始兼容所有 Agent 平台
-- 允许第三方 Skill 默认执行高风险系统操作
+- A cloud Skill marketplace
+- User accounts and billing
+- A self-hosted large model
+- Multi-Agent collaborative orchestration
+- Full-featured desktop RPA
+- Arbitrary GUI operations in the first release
+- Compatibility with every Agent platform in the first release
+- Default execution of high-risk system operations by third-party Skills
 
-## 4. 产品契约与核心对象
+## 4. Product Contract and Core Objects
 
-SkillTape 只保留四个核心对象：
+SkillTape keeps only four core objects:
 
-| 对象 | 含义 |
+| Object | Meaning |
 |---|---|
-| Tape | 一次真实操作过程的结构化记录 |
-| Skill | 从 Tape 编译出的可复用工作流包 |
-| Run | Skill 的一次实际执行 |
-| Receipt | Run 的证据、日志和结果摘要 |
+| Tape | Structured record of one real operation |
+| Skill | Reusable workflow package compiled from a Tape |
+| Run | One actual execution of a Skill |
+| Receipt | Evidence, logs, and result summary for a Run |
 
 ### 4.1 Tape
 
-Tape 不是简单视频，而是带顺序号的事件记录，包含命令、输出、工作目录、文件变化和权限决策。
+A Tape is not simply a video. It is an event record with sequence numbers that includes commands, output, the working directory, filesystem changes, and permission decisions.
 
 ### 4.2 Skill
 
-Skill 是可提交到 Git 的目录，包含文档、Workflow IR、权限清单、fixtures 和测试。
+A Skill is a directory that can be committed to Git. It contains documentation, Workflow IR, a permission manifest, fixtures, and tests.
 
 ### 4.3 Run
 
-Run 是某个 Skill 在一组输入上的执行实例。Run 默认使用临时工作区，不直接修改用户原始目录。
+A Run is an execution instance of a Skill against a set of inputs. A Run uses a temporary workspace by default and does not modify the user's original directory directly.
 
 ### 4.4 Receipt
 
-Receipt 记录每一步的状态、耗时、输入输出哈希、权限决策、断言结果和失败原因。
+A Receipt records the status and duration of every step, input and output hashes, permission decisions, assertion results, and failure reasons.
 
-## 5. 用户流程
+## 5. User Flow
 
 ```text
 Capture
-  捕获一次成功的人工工作
+  Capture a successful human workflow
 
 Compile
-  将轨迹编译为 Workflow IR 和 Skill 文档
+  Compile the trace into Workflow IR and Skill documentation
 
 Review
-  查看步骤、变量、文件访问和权限 Diff
+  Inspect steps, variables, file access, and permission Diff
 
 Verify
-  使用 fixtures 在临时环境中回放
+  Replay in a temporary environment using fixtures
 
 Share
-  导出为可提交、可 Fork 的 GitHub 项目
+  Export a GitHub project ready to commit and Fork
 ```
 
-理想命令流：
+Ideal command flow:
 
 ```bash
 skilltape capture pdf-to-study
@@ -144,73 +146,73 @@ skilltape verify ./pdf-to-study
 skilltape export ./pdf-to-study
 ```
 
-## 6. MVP 边界与成功标准
+## 6. MVP Boundaries and Success Criteria
 
-### 6.1 MVP 必须包含
+### 6.1 Proposed MVP Contents
 
-- 终端命令捕获
-- 文件创建、修改、移动和删除捕获
-- 事件即时脱敏
-- 本地模型和 OpenAI-compatible provider
-- Tape 到 Workflow IR 的编译
-- `SKILL.md` 生成
-- `workflow.yaml` 生成
-- `permissions.json` 生成
-- Schema 和策略检查
-- fixtures 驱动的回放验证
-- Receipt 生成
-- 本地 Web 查看器
-- 通用 Skill 包导出
+- Terminal command Capture
+- Capture of file creation, modification, movement, and deletion
+- Immediate event redaction
+- Local models and an OpenAI-compatible provider
+- Compilation from Tape to Workflow IR
+- `SKILL.md` generation
+- `workflow.yaml` generation
+- `permissions.json` generation
+- Schema and policy checks
+- Fixture-driven Replay verification
+- Receipt generation
+- A local Web viewer
+- Generic Skill package export
 
-### 6.2 平台边界
+### 6.2 Platform Boundaries
 
-- 第一阶段支持 macOS 和 Linux
-- Windows 后续通过 WSL 或独立适配器支持
-- 第一阶段只捕获终端和指定工作区文件变化
-- 浏览器捕获属于第二阶段
-- 本地 Web UI 不采用 Tauri/Electron，先由本地服务托管
+- The first phase supports macOS and Linux
+- Windows is supported later through WSL or an independent adapter
+- The first phase captures only terminal activity and filesystem changes in a specified workspace
+- Browser Capture belongs to the second phase
+- The local Web UI is hosted by a local service first rather than using Tauri/Electron
 
-### 6.3 成功标准
+### 6.3 Success Criteria
 
-用户从安装到生成第一个通过验证的 Skill，应在 5 分钟内完成。
+The historical target was for a user to go from installation to generating a verified Skill within five minutes.
 
-MVP 验收条件：
+The MVP acceptance criteria in this design were:
 
-1. 用户可以捕获一个真实工作流。
-2. 编译器生成可读、可校验的 Skill 包。
-3. 未声明的命令、路径和网络访问会被阻止。
-4. Skill 可以在 fixtures 中重复回放。
-5. 回放会生成 Receipt。
-6. 生成目录可以直接提交到 GitHub。
-7. 不配置云端服务也能完成完整流程。
+1. A user can Capture a real workflow.
+2. The compiler generates a readable, verifiable Skill package.
+3. Undeclared commands, paths, and network access are blocked.
+4. A Skill can be replayed repeatedly with fixtures.
+5. Replay generates a Receipt.
+6. The generated directory can be committed directly to GitHub.
+7. The complete flow works without configuring a cloud service.
 
-## 7. 总体架构
+## 7. Overall Architecture
 
-### 7.1 技术选择
+### 7.1 Technology Choices
 
-推荐采用 Rust 核心加 TypeScript/React 本地控制台：
+The design recommends a Rust core with a local TypeScript/React Console:
 
-- Rust 负责单二进制分发、PTY、文件监听、进程监督和运行时策略。
-- TypeScript/React 负责时间线、Diff、权限审查和 Receipt 展示。
-- Axum 提供本地 HTTP API 和 SSE。
-- JSON Schema 是跨 Rust/TypeScript 的契约来源。
-- JSONL、YAML 和 Markdown 作为可审查的文件格式。
+- Rust handles single-binary distribution, PTY, filesystem watching, process supervision, and runtime policy.
+- TypeScript/React handles the timeline, Diffs, permission review, and Receipt display.
+- Axum provides the local HTTP API and SSE.
+- JSON Schema is the contract source shared by Rust and TypeScript.
+- JSONL, YAML, and Markdown are used as reviewable file formats.
 
-建议技术组件：
+Suggested technology components:
 
-| 能力 | 选择 |
+| Capability | Choice |
 |---|---|
-| 异步运行时 | Tokio |
+| Async runtime | Tokio |
 | PTY | portable-pty |
-| 文件监听 | notify |
+| Filesystem watching | notify |
 | HTTP | Axum |
-| 序列化 | serde / serde_json / serde_yaml |
+| Serialization | serde / serde_json / serde_yaml |
 | Schema | JSON Schema + schemars |
-| 日志 | tracing |
+| Logging | tracing |
 | Web UI | React + Vite + TypeScript |
 | CI | GitHub Actions |
 
-### 7.2 组件图
+### 7.2 Component Diagram
 
 ```text
 skilltape CLI
@@ -226,40 +228,40 @@ skilltape CLI
              └── React Console
 ```
 
-CLI 和 Web UI 必须复用同一套 Core，不在前端重新实现编译、策略或执行逻辑。
+The CLI and Web UI must reuse the same Core; the frontend must not reimplement compilation, policy, or execution logic.
 
 ## 8. Capture Engine
 
-### 8.1 终端捕获
+### 8.1 Terminal Capture
 
-`skilltape capture <name>` 启动一个受控 PTY Shell。用户在该 Shell 中正常完成工作，输入 `exit` 后结束捕获。
+`skilltape capture <name>` starts a controlled PTY Shell. The user completes the work normally in that Shell and enters `exit` to end Capture.
 
-捕获内容：
+Captured content:
 
-- 命令输入
+- Command input
 - stdout/stderr
-- 退出码
-- 当前工作目录
-- 命令耗时
-- 子进程摘要
-- 文件变化
+- Exit code
+- Current working directory
+- Command duration
+- Subprocess summary
+- Filesystem changes
 
-第一版不做全系统 Hook，也不试图记录用户在所有应用中的任意操作。
+The first version does not implement system-wide hooks or attempt to record arbitrary operations that a user performs in every application.
 
-### 8.2 文件变化捕获
+### 8.2 Filesystem-change Capture
 
-用户必须指定工作区。Capture Engine 使用初始快照加文件监听记录：
+The user must specify a workspace. Capture Engine records changes using an initial snapshot plus filesystem watching:
 
-- 创建
-- 修改
-- 移动
-- 删除
-- 文件大小
-- 前后哈希
+- Creation
+- Modification
+- Movement
+- Deletion
+- File size
+- Before-and-after hashes
 
-文件内容默认不全部复制。只有用户指定的输入样例和输出样例进入 `fixtures/`。
+File contents are not copied in full by default. Only user-specified input and output examples are placed in `fixtures/`.
 
-### 8.3 事件格式
+### 8.3 Event Format
 
 ```json
 {
@@ -274,7 +276,7 @@ CLI 和 Web UI 必须复用同一套 Core，不在前端重新实现编译、策
 }
 ```
 
-事件类型：
+Event types:
 
 - `session.started`
 - `command.started`
@@ -284,17 +286,17 @@ CLI 和 Web UI 必须复用同一套 Core，不在前端重新实现编译、策
 - `approval.changed`
 - `session.ended`
 
-### 8.4 脱敏
+### 8.4 Redaction
 
-脱敏发生在事件进入持久化层之前：
+Redaction occurs before events enter the persistence layer:
 
-- 环境变量只记录名称，不记录值
-- Token、Cookie、Authorization、私钥和常见 API Key 进行模式识别
-- 命令参数中的疑似秘密替换为 `<REDACTED>` 标记
-- 脱敏不确定时阻止导出
-- 原始事件默认不保存
+- Record environment-variable names only, not their values
+- Detect patterns for Tokens, Cookies, Authorization values, private keys, and common API Keys
+- Replace suspected secrets in command arguments with the `<REDACTED>` marker
+- Block export when redaction is uncertain
+- Do not save raw events by default
 
-## 9. Tape 存储
+## 9. Tape Storage
 
 ```text
 .tapes/
@@ -308,13 +310,13 @@ CLI 和 Web UI 必须复用同一套 Core，不在前端重新实现编译、策
         └── redactions.json
 ```
 
-设计原则：
+Design principles:
 
-- `events.jsonl` 追加写入
-- 事件使用递增序号
-- 中途崩溃也能保存为 `partial` Tape
-- Tape 不等于 Skill，必须经过编译和审查
-- 原始轨迹不进入 GitHub 包，除非用户明确选择
+- Append to `events.jsonl`
+- Use increasing sequence numbers for events
+- Preserve a `partial` Tape even after an interruption or crash
+- A Tape is not a Skill and must go through compilation and review
+- Do not include the raw trace in the GitHub package unless the user explicitly chooses to do so
 
 ## 10. Compile Pipeline
 
@@ -334,30 +336,30 @@ Skill Renderer
 
 ### 10.1 Trace Analyzer
 
-识别：
+Identifies:
 
-- 固定命令
-- 可参数化路径
-- 输入和输出文件
-- 可合并步骤
-- 不稳定数据
-- 必要权限
+- Fixed commands
+- Parameterizable paths
+- Input and output files
+- Steps that can be merged
+- Unstable data
+- Required permissions
 
-### 10.2 LLM 边界
+### 10.2 LLM Boundary
 
-LLM 只能生成或修改 Workflow IR，不能：
+The LLM may only generate or modify Workflow IR. It cannot:
 
-- 直接执行 Shell
-- 直接修改用户文件
-- 自动批准权限
-- 添加未观察到的程序而不提示
-- 通过字符串拼接生成任意 Shell
+- Execute Shell directly
+- Modify user files directly
+- Approve permissions automatically
+- Add an unobserved program without warning
+- Generate arbitrary Shell through string concatenation
 
-### 10.3 编译失败
+### 10.3 Compilation Failure
 
-如果 Schema、变量、路径或权限校验失败，只生成诊断报告，不生成可运行 Skill。
+If schema, variable, path, or permission validation fails, generate only a diagnostic report and do not generate a runnable Skill.
 
-## 11. Skill 包格式
+## 11. Skill Package Format
 
 ```text
 pdf-to-study/
@@ -439,26 +441,26 @@ steps:
       path: output/study-notes.md
 ```
 
-### 11.3 Action 类型
+### 11.3 Action Types
 
-MVP 只支持：
+The proposed MVP supports only:
 
-- `exec`：执行明确程序和参数
-- `script`：执行包内、带哈希的辅助脚本
-- `file`：受限复制、移动和创建目录
-- `assert`：检查文件、JSON Schema、哈希或退出码
+- `exec`: Execute an explicit program and its arguments
+- `script`: Execute a hashed helper script contained in the package
+- `file`: Copy, move, and create directories within the permitted scope
+- `assert`: Check a file, JSON Schema, hash, or exit code
 
-不允许使用任意 `sh -c` 作为规范化执行形式。
+Arbitrary `sh -c` is not allowed as the normalized execution form.
 
-### 11.4 路径和变量规则
+### 11.4 Path and Variable Rules
 
-- 输入必须预先声明
-- 路径必须是工作区相对路径
-- 禁止绝对路径
-- 禁止隐式环境变量
-- 禁止自由字符串拼接 Shell
-- 输出必须由步骤声明
-- 步骤只能读取已声明输入或前序输出
+- Inputs must be declared in advance
+- Paths must be relative to the workspace
+- Absolute paths are forbidden
+- Implicit environment variables are forbidden
+- Free-form Shell string concatenation is forbidden
+- Outputs must be declared by steps
+- Steps may read only declared inputs or outputs from preceding steps
 
 ### 11.5 `permissions.json`
 
@@ -484,11 +486,11 @@ MVP 只支持：
 }
 ```
 
-默认拒绝未声明能力。
+Undeclared capabilities are denied by default.
 
 ### 11.6 `skilltape.lock`
 
-`skilltape.lock` 由 `verify` 生成，用来固定验证环境和包内脚本哈希。它不能包含 API Key、Token 或用户文件内容。
+`skilltape.lock` is generated by `verify` to pin the verification environment and hashes for package scripts. It must not contain API Keys, Tokens, or user file contents.
 
 ```yaml
 schema: skilltape.dev/lock/v1
@@ -508,13 +510,13 @@ scripts:
     sha256: "..."
 ```
 
-当本机工具版本与 lock 文件不一致时，`verify` 默认给出警告；`--strict` 模式直接失败。
+When local tool versions do not match the lock file, `verify` gives a warning by default; `--strict` mode fails immediately.
 
-### 11.7 `SKILL.md` 和 `README.md`
+### 11.7 `SKILL.md` and `README.md`
 
-`SKILL.md` 面向 Agent，`README.md` 面向 GitHub 用户。两者都允许人工编辑。
+`SKILL.md` is for Agents, while `README.md` is for GitHub users. Both may be edited by hand.
 
-SkillTape 只更新以下标记区块：
+SkillTape updates only the following marked block:
 
 ```markdown
 <!-- skilltape:generated:start -->
@@ -522,46 +524,46 @@ Generated verification summary...
 <!-- skilltape:generated:end -->
 ```
 
-这样重新编译不会覆盖用户自己写的说明。
+This prevents recompilation from overwriting documentation written by the user.
 
-## 12. Policy Engine 与 Replay Runner
+## 12. Policy Engine and Replay Runner
 
-### 12.1 权限策略
+### 12.1 Permission Policy
 
-默认策略：
+Default policy:
 
-- 工作区之外禁止读写
-- 网络默认关闭
-- 禁止读取环境变量秘密
-- 禁止提权
-- 只能执行声明过的程序
-- 权限变更必须经过用户确认
-- 未观察过的命令默认阻止
+- Deny reads and writes outside the workspace
+- Disable the network by default
+- Do not read secrets from environment variables
+- Do not escalate privileges
+- Execute only declared programs
+- Require user confirmation for permission changes
+- Block unobserved commands by default
 
-### 12.2 回放流程
+### 12.2 Replay Flow
 
 ```text
 fixtures/input
     ↓
-复制到临时工作区
+Copy into a temporary workspace
     ↓
-Policy Engine 检查
+Policy Engine check
     ↓
-Replay Runner 执行
+Replay Runner execution
     ↓
-文件和断言检查
+File and assertion checks
     ↓
-生成 Receipt
+Generate Receipt
 ```
 
-### 12.3 运行后端
+### 12.3 Runtime Backends
 
-MVP 提供：
+The proposed MVP provides:
 
-1. `guarded-local`：临时工作区、路径检查、进程监管、超时和网络策略。
-2. `container`：Docker/Podman 可用时提供更强隔离。
+1. `guarded-local`: A temporary workspace, path checks, process supervision, timeouts, and network policy.
+2. `container`: Stronger isolation when Docker/Podman is available.
 
-`guarded-local` 不宣称是完整安全沙箱。执行不可信第三方 Skill 时必须推荐容器后端。
+`guarded-local` does not claim to be a complete security sandbox. The container backend must be recommended when executing an untrusted third-party Skill.
 
 ## 13. Receipt
 
@@ -575,24 +577,24 @@ receipts/
     └── summary.md
 ```
 
-Receipt 包含：
+Receipt contains:
 
-- Skill 版本
-- 输入文件哈希
-- 每一步开始和结束时间
-- 命令退出码
-- 权限批准记录
-- 文件变化
-- 断言结果
-- 失败步骤和原因
-- 模型 provider 和模型名称
-- 是否使用本地模型
+- Skill version
+- Input file hashes
+- Start and end times for every step
+- Command exit codes
+- Permission approval records
+- Filesystem changes
+- Assertion results
+- Failed step and reason
+- Model provider and model name
+- Whether a local model was used
 
-成功必须明确列出完成步骤和断言；失败必须停止在具体步骤，不返回模糊成功。
+Success must explicitly list completed steps and assertions; failure must stop at the specific step rather than return an ambiguous success.
 
-## 14. CLI 设计
+## 14. CLI Design
 
-### 14.1 命令
+### 14.1 Commands
 
 ```text
 skilltape init <name>
@@ -609,7 +611,7 @@ skilltape ui
 skilltape doctor
 ```
 
-### 14.2 通用选项
+### 14.2 Common Options
 
 ```text
 --json
@@ -620,43 +622,43 @@ skilltape doctor
 --dry-run
 ```
 
-### 14.3 安全默认值
+### 14.3 Secure Defaults
 
-- `run` 默认要求权限确认
-- `export` 默认要求通过 lint 和 verify
-- `--approved` 只对已审查且权限未变化的 Skill 有效
-- `--force` 不跳过策略检查，只允许覆盖生成文件
+- `run` requires permission confirmation by default
+- `export` requires lint and verify to pass by default
+- `--approved` is valid only for a reviewed Skill whose permissions have not changed
+- `--force` does not skip policy checks; it only permits overwriting generated files
 
-### 14.4 退出码
+### 14.4 Exit Codes
 
-| 退出码 | 含义 |
+| Exit code | Meaning |
 |---:|---|
-| 0 | 成功 |
-| 1 | 参数或用户输入错误 |
-| 2 | Schema 或编译错误 |
-| 3 | 权限策略阻止 |
-| 4 | 回放验证失败 |
-| 5 | 本地环境或模型不可用 |
+| 0 | Success |
+| 1 | Argument or user-input error |
+| 2 | Schema or compilation error |
+| 3 | Blocked by permission policy |
+| 4 | Replay verification failure |
+| 5 | Local environment or model unavailable |
 
-## 15. 本地 Web UI
+## 15. Local Web UI
 
-### 15.1 页面
+### 15.1 Pages
 
 #### Dashboard
 
-展示 Tape、Skill、最近验证结果、失败任务和未审查权限。
+Shows Tapes, Skills, recent verification results, failed tasks, and unreviewed permissions.
 
 #### Tape Inspector
 
-展示命令时间线、stdout/stderr、文件 Diff、脱敏标记和网络访问。
+Shows the command timeline, stdout/stderr, filesystem Diffs, redaction markers, and network access.
 
 #### Compile Review
 
-展示生成的步骤、输入输出、程序和权限 Diff。用户逐项确认，不提供默认的“允许全部”。
+Shows generated steps, inputs and outputs, programs, and permission Diffs. Users confirm items individually; there is no default “Allow all”.
 
 #### Skill Review
 
-并列查看：
+View side by side:
 
 - Skill Overview
 - Workflow
@@ -665,13 +667,13 @@ skilltape doctor
 
 #### Verify Run
 
-通过 SSE 显示每一步实时状态。
+Shows the real-time status of each step through SSE.
 
 #### Receipt Viewer
 
-以报告方式展示完整执行凭证，并支持复制 Markdown 摘要。
+Shows the complete execution Receipt as a report and supports copying a Markdown summary.
 
-### 15.2 本地 API
+### 15.2 Local API
 
 ```text
 GET  /api/tapes
@@ -684,28 +686,28 @@ GET  /api/runs/:id/stream
 POST /api/skills/:id/export
 ```
 
-### 15.3 UI 安全
+### 15.3 UI Security
 
-- 只监听 `127.0.0.1`
-- 每次启动生成随机访问 Token
-- 检查请求 Origin
-- 设置严格 CSP
-- UI 不能直接执行 Shell
-- 所有动作必须通过 Core API
+- Listen only on `127.0.0.1`
+- Generate a random access Token on every startup
+- Check the request Origin
+- Set a strict CSP
+- Do not allow the UI to execute Shell directly
+- Route every action through the Core API
 
-### 15.4 首个演示流程
+### 15.4 First Demonstration Flow
 
 ```text
-capture → 时间线 → compile → 权限 Diff → verify → 绿色 Receipt → GitHub 包
+capture → timeline → compile → permission Diff → verify → green Receipt → GitHub package
 ```
 
-这是 README 首屏 GIF 和公开演示视频的主流程。
+This was intended as the primary flow for the first-screen README GIF and the public demonstration video.
 
-## 16. Provider、Capture Source 和 Export Adapter
+## 16. Provider, Capture Source, and Export Adapter
 
 ### 16.1 Provider
 
-Provider 只负责结构化生成和能力检测：
+Provider is responsible only for structured generation and capability detection:
 
 ```text
 health()
@@ -713,28 +715,28 @@ complete_structured(schema, context)
 capabilities()
 ```
 
-首批实现：
+Initial implementations:
 
 - Ollama
 - LM Studio
 - OpenAI-compatible HTTP API
 
-所有发送给 provider 的内容都必须是脱敏后的 Tape 摘要。`--offline` 模式禁止任何网络请求。
+All content sent to a provider must be a redacted Tape summary. `--offline` mode prohibits all network requests.
 
 ### 16.2 Capture Source
 
-MVP 内置 `shell` Capture Source。后续扩展：
+The proposed MVP includes a built-in `shell` Capture Source. Future extensions:
 
 - browser
 - git
 - editor
 - desktop
 
-Capture Source 输出统一事件，不改变 Compiler 和 Policy Engine。
+Capture Source emits uniform events without changing the Compiler or Policy Engine.
 
 ### 16.3 Export Adapter
 
-核心始终输出 generic Skill 包。平台适配器独立实现：
+The Core always outputs a generic Skill package. Platform adapters implement the following independently:
 
 ```text
 adapter id
@@ -744,22 +746,22 @@ validate(skill)
 render(skill, output_dir)
 ```
 
-适配器建议以独立进程通过 JSON-RPC over stdio 工作，避免插件崩溃影响核心运行时。
+Adapters should run as independent processes through JSON-RPC over stdio so that a plugin crash does not affect the core runtime.
 
-首批目标：
+Initial targets:
 
 - generic-agent-skill
 - claude
 - codex
 - cursor
 
-MCP 暴露和浏览器 Capture Adapter 放入后续版本。
+MCP exposure and the browser Capture Adapter are deferred to later versions.
 
-## 17. Skill 分享机制
+## 17. Skill Sharing Mechanism
 
 ### 17.1 MVP
 
-Git 仓库是第一注册表，不建设中心化市场。
+A Git repository is the first registry; no centralized marketplace is built.
 
 ```bash
 skilltape export ./pdf-to-study
@@ -767,57 +769,57 @@ git add .
 git commit -m "feat: add pdf to study skill"
 ```
 
-SkillTape 自动生成：
+SkillTape automatically generates:
 
 - README
-- 安装说明
-- 权限摘要
-- 验证徽章摘要
-- 示例输入输出
+- Installation instructions
+- Permission summary
+- Verification badge summary
+- Example inputs and outputs
 
-### 17.2 后续
+### 17.2 Later Versions
 
 - `skilltape pack`
 - `skilltape install <git-url>`
 - `skilltape verify --strict`
 - GitHub Action
-- Skill 索引页
-- 签名和 provenance
+- Skill index page
+- Signatures and provenance
 
-不在 MVP 中引入账号、云端运行和收费市场。
+Accounts, cloud execution, and a paid marketplace are not introduced in the MVP.
 
-## 18. 安全与威胁模型
+## 18. Security and Threat Model
 
-| 威胁 | 防御 | 残余风险 |
+| Threat | Defense | Residual risk |
 |---|---|---|
-| 捕获时记录 Token | 流式脱敏、环境变量不落盘 | 模式无法识别的新型秘密 |
-| 恶意 Skill 读用户文件 | 默认工作区限制、权限清单 | 本机模式不是硬隔离 |
-| 网络数据外泄 | 默认关闭网络、记录网络策略 | 外部进程自身绕过需容器 |
-| Prompt Injection | 内容按数据处理，LLM 不直接执行 | 外部 Agent 自身仍有风险 |
-| Shell 注入 | `program + args[]`，禁止任意 `sh -c` | 被调用程序本身可能危险 |
-| 浏览器跨站调用本地 API | 127.0.0.1、随机 Token、Origin 检查 | 用户主动暴露 Token 的风险 |
-| 脚本篡改 | 脚本哈希和 lock 文件 | 用户主动覆盖文件 |
+| Token recorded during Capture | Streaming redaction; environment variables are not persisted | New secrets whose patterns are not recognized |
+| Malicious Skill reads user files | Default workspace restriction; permission manifest | Local mode is not hard isolation |
+| Network data exfiltration | Network disabled by default; network policy recorded | External processes may bypass it; use a container |
+| Prompt Injection | Treat content as data; the LLM does not execute directly | The external Agent remains a risk |
+| Shell injection | `program + args[]`; arbitrary `sh -c` prohibited | The invoked program itself may be dangerous |
+| Browser cross-site call to the local API | 127.0.0.1, random Token, and Origin check | Risk of the user intentionally exposing the Token |
+| Script tampering | Script hashes and lock file | The user may overwrite files intentionally |
 
-安全产品文案必须明确：
+Security product copy must state clearly:
 
-> SkillTape 提供默认拒绝和可审查执行；对于不可信 Skill，使用容器运行时，而不是把 guarded-local 当作完整沙箱。
+> SkillTape provides default-deny and reviewable execution; for untrusted Skills, use a container runtime rather than treating guarded-local as a complete sandbox.
 
-## 19. 测试与验证策略
+## 19. Testing and Verification Strategy
 
-### 19.1 单元测试
+### 19.1 Unit Tests
 
-- 事件序列化和排序
-- 秘密脱敏
-- 路径规范化
-- 命令参数校验
-- Schema 验证
-- 权限匹配
-- Receipt 生成
-- JSON/YAML 往返
+- Event serialization and ordering
+- Secret redaction
+- Path normalization
+- Command-argument validation
+- Schema validation
+- Permission matching
+- Receipt generation
+- JSON/YAML round trips
 
 ### 19.2 Golden Fixtures
 
-首批固定示例：
+Initial fixed examples:
 
 1. `rename-images`
 2. `pdf-to-markdown`
@@ -825,45 +827,45 @@ SkillTape 自动生成：
 4. `git-release-notes`
 5. `workspace-cleanup`
 
-每个示例都包含 Tape、Skill、fixtures、预期 Receipt 和失败用例。
+Each example contains a Tape, Skill, fixtures, an expected Receipt, and failure cases.
 
-### 19.3 安全测试
+### 19.3 Security Tests
 
-- 路径穿越
-- 绝对路径
-- Shell 注入
-- 未声明可执行文件
-- 未声明网络请求
-- 环境变量秘密
-- 超时和进程泄漏
-- 恶意 YAML 字段
-- 不可信脚本导入
+- Path traversal
+- Absolute paths
+- Shell injection
+- Undeclared executables
+- Undeclared network requests
+- Environment-variable secrets
+- Timeouts and process leaks
+- Malicious YAML fields
+- Untrusted script imports
 
-### 19.4 集成和 E2E
+### 19.4 Integration and E2E
 
-- macOS/Linux CLI 集成测试
-- Docker/Podman runner 测试
-- Web UI Playwright 测试
-- SSE 中断和重连
-- Capture 中途退出恢复
-- Provider 不可用时的明确失败
+- macOS/Linux CLI integration tests
+- Docker/Podman runner tests
+- Web UI Playwright tests
+- SSE interruption and reconnection
+- Recovery after Capture exits midway
+- Explicit failure when a Provider is unavailable
 
-### 19.5 CI 门禁
+### 19.5 CI Gates
 
-Pull Request 必须通过：
+Pull Requests must pass:
 
 - Rust format
 - Rust lint
 - TypeScript type-check
-- 单元测试
-- Golden fixture 回放
-- 安全策略测试
+- Unit tests
+- Golden fixture Replay
+- Security policy tests
 - UI E2E
-- 文档示例命令
+- Documentation example commands
 
-## 20. 仓库结构
+## 20. Repository Structure
 
-目标仓库结构：
+Target repository structure:
 
 ```text
 skilltape/
@@ -892,56 +894,56 @@ skilltape/
 └── LICENSE-APACHE
 ```
 
-共享 Schema 位于 `schemas/`，由 Rust 和 TypeScript 生成类型，避免两端漂移。
+Shared Schema definitions are in `schemas/`; Rust and TypeScript generate types from them to prevent drift between the two sides.
 
-## 21. 实施阶段
+## 21. Implementation Phases
 
-### Phase 0：协议基础
+### Phase 0: Protocol Foundation
 
-- 初始化 Rust workspace
-- 定义 JSON Schema
-- 实现 Skill 包读写
-- 实现 `init` 和 `lint`
-- 添加第一个 Golden Fixture
+- Initialize the Rust workspace
+- Define JSON Schema
+- Implement Skill package read/write
+- Implement `init` and `lint`
+- Add the first Golden Fixture
 
-完成标准：空 Skill 可以创建、校验和导出。
+Completion criterion: An empty Skill can be created, validated, and exported.
 
-### Phase 1：Capture
+### Phase 1: Capture
 
 - PTY Shell
-- 命令事件
-- 文件监听
-- 事件脱敏
-- Tape 持久化
-- `capture` 和 `tapes` 命令
+- Command events
+- Filesystem watching
+- Event redaction
+- Tape persistence
+- `capture` and `tapes` commands
 
-完成标准：能够捕获并重新打开一次完整 Tape。
+Completion criterion: Capture and reopen a complete Tape.
 
-### Phase 2：Compiler
+### Phase 2: Compiler
 
 - Trace Analyzer
-- Provider 接口
-- Workflow IR 生成
-- 权限推导
-- Skill 文档生成
-- Compile Review 数据
+- Provider interface
+- Workflow IR generation
+- Permission inference
+- Skill documentation generation
+- Compile Review data
 
-完成标准：三个示例 Tape 能编译成合法 Skill。
+Completion criterion: Three example Tapes compile into valid Skills.
 
-### Phase 3：Verify
+### Phase 3: Verify
 
 - Policy Engine
 - guarded-local runner
-- fixtures 回放
-- 断言
+- Fixture Replay
+- Assertions
 - Receipt
-- `verify` 和 `run`
+- `verify` and `run`
 
-完成标准：成功、失败、超时、权限阻止都能形成可读 Receipt。
+Completion criterion: Success, failure, timeout, and permission-blocked runs all produce readable Receipts.
 
-### Phase 4：Console
+### Phase 4: Console
 
-- 本地 HTTP API
+- Local HTTP API
 - SSE
 - Dashboard
 - Tape Inspector
@@ -949,97 +951,97 @@ skilltape/
 - Verify Run
 - Receipt Viewer
 
-完成标准：不使用 CLI 参数也能完成审查和验证。
+Completion criterion: Review and verification can be completed without CLI arguments.
 
-### Phase 5：公开发布
+### Phase 5: Public Release
 
 - GitHub Releases
-- macOS/Linux 预编译二进制
+- Prebuilt macOS/Linux binaries
 - Homebrew formula
-- 示例 Skill 仓库
-- 通用 Export Adapter
-- GitHub Action 设计
+- Example Skill repository
+- Generic Export Adapter
+- GitHub Action design
 
-## 22. Star 增长策略
+## 22. Star Growth Strategy
 
-项目不能依赖“功能很多”获取 Stars，而要降低第一次理解和第一次成功的成本。
+The project cannot rely on “many features” to gain Stars; it must reduce the cost of first understanding and first success.
 
-首发仓库必须具备：
+The initial repository must have:
 
-1. 首屏一句话解释产品。
-2. 30–60 秒 GIF 展示 Capture → Verify。
-3. 一个命令完成安装。
-4. 三个可以复制的示例。
-5. 明确的权限 Diff 和 Receipt 截图。
-6. “No cloud required” 和 “No vendor lock-in” 的清晰说明。
-7. GitHub Action/徽章的后续路线。
-8. 适配器、示例和 fixtures 都可以独立贡献。
+1. A one-sentence product explanation above the fold.
+2. A 30–60 second GIF showing Capture → Verify.
+3. One command for installation.
+4. Three examples that can be copied.
+5. Clear screenshots of permission Diffs and Receipts.
+6. A clear explanation of “No cloud required” and “No vendor lock-in”.
+7. A future roadmap for GitHub Actions and badges.
+8. Independently contributable adapters, examples, and fixtures.
 
-首发示例应优先选择可视觉化展示结果的工作流：
+Initial examples should prioritize workflows whose results can be shown visually:
 
-- PDF 转 Markdown
-- 图片批量重命名和整理
-- CSV 生成报告
-- Git release notes 生成
-- 项目目录清理
+- PDF to Markdown
+- Batch rename and organize images
+- Generate a report from CSV
+- Generate Git release notes
+- Clean a project directory
 
-传播重点是“证据”和“可复现”，不是夸大 Agent 智能程度。
+Promotion should focus on “evidence” and “reproducibility”, not exaggerating Agent intelligence.
 
-## 23. 主要风险与应对
+## 23. Major Risks and Responses
 
-### 风险一：成为普通 Skill 生成器
+### Risk 1: Becoming an Ordinary Skill Generator
 
-应对：把验证、权限、回放和 Receipt 作为产品核心，不能在 MVP 中删掉。
+Response: Make verification, permissions, Replay, and Receipt core product capabilities; they must not be removed from the MVP.
 
-### 风险二：安全承诺过度
+### Risk 2: Overstated Security Commitments
 
-应对：明确区分 guarded-local 和 container；不把本机路径拦截宣传为完整沙箱。
+Response: Clearly distinguish guarded-local from container; do not market local path blocking as a complete sandbox.
 
-### 风险三：跨平台范围过大
+### Risk 3: Excessive Cross-platform Scope
 
-应对：先支持 macOS/Linux 的终端和文件工作流，浏览器和 Windows 后置。
+Response: Support macOS/Linux terminal and filesystem workflows first, and defer browser and Windows support.
 
-### 风险四：LLM 供应商锁定
+### Risk 4: LLM Vendor Lock-in
 
-应对：Provider 只暴露结构化生成接口，默认支持 Ollama 和 OpenAI-compatible API。
+Response: Provider exposes only a structured-generation interface, with Ollama and OpenAI-compatible APIs supported by default.
 
-### 风险五：格式过于复杂
+### Risk 5: Excessive Format Complexity
 
-应对：MVP 只保留四种 Action、线性步骤和 JSON Schema；条件、循环和多 Agent 放入后续版本。
+Response: Keep only four Action types, linear steps, and JSON Schema in the MVP; defer conditions, loops, and multi-Agent workflows to later versions.
 
-### 风险六：UI 变成第二套系统
+### Risk 6: The UI Becomes a Second System
 
-应对：UI 只调用 Core API，所有编译、策略、执行和 Receipt 逻辑在 Rust 核心中实现。
+Response: The UI calls only the Core API; all compilation, policy, execution, and Receipt logic is implemented in the Rust core.
 
 ## 24. Definition of Done
 
-SkillTape v0.1.0 只有在以下条件同时满足时才算完成：
+The historical SkillTape v0.1.0 design is complete only when all of the following conditions are met:
 
-- macOS/Linux 可以安装并启动 CLI
-- 可以捕获终端和文件工作流
-- Tape 可以恢复、查看和脱敏
-- 可以通过 Provider 生成合法 Workflow IR
-- LLM 不能绕过 IR 直接执行命令
-- 权限默认拒绝
-- 至少三个 Golden Fixture 通过回放
-- 权限、路径、注入和秘密泄露测试通过
-- 每次执行都有 Receipt
-- 本地 Web UI 可以完成审查和验证
-- 生成 Skill 可以不依赖 SkillTape 才能阅读
-- README 有完整的 60 秒演示和失败案例
-- 文档示例命令在干净环境中可运行
+- macOS/Linux can install and start the CLI
+- Terminal and filesystem workflows can be Captured
+- Tapes can be recovered, viewed, and redacted
+- A valid Workflow IR can be generated through a Provider
+- The LLM cannot bypass IR to execute commands directly
+- Permissions default to deny
+- At least three Golden Fixtures pass Replay
+- Permission, path, injection, and secret-leak tests pass
+- Every execution has a Receipt
+- The local Web UI can complete review and verification
+- A generated Skill can be read without depending on SkillTape
+- README contains a complete 60-second demonstration and failure cases
+- Documentation example commands run in a clean environment
 
-## 25. 最终设计结论
+## 25. Final Design Conclusion
 
-SkillTape 的核心不是“让 AI 自动做更多事情”，而是：
+The core of SkillTape is not “making AI do more things automatically”. It is:
 
-> 把一次成功的人类工作，编译成一个权限明确、结果可验证、可以被 Agent 复用的开源资产。
+> Compile one successful human task into an open-source asset with explicit permissions, verifiable results, and reuse by Agents.
 
-它以开发者基础设施获得早期传播，以普通用户可理解的视觉回放降低使用门槛，以 Git 和开放文件格式形成贡献生态。
+It gains early adoption through developer infrastructure, lowers the barrier to entry with visual Replay that ordinary users can understand, and builds a contribution ecosystem through Git and open file formats.
 
-MVP 必须坚持四个边界：
+The MVP must maintain four boundaries:
 
-1. 终端和文件系统优先。
-2. LLM 只生成结构化意图，不直接执行。
-3. 默认拒绝权限，回放必须产生证据。
-4. GitHub 包优先，云端市场后置。
+1. Terminal and filesystem first.
+2. The LLM generates structured intent only and does not execute directly.
+3. Permissions default to deny, and Replay must produce evidence.
+4. GitHub packages first; cloud marketplaces later.
