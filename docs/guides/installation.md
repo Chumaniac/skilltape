@@ -4,11 +4,11 @@ SkillTape 有两种安装方式：从源码构建，或从 GitHub Release 下载
 
 ## 从源码构建
 
-安装 Rust stable 后，在仓库根目录运行：
+安装 Rust 1.97.1（仓库中的 `rust-toolchain.toml` 会自动选择该版本）后，在仓库根目录运行：
 
 ```bash
-cargo build --release -p skilltape-cli -p skilltape-console-api
-cargo install --path crates/skilltape-cli
+cargo build --locked --release -p skilltape-cli -p skilltape-console-api
+cargo install --locked --path crates/skilltape-cli
 ```
 
 Replay/Verify 还会启动受限的本地执行器：Linux 需要 `bwrap`（Debian/Ubuntu 可安装 `bubblewrap`），macOS 需要系统提供的 `/usr/bin/sandbox-exec`。没有对应 sandbox 时，Capture、Compile、Lint 和 Export 仍可使用，但 Replay/Verify 会安全地失败并提示环境不可用。
@@ -16,7 +16,7 @@ Replay/Verify 还会启动受限的本地执行器：Linux 需要 `bwrap`（Debi
 只使用 Capture、Compile、Lint、Replay、Verify 或 Export 时，安装 `skilltape` 即可。要从源码启动 Console：
 
 ```bash
-npm --prefix apps/skilltape-console install
+npm ci --prefix apps/skilltape-console
 npm --prefix apps/skilltape-console run build
 ./target/release/skilltape console --workspace .
 ```
@@ -85,19 +85,22 @@ skilltape export "$demo_workspace/demo-skill" \
 
 ## 本地验证
 
-与 CI 一致的本地门禁：
+与 CI 一致的本地门禁（依赖锁文件，不接受隐式升级）：
 
 ```bash
 cargo fmt --all -- --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace -- --test-threads=1
-cargo run -p skilltape-cli -- lint examples/minimal-skill
+cargo clippy --locked --workspace --all-targets -- -D warnings
+cargo test --locked --workspace -- --test-threads=1
+cargo run --locked -p skilltape-cli -- lint examples/minimal-skill
+npm ci --prefix apps/skilltape-console
+npm --prefix apps/skilltape-console run build
+npm --prefix apps/skilltape-console test
 ```
 
 无效 fixture 应明确失败（当前 policy code 为 3）：
 
 ```bash
-if cargo run -p skilltape-cli -- lint tests/fixtures/invalid-skill; then
+if cargo run --locked -p skilltape-cli -- lint tests/fixtures/invalid-skill; then
   echo "invalid fixture unexpectedly passed" >&2
   exit 1
 fi

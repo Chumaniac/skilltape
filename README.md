@@ -12,14 +12,14 @@ Capture → Tape → Compile → Lint/Policy → Replay → Verify/Receipt → E
 
 ## 五分钟本地试跑
 
-需要 Rust stable；Linux 上执行 Replay/Verify 还需要 `bubblewrap`，macOS 使用系统的 `/usr/bin/sandbox-exec`。源码构建方式和预构建 release 安装方式见[安装指南](docs/guides/installation.md)。
+需要 Rust 1.97.1；Linux 上执行 Replay/Verify 还需要 `bubblewrap`，macOS 使用系统的 `/usr/bin/sandbox-exec`。源码构建方式和预构建 release 安装方式见[安装指南](docs/guides/installation.md)。
 
 ```bash
 git clone <your-skilltape-repository>
 cd skilltape
 
 # 构建 CLI；核心命令不需要 Node.js 或云服务
-cargo install --path crates/skilltape-cli
+cargo install --locked --path crates/skilltape-cli
 
 demo_workspace="$(mktemp -d)"
 skilltape capture demo \
@@ -47,9 +47,9 @@ Console 是可选的只读本地查看器，展示 Capture 时间线、Workflow/
 从源码运行 Console 还需要构建 UI 和 API companion binary：
 
 ```bash
-npm --prefix apps/skilltape-console install
+npm ci --prefix apps/skilltape-console
 npm --prefix apps/skilltape-console run build
-cargo build --release -p skilltape-cli -p skilltape-console-api
+cargo build --locked --release -p skilltape-cli -p skilltape-console-api
 
 ./target/release/skilltape console --workspace .
 ```

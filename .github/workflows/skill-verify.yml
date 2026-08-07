@@ -23,7 +23,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Build local SkillTape CLI
-        run: cargo build -p skilltape-cli
+        run: cargo build --locked -p skilltape-cli
 
       - name: Lint the selected local Skill
         env:

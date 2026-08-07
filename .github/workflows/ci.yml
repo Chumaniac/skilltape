@@ -38,27 +38,57 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Run Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
 
       - name: Run workspace tests
-        run: cargo test --workspace -- --test-threads=1
+        run: cargo test --locked --workspace -- --test-threads=1
 
       - name: Run product security and journey gates
         run: >-
-          cargo test -p skilltape-cli
+          cargo test --locked -p skilltape-cli
           --test security_path_escape
           --test security_secret_leak
           --test integration_full_journey
           -- --test-threads=1
 
       - name: Lint valid example
-        run: cargo run -p skilltape-cli -- lint examples/minimal-skill
+        run: cargo run --locked -p skilltape-cli -- lint examples/minimal-skill
 
       - name: Assert invalid fixture fails with policy code
         shell: bash
         run: |
           set +e
-          cargo run -p skilltape-cli -- lint tests/fixtures/invalid-skill
+          cargo run --locked -p skilltape-cli -- lint tests/fixtures/invalid-skill
           rc=$?
           set -e
           test "$rc" -eq 3
+
+  console:
+    name: Console (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/skilltape-console/package-lock.json
+
+      - name: Install Console dependencies
+        run: npm ci --prefix apps/skilltape-console
+
+      - name: Install Playwright Chromium
+        run: npx --prefix apps/skilltape-console playwright install --with-deps chromium
+
+      - name: Build Console
+        run: npm --prefix apps/skilltape-console run build
+
+      - name: Run Console browser tests
+        run: npm --prefix apps/skilltape-console test
