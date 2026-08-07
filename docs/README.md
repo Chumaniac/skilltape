@@ -9,7 +9,7 @@ path by audience, or browse the documentation sections below.
 
 - [Project README](../README.md) — product overview, quick start, and workflow.
 - [Installation guide](guides/installation.md) — source builds, release archives, installers, and platform prerequisites.
-- [Release readiness](release-readiness.md) — current release evidence and remaining release steps.
+- [Release readiness](release-readiness.md) — current release evidence and post-release follow-up.
 - [Tape format reference](reference/tape-format.md) — the recorded Tape format and its rules.
 
 ### Skill authors
@@ -37,7 +37,7 @@ path by audience, or browse the documentation sections below.
 
 - [Changelog](../CHANGELOG.md) — versioned release history.
 - [Installation guide](guides/installation.md) — release assets, installers, and local verification.
-- [Release readiness](release-readiness.md) — release evidence and approval requirements.
+- [Release readiness](release-readiness.md) — release evidence and post-release follow-up.
 - [Release workflow](../.github/workflows/release.yml) — the checked-in release process.
 
 ## Documentation sections

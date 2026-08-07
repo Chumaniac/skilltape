@@ -5,10 +5,10 @@ All notable changes to SkillTape are documented here.
 ## [0.1.0] - 2026-08-07
 
 The implementation and release workflow are merged on `main` at commit
-`14ef710a4fbaa4859a3b9627c79df90ed2f5fe28`, and CI run `31162165176` is
-green. The release workflow builds four target archives, publishes checksums,
-and runs a Windows PowerShell installer smoke test against the published
-release.
+`beb0bba1870e20e03e5bc80a2d9234c04fc1c6f6`. Final release run `31167200699`
+passed all four target builds, release publication, and the Windows
+PowerShell installer smoke test. The published assets are available from the
+[SkillTape v0.1.0 GitHub Release](https://github.com/Chumaniac/skilltape/releases/tag/v0.1.0).
 
 ### Added
 

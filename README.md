@@ -106,7 +106,7 @@ non-zero code. CI should assert failures rather than ignore them.
 - `.github/workflows/release.yml` builds Linux, macOS, and Windows archives on a `v*` tag or manual version input, generates `checksums.txt`, and grants `contents: write` only to the final publish job.
 - `.github/workflows/skill-verify.yml` is a template that runs only the local CLI; it does not upload Tapes, Receipts, logs, or secrets.
 - The release installation script requires a fixed version, downloads a checksum, and does not replace an existing binary until verification succeeds; see the [installation guide](docs/guides/installation.md) for the exact parameters.
-- The implementation is merged on `main` at `bdd82937fc652190917a8259098bc92ae48553cb`; CI run `31149247700` is green, and no versioned GitHub Release has been published.
+- The implementation and release workflow are merged on `main` at `beb0bba1870e20e03e5bc80a2d9234c04fc1c6f6`; final release run `31167200699` is green, and [SkillTape v0.1.0](https://github.com/Chumaniac/skilltape/releases/tag/v0.1.0) is published with four verified archives and `checksums.txt`.
 
 ## Security, compatibility, and benchmarks
 

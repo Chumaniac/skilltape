@@ -95,9 +95,9 @@ $env:SKILLTAPE_VERSION = "0.1.0"
 The [release workflow](../../.github/workflows/release.yml) is triggered by a
 `v*` tag or manual version input and covers Linux x86_64, macOS x86_64/arm64,
 and Windows x86_64. The workflow does not upload Tapes, Receipts, logs,
-environment variables, or provider credentials. No versioned GitHub Release
-has been published yet; release publication requires the remaining release
-checks and explicit release-tag approval.
+environment variables, or provider credentials. [SkillTape v0.1.0](https://github.com/Chumaniac/skilltape/releases/tag/v0.1.0)
+is the published release and includes the four target archives plus
+`checksums.txt`.
 
 The script downloads the archive and `checksums.txt` into a random temporary
 directory, compares the target asset's SHA-256, validates the CLI, API

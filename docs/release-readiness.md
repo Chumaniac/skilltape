@@ -9,14 +9,16 @@ release documentation.
 ## Current merged-main evidence
 
 - The implementation and release workflow are merged on `main` at commit
-  `14ef710a4fbaa4859a3b9627c79df90ed2f5fe28`.
-- CI run `31162165176` is green for the merged implementation and release
-  workflow.
+  `beb0bba1870e20e03e5bc80a2d9234c04fc1c6f6`.
+- Final tag-triggered release run `31167200699` is green for the four target
+  builds, publication, and the Windows installer smoke job.
 - The merged implementation includes interactive Capture, locked dependencies,
   installed Console discovery, release packaging, installers, smoke
   verification, the tag-driven workflow, and a Windows PowerShell installer
   smoke job for published release assets.
-- No release tag or versioned GitHub Release has been published.
+- The `v0.1.0` tag points to the release commit above, and the [published
+  GitHub Release](https://github.com/Chumaniac/skilltape/releases/tag/v0.1.0)
+  contains the four target archives and `checksums.txt`.
 
 ## Local verification evidence
 
@@ -28,24 +30,33 @@ The following local checks passed for the implementation:
 - `npm ci`, the Console production build, and 4 Playwright tests passed.
 - 4 release package tests passed, including Windows naming and symlink rejection.
 - Release workflow static checks and Ruby YAML parsing passed.
-- The Unix HTTPS installer fixture passed; checksum failure preserved the old CLI.
+- The Unix HTTPS installer fixture passed with `./` checksum paths; checksum
+  failure preserved the old CLI.
+- The Windows installer now supports authenticated GitHub release API asset
+  downloads and normalizes checksum filenames from the published manifest.
 - Real release Console smoke passed for loopback API JSON and static UI HTML.
 
-## Required before publishing
+## Completed release gates
 
 - [x] Confirm hosted Linux has bubblewrap/user namespaces and hosted macOS has
       `/usr/bin/sandbox-exec`; the current CI evidence is run `31149247700`.
-- [ ] Run the [release workflow](../.github/workflows/release.yml) on all four
+- [x] Run the [release workflow](../.github/workflows/release.yml) on all four
       matrix targets and retain only the intended archive/checksum assets:
       `x86_64-unknown-linux-gnu`, `x86_64-apple-darwin`,
       `aarch64-apple-darwin`, and `x86_64-pc-windows-msvc`.
-- [ ] Execute and record the Windows PowerShell installer smoke job against
+- [x] Execute and record the Windows PowerShell installer smoke job against
       the published release assets.
-- [ ] Review the generated `checksums.txt` and archive contents from the exact
+- [x] Review the generated `checksums.txt` and archive contents from the exact
       tag commit.
-- [ ] Review [CHANGELOG](../CHANGELOG.md) and [security notes](../SECURITY.md),
-      then obtain explicit approval before creating the release tag and granting
-      publish permission.
+- [x] Review [CHANGELOG](../CHANGELOG.md) and [security notes](../SECURITY.md),
+      then publish the approved `v0.1.0` release.
+
+## Post-release follow-up
+
+- Update the third-party GitHub Actions that currently emit Node.js 20
+  deprecation warnings before the next maintenance release. This is a
+  non-blocking warning for v0.1.0 because the final release run completed
+  successfully.
 
 ## Explicit known limitations
 
