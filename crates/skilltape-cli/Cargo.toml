@@ -8,6 +8,23 @@ license.workspace = true
 name = "skilltape"
 path = "src/main.rs"
 
+[[test]]
+name = "security_path_escape"
+path = "../../tests/security/path_escape.rs"
+
+[[test]]
+name = "security_secret_leak"
+path = "../../tests/security/secret_leak.rs"
+
+[[test]]
+name = "integration_full_journey"
+path = "../../tests/integration/full_journey.rs"
+
+[[bench]]
+name = "capture_compile"
+path = "../../benchmarks/capture_compile.rs"
+harness = false
+
 [dependencies]
 clap.workspace = true
 ctrlc.workspace = true

@@ -75,6 +75,14 @@ CLI 默认只绑定 `127.0.0.1`，退出时会回收 API 子进程；如需自�
 - `.github/workflows/skill-verify.yml` 是只运行本地 CLI 的模板，不上传 Tape、Receipt、日志或秘密。
 - release 安装脚本要求固定版本、下载 checksum 并在校验成功前不替换已有 binary；具体参数见[安装指南](docs/guides/installation.md)。
 
+## 安全、兼容性与基准
+
+- [安全模型与漏洞披露](SECURITY.md)：说明 sandbox 边界、秘密处理、平台差异和版本策略。
+- [安装与平台前提](docs/guides/installation.md)：Linux Replay/Verify 需要 `bubblewrap`，macOS 使用 `/usr/bin/sandbox-exec`。
+- `cargo bench -p skilltape-cli --bench capture_compile` 提供 10k Tape 事件、100-step Workflow 和可选 1GB 稀疏日志场景；它只输出观测值，不以未经校准的固定阈值阻断功能测试。运行大日志场景时设置 `SKILLTAPE_BENCHMARK_LARGE=1`。
+
+CI 的完整产品门禁覆盖 Linux 和 macOS；Windows 当前可用于 Capture/Compile/Lint/Export，Replay/Verify 需要后续接入等价的受限执行器。
+
 ## 设计目标
 
 - 本地优先，不强制云端服务。

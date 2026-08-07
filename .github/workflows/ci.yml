@@ -24,6 +24,16 @@ jobs:
         with:
           components: rustfmt, clippy
 
+      - name: Install Linux replay sandbox
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes bubblewrap
+
+      - name: Check macOS replay sandbox
+        if: matrix.os == 'macos-latest'
+        run: test -x /usr/bin/sandbox-exec
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 
@@ -32,6 +42,14 @@ jobs:
 
       - name: Run workspace tests
         run: cargo test --workspace -- --test-threads=1
+
+      - name: Run product security and journey gates
+        run: >-
+          cargo test -p skilltape-cli
+          --test security_path_escape
+          --test security_secret_leak
+          --test integration_full_journey
+          -- --test-threads=1
 
       - name: Lint valid example
         run: cargo run -p skilltape-cli -- lint examples/minimal-skill
