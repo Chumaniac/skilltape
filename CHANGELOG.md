@@ -1,0 +1,25 @@
+# Changelog
+
+All notable changes to SkillTape are documented here.
+
+## [0.1.0] - Unreleased
+
+This is the first delivery candidate and has not been published to a remote
+repository from the current worktree.
+
+### Added
+
+- Local-first Capture → Tape → Compile → Lint → Replay/Verify → Receipt → Export flow.
+- Redacted PTY capture with interactive stdin forwarding and unique Tape IDs.
+- Deterministic generic and Claude Code exporters with plugin contract validation.
+- Read-only local Console API, React UI, CLI supervisor, and packaged Console assets.
+- Locked Rust/npm dependencies, Linux/macOS CI gates, release archive packaging,
+  checksum verification, and Unix/Windows installers.
+
+### Security and compatibility
+
+- Replay/Verify require bubblewrap on Linux or sandbox-exec on macOS.
+- Windows supports Capture, Compile, Lint, and Export; Replay/Verify fail closed
+  until an equivalent sandbox is implemented.
+- Capture and Console reject unsafe path/symlink boundaries and persist redacted
+  or digest-only evidence.

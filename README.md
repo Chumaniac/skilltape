@@ -99,5 +99,8 @@ CI 的完整产品门禁覆盖 Linux 和 macOS；Windows 当前可用于 Capture
 ## 文档
 
 - [安装、release 和 GitHub Actions](docs/guides/installation.md)
+- [Release readiness checklist](docs/release-readiness.md)
+- [贡献指南](CONTRIBUTING.md)
+- [变更记录](CHANGELOG.md)
 - [完整产品设计](docs/superpowers/specs/2026-08-05-skilltape-full-product-design.md)
 - [实现计划](docs/superpowers/plans/2026-08-05-skilltape-full-product.md)
