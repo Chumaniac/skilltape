@@ -51,11 +51,13 @@ archive_url="${release_root}/${asset}"
 checksums_url="${release_root}/checksums.txt"
 
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/skilltape-install.XXXXXX")"
-staged=""
+staged_cli=""
+staged_api=""
+staged_console=""
 cleanup() {
-  if [[ -n "$staged" && -e "$staged" ]]; then
-    rm -f "$staged"
-  fi
+  [[ -z "$staged_cli" || ! -e "$staged_cli" ]] || rm -f "$staged_cli"
+  [[ -z "$staged_api" || ! -e "$staged_api" ]] || rm -f "$staged_api"
+  [[ -z "$staged_console" || ! -e "$staged_console" ]] || rm -rf "$staged_console"
   rm -rf "$tmp_dir"
 }
 trap cleanup EXIT
@@ -109,12 +111,55 @@ if [[ -z "$candidate" ]]; then
   echo "release archive does not contain a skilltape binary" >&2
   exit 1
 fi
+candidate_api="$(find "$extract_dir" -type f -name skilltape-console-api -print -quit)"
+if [[ -z "$candidate_api" ]]; then
+  echo "release archive does not contain a skilltape-console-api binary" >&2
+  exit 1
+fi
+console_index="$(find "$extract_dir" -type f -path '*/console/index.html' -print -quit)"
+if [[ -z "$console_index" ]]; then
+  echo "release archive does not contain console/index.html" >&2
+  exit 1
+fi
+console_source="${console_index%/index.html}"
+if [[ -L "$console_source" || ! -d "$console_source" ]]; then
+  echo "release archive contains an unsafe Console UI directory" >&2
+  exit 1
+fi
 
 mkdir -p "$install_dir"
-staged="$install_dir/.skilltape.tmp.$$"
-cp "$candidate" "$staged"
-chmod 0755 "$staged"
-mv -f "$staged" "$install_dir/skilltape"
-staged=""
+if [[ -L "$install_dir" ]]; then
+  echo "install directory must not be a symlink: $install_dir" >&2
+  exit 1
+fi
+install_parent="$(dirname "$install_dir")"
+mkdir -p "$install_parent"
+staged_cli="$install_dir/.skilltape.tmp.$$"
+staged_api="$install_dir/.skilltape-console-api.tmp.$$"
+staged_console="$install_parent/.skilltape-console.tmp.$$"
+cp "$candidate" "$staged_cli"
+cp "$candidate_api" "$staged_api"
+mkdir -p "$staged_console"
+cp -R "$console_source/." "$staged_console/"
+chmod 0755 "$staged_cli" "$staged_api"
+[[ -f "$staged_cli" && -f "$staged_api" && -f "$staged_console/index.html" ]] || {
+  echo "staged release assets are incomplete" >&2
+  exit 1
+}
+
+mv -f "$staged_cli" "$install_dir/skilltape"
+staged_cli=""
+mv -f "$staged_api" "$install_dir/skilltape-console-api"
+staged_api=""
+previous_console="$tmp_dir/previous-console"
+if [[ -e "$install_parent/console" || -L "$install_parent/console" ]]; then
+  mv "$install_parent/console" "$previous_console"
+fi
+if ! mv "$staged_console" "$install_parent/console"; then
+  [[ -e "$previous_console" ]] && mv "$previous_console" "$install_parent/console"
+  echo "failed to install Console UI" >&2
+  exit 1
+fi
+staged_console=""
 
 echo "Installed skilltape $version for $target at $install_dir/skilltape"

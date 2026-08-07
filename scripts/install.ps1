@@ -44,7 +44,32 @@ $releaseRoot = "$($releaseBase.TrimEnd('/'))/v$Version"
 $archiveUrl = "$releaseRoot/$asset"
 $checksumsUrl = "$releaseRoot/checksums.txt"
 $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("skilltape-install-" + [guid]::NewGuid().ToString("N"))
-$staged = $null
+$stagedCli = $null
+$stagedApi = $null
+$stagedConsole = $null
+
+function Assert-RegularFile([string]$Path, [string]$Label) {
+    $item = Get-Item -LiteralPath $Path -ErrorAction Stop
+    if ($item.PSIsContainer -or (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)) {
+        throw "$Label is not a regular file: $Path"
+    }
+}
+
+function Assert-RegularDirectory([string]$Path, [string]$Label) {
+    $item = Get-Item -LiteralPath $Path -ErrorAction Stop
+    if (-not $item.PSIsContainer -or (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)) {
+        throw "$Label is not a regular directory: $Path"
+    }
+}
+
+function Replace-File([string]$Staged, [string]$Destination) {
+    if (Test-Path -LiteralPath $Destination) {
+        [System.IO.File]::Replace($Staged, $Destination, $null)
+    }
+    else {
+        [System.IO.File]::Move($Staged, $Destination)
+    }
+}
 
 try {
     New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
@@ -75,24 +100,74 @@ try {
     if ($null -eq $candidate) {
         throw "Release archive does not contain skilltape.exe."
     }
+    Assert-RegularFile $candidate.FullName "skilltape binary"
+    $candidateApi = Get-ChildItem -LiteralPath $extractRoot -Recurse -File -Filter "skilltape-console-api.exe" |
+        Where-Object { ($_.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0 } |
+        Select-Object -First 1
+    if ($null -eq $candidateApi) {
+        throw "Release archive does not contain skilltape-console-api.exe."
+    }
+    Assert-RegularFile $candidateApi.FullName "Console API binary"
+    $consoleIndex = Get-ChildItem -LiteralPath $extractRoot -Recurse -File -Filter "index.html" |
+        Where-Object {
+            $_.FullName -match '[\\/]console[\\/]index\.html$' -and
+            ($_.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0
+        } |
+        Select-Object -First 1
+    if ($null -eq $consoleIndex) {
+        throw "Release archive does not contain console/index.html."
+    }
+    $consoleSource = $consoleIndex.Directory.FullName
+    Assert-RegularDirectory $consoleSource "Console UI directory"
 
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
-    $staged = Join-Path $InstallDir (".skilltape.tmp." + [guid]::NewGuid().ToString("N") + ".exe")
-    Copy-Item -LiteralPath $candidate.FullName -Destination $staged
+    Assert-RegularDirectory $InstallDir "install directory"
+    $installParent = Split-Path -Parent $InstallDir
+    New-Item -ItemType Directory -Path $installParent -Force | Out-Null
+    $stagedCli = Join-Path $InstallDir (".skilltape.tmp." + [guid]::NewGuid().ToString("N") + ".exe")
+    $stagedApi = Join-Path $InstallDir (".skilltape-console-api.tmp." + [guid]::NewGuid().ToString("N") + ".exe")
+    $stagedConsole = Join-Path $installParent (".skilltape-console.tmp." + [guid]::NewGuid().ToString("N"))
+    Copy-Item -LiteralPath $candidate.FullName -Destination $stagedCli
+    Copy-Item -LiteralPath $candidateApi.FullName -Destination $stagedApi
+    New-Item -ItemType Directory -Path $stagedConsole -Force | Out-Null
+    Get-ChildItem -LiteralPath $consoleSource -Force | Copy-Item -Destination $stagedConsole -Recurse -Force
+    Assert-RegularFile $stagedCli "staged skilltape binary"
+    Assert-RegularFile $stagedApi "staged Console API binary"
+    Assert-RegularFile (Join-Path $stagedConsole "index.html") "staged Console UI index"
+
     $destination = Join-Path $InstallDir "skilltape.exe"
-    if (Test-Path -LiteralPath $destination) {
-        [System.IO.File]::Replace($staged, $destination, $null)
+    Replace-File $stagedCli $destination
+    $stagedCli = $null
+    $apiDestination = Join-Path $InstallDir "skilltape-console-api.exe"
+    Replace-File $stagedApi $apiDestination
+    $stagedApi = $null
+    $consoleDestination = Join-Path $installParent "console"
+    $previousConsole = Join-Path $tempRoot "previous-console"
+    if (Test-Path -LiteralPath $consoleDestination) {
+        Move-Item -LiteralPath $consoleDestination -Destination $previousConsole
     }
-    else {
-        [System.IO.File]::Move($staged, $destination)
+    try {
+        Move-Item -LiteralPath $stagedConsole -Destination $consoleDestination
+        $stagedConsole = $null
     }
-    $staged = $null
+    catch {
+        if (Test-Path -LiteralPath $previousConsole) {
+            Move-Item -LiteralPath $previousConsole -Destination $consoleDestination
+        }
+        throw
+    }
 
     Write-Output "Installed skilltape $Version for $Target at $(Join-Path $InstallDir 'skilltape.exe')"
 }
 finally {
-    if ($null -ne $staged -and (Test-Path -LiteralPath $staged)) {
-        Remove-Item -LiteralPath $staged -Force -ErrorAction SilentlyContinue
+    if ($null -ne $stagedCli -and (Test-Path -LiteralPath $stagedCli)) {
+        Remove-Item -LiteralPath $stagedCli -Force -ErrorAction SilentlyContinue
+    }
+    if ($null -ne $stagedApi -and (Test-Path -LiteralPath $stagedApi)) {
+        Remove-Item -LiteralPath $stagedApi -Force -ErrorAction SilentlyContinue
+    }
+    if ($null -ne $stagedConsole -and (Test-Path -LiteralPath $stagedConsole)) {
+        Remove-Item -LiteralPath $stagedConsole -Recurse -Force -ErrorAction SilentlyContinue
     }
     if (Test-Path -LiteralPath $tempRoot) {
         Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
