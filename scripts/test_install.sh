@@ -38,7 +38,7 @@ if command -v sha256sum >/dev/null 2>&1; then
 else
   digest_command=(shasum -a 256)
 fi
-"${digest_command[@]}" "$archive" | awk -v asset="$(basename "$archive")" '{print $1 "  " asset}' > "$release_dir/checksums.txt"
+"${digest_command[@]}" "$archive" | awk -v asset="./$(basename "$archive")" '{print $1 "  " asset}' > "$release_dir/checksums.txt"
 printf 'old cli\n' > "$install_dir/skilltape"
 
 port="$(python3 - <<'PY'

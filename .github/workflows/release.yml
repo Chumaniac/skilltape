@@ -139,9 +139,12 @@ jobs:
         working-directory: release-assets
         shell: bash
         run: |
-          find . -maxdepth 1 -type f -name 'skilltape-v*' -print0 \
-            | sort -z \
-            | xargs -0 sha256sum > checksums.txt
+          archives=(skilltape-v*)
+          if [[ "${#archives[@]}" -eq 0 || "${archives[0]}" == "skilltape-v*" ]]; then
+            echo "no release archives found" >&2
+            exit 1
+          fi
+          sha256sum "${archives[@]}" | sort > checksums.txt
           test -s checksums.txt
 
       - name: Publish GitHub release

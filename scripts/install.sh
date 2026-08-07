@@ -81,7 +81,14 @@ checksums="$tmp_dir/checksums.txt"
 download "$archive_url" "$archive"
 download "$checksums_url" "$checksums"
 
-expected="$(awk -v asset="$asset" '$2 == asset || $2 == ("*" asset) { print $1; exit }' "$checksums")"
+expected="$(awk -v asset="$asset" '
+  {
+    name = $2
+    sub(/^\*/, "", name)
+    sub(/^\.\//, "", name)
+    if (name == asset) { print $1; exit }
+  }
+' "$checksums")"
 if [[ ! "$expected" =~ ^[[:xdigit:]]{64}$ ]]; then
   echo "checksums.txt has no valid SHA-256 entry for $asset" >&2
   exit 1

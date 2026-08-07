@@ -67,6 +67,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertIn("$archiveAsset.url", installer)
         self.assertIn("$checksumsAsset.url", installer)
         self.assertIn("application/octet-stream", installer)
+        self.assertIn("-replace '^\\./'", installer)
         self.assertIn("Authorization", installer)
 
 

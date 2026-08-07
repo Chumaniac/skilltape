@@ -134,7 +134,12 @@ try {
 
     $checksumLine = Get-Content $checksums | Where-Object {
         $parts = $_ -split '\s+'
-        $parts.Length -ge 2 -and ($parts[1] -eq $asset -or $parts[1] -eq "*$asset")
+        if ($parts.Length -lt 2) {
+            return $false
+        }
+        $checksumName = $parts[1] -replace '^\*', ''
+        $checksumName = $checksumName -replace '^\./', ''
+        return $checksumName -eq $asset
     } | Select-Object -First 1
     if ([string]::IsNullOrWhiteSpace($checksumLine)) {
         throw "checksums.txt has no entry for $asset."
