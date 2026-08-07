@@ -157,3 +157,58 @@ jobs:
               --title "SkillTape $tag" \
               --generate-notes
           fi
+
+  windows-installer:
+    name: Windows installer smoke
+    needs: publish
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Resolve release version
+        id: version
+        shell: pwsh
+        run: |
+          $version = if ("${{ github.event_name }}" -eq "push") {
+            "${{ github.ref_name }}".TrimStart("v")
+          }
+          else {
+            "${{ inputs.version }}"
+          }
+          if ([string]::IsNullOrWhiteSpace($version) -or $version -match "[^A-Za-z0-9._-]") {
+            throw "release version must be a non-empty safe path component"
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Install and verify the published Windows release
+        shell: pwsh
+        env:
+          SKILLTAPE_RELEASE_BASE_URL: https://github.com/${{ github.repository }}/releases/download
+          SKILLTAPE_RELEASE_TOKEN: ${{ github.token }}
+        run: |
+          $installDir = Join-Path $env:RUNNER_TEMP "skilltape-install\bin"
+          $installerParameters = @{
+            Version = "${{ steps.version.outputs.version }}"
+            InstallDir = $installDir
+            Target = "x86_64-pc-windows-msvc"
+          }
+          & "$env:GITHUB_WORKSPACE/scripts/install.ps1" @installerParameters
+
+          $cli = Join-Path $installDir "skilltape.exe"
+          $api = Join-Path $installDir "skilltape-console-api.exe"
+          $consoleIndex = Join-Path (Split-Path -Parent $installDir) "console\index.html"
+          foreach ($path in @($cli, $api, $consoleIndex)) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "published Windows install is missing $path"
+            }
+          }
+          $smokePackage = Join-Path $env:RUNNER_TEMP "skilltape-smoke-package"
+          & $cli init release-smoke --output $smokePackage
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $smokePackage "skilltape.yaml") -PathType Leaf)) {
+            throw "installed skilltape.exe could not create a package"
+          }
+          Write-Output "Windows installer smoke passed for ${{ steps.version.outputs.version }}"

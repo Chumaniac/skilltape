@@ -2,7 +2,8 @@
 param(
     [string]$Version,
     [string]$InstallDir,
-    [string]$Target
+    [string]$Target,
+    [string]$ReleaseToken
 )
 
 $ErrorActionPreference = "Stop"
@@ -36,6 +37,14 @@ if ([string]::IsNullOrWhiteSpace($releaseBase)) {
 }
 if (-not $releaseBase.StartsWith("https://", [System.StringComparison]::OrdinalIgnoreCase)) {
     throw "SKILLTAPE_RELEASE_BASE_URL must use HTTPS."
+}
+if ([string]::IsNullOrWhiteSpace($ReleaseToken)) {
+    $ReleaseToken = $env:SKILLTAPE_RELEASE_TOKEN
+}
+
+$downloadHeaders = @{}
+if (-not [string]::IsNullOrWhiteSpace($ReleaseToken)) {
+    $downloadHeaders["Authorization"] = "Bearer $ReleaseToken"
 }
 
 $Version = $Version.TrimStart('v')
@@ -75,8 +84,22 @@ try {
     New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
     $archive = Join-Path $tempRoot $asset
     $checksums = Join-Path $tempRoot "checksums.txt"
-    Invoke-WebRequest -Uri $archiveUrl -OutFile $archive -UseBasicParsing
-    Invoke-WebRequest -Uri $checksumsUrl -OutFile $checksums -UseBasicParsing
+    $archiveRequest = @{
+        Uri = $archiveUrl
+        OutFile = $archive
+        UseBasicParsing = $true
+    }
+    $checksumsRequest = @{
+        Uri = $checksumsUrl
+        OutFile = $checksums
+        UseBasicParsing = $true
+    }
+    if ($downloadHeaders.Count -gt 0) {
+        $archiveRequest.Headers = $downloadHeaders
+        $checksumsRequest.Headers = $downloadHeaders
+    }
+    Invoke-WebRequest @archiveRequest
+    Invoke-WebRequest @checksumsRequest
 
     $checksumLine = Get-Content $checksums | Where-Object {
         $parts = $_ -split '\s+'
