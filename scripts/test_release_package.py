@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 import subprocess
 import sys
 import tarfile
@@ -114,6 +115,22 @@ class ReleasePackageTests(unittest.TestCase):
             root = Path(temporary)
             binary_dir, ui_dist, output_dir = self.make_fixture(root, "x86_64-apple-darwin")
             (binary_dir / "skilltape-console-api").unlink()
+
+            result = self.run_packager(
+                "0.1.0", "x86_64-apple-darwin", binary_dir, ui_dist, output_dir
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(list(output_dir.iterdir()), [])
+
+    @unittest.skipUnless(hasattr(os, "symlink"), "symlink support is unavailable")
+    def test_symlinked_ui_input_fails_without_creating_an_archive(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            binary_dir, ui_dist, output_dir = self.make_fixture(root, "x86_64-apple-darwin")
+            outside = root / "outside.js"
+            outside.write_text("outside", encoding="utf-8")
+            (ui_dist / "assets" / "linked.js").symlink_to(outside)
 
             result = self.run_packager(
                 "0.1.0", "x86_64-apple-darwin", binary_dir, ui_dist, output_dir

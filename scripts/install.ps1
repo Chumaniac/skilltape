@@ -119,6 +119,20 @@ try {
     }
     $consoleSource = $consoleIndex.Directory.FullName
     Assert-RegularDirectory $consoleSource "Console UI directory"
+    $unsafeUiEntry = Get-ChildItem -LiteralPath $consoleSource -Recurse -Force |
+        Where-Object { ($_.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0 } |
+        Select-Object -First 1
+    if ($null -ne $unsafeUiEntry) {
+        throw "Release archive contains a symlink in the Console UI."
+    }
+    $consoleAssets = Join-Path $consoleSource "assets"
+    Assert-RegularDirectory $consoleAssets "Console UI assets directory"
+    $assetFile = Get-ChildItem -LiteralPath $consoleAssets -Recurse -File |
+        Where-Object { ($_.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0 } |
+        Select-Object -First 1
+    if ($null -eq $assetFile) {
+        throw "Release archive does not contain regular Console UI assets."
+    }
 
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
     Assert-RegularDirectory $InstallDir "install directory"

@@ -126,6 +126,15 @@ if [[ -L "$console_source" || ! -d "$console_source" ]]; then
   echo "release archive contains an unsafe Console UI directory" >&2
   exit 1
 fi
+if [[ -n "$(find "$console_source" -type l -print -quit)" ]]; then
+  echo "release archive contains a symlink in the Console UI" >&2
+  exit 1
+fi
+console_assets="$console_source/assets"
+if [[ -L "$console_assets" || ! -d "$console_assets" || -z "$(find "$console_assets" -type f -print -quit)" ]]; then
+  echo "release archive does not contain regular Console UI assets" >&2
+  exit 1
+fi
 
 mkdir -p "$install_dir"
 if [[ -L "$install_dir" ]]; then
