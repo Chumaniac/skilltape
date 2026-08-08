@@ -1,0 +1,78 @@
+import re
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+README = ROOT / "README.md"
+DOCS_INDEX = ROOT / "docs" / "README.md"
+GUIDES_INDEX = ROOT / "docs" / "guides" / "README.md"
+QUICKSTART = ROOT / "docs" / "guides" / "quickstart.md"
+TRANSCRIPT = ROOT / "docs" / "assets" / "quickstart-terminal.txt"
+VISUAL = ROOT / "docs" / "assets" / "quickstart-terminal.svg"
+
+PRIMARY_PROMISE = (
+    "Turn a real local workflow into a reviewable Agent Skill you can replay "
+    "and verify before you share it."
+)
+RETIRED_README_HEADINGS = (
+    "## CI and Skill repository integration",
+    "## Security, compatibility, and benchmarks",
+    "## Design goals",
+)
+
+LINK_RE = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
+
+
+class UserDocumentationContractTests(unittest.TestCase):
+    def test_readme_has_a_value_statement_beta_and_user_entry_links(self):
+        text = README.read_text(encoding="utf-8")
+        self.assertIn(PRIMARY_PROMISE, text)
+        self.assertIn("**Beta**", text)
+        self.assertIn("docs/assets/quickstart-terminal.svg", text)
+        self.assertIn("docs/guides/quickstart.md", text)
+        self.assertIn(
+            "https://github.com/Chumaniac/skilltape/releases/tag/v0.1.0", text
+        )
+
+    def test_visual_demo_is_accessible_and_has_a_transcript(self):
+        self.assertTrue(TRANSCRIPT.is_file())
+        self.assertTrue(VISUAL.is_file())
+        transcript = TRANSCRIPT.read_text(encoding="utf-8")
+        visual = VISUAL.read_text(encoding="utf-8")
+        for fragment in ("<title>", "<desc>", "Capture", "Verify", "<workspace>"):
+            self.assertIn(fragment, transcript + visual)
+        self.assertNotIn("/tmp/", transcript + visual)
+
+    def test_readme_does_not_promote_retired_implementation_sections(self):
+        text = README.read_text(encoding="utf-8")
+        for heading in RETIRED_README_HEADINGS:
+            self.assertNotIn(heading, text)
+
+    def test_quickstart_has_a_unix_first_result_and_safe_boundary(self):
+        self.assertTrue(QUICKSTART.is_file())
+        text = QUICKSTART.read_text(encoding="utf-8")
+        for fragment in (
+            "## macOS and Linux",
+            "bwrap",
+            "sandbox-exec",
+            "beb0bba1870e20e03e5bc80a2d9234c04fc1c6f6",
+            "installation.md",
+        ):
+            self.assertIn(fragment, text)
+
+    def test_public_relative_markdown_links_resolve(self):
+        for source in (README, QUICKSTART):
+            self.assertTrue(source.is_file())
+            for destination in LINK_RE.findall(source.read_text(encoding="utf-8")):
+                target = destination.split("#", 1)[0].strip().strip("<>")
+                if not target or "://" in target or target.startswith("mailto:"):
+                    continue
+                self.assertTrue(
+                    (source.parent / target).resolve().exists(),
+                    f"{source.relative_to(ROOT)} links to missing {target}",
+                )
+
+
+if __name__ == "__main__":
+    unittest.main()
