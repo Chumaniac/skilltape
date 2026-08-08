@@ -1,4 +1,4 @@
-# SkillTape CodeQL Path-Safety Audit Design
+# SkillTape CodeQL path-safety audit design
 
 **Date:** 2026-08-08
 
@@ -9,7 +9,7 @@
 
 Resolve every current path-injection alert without weakening SkillTape's existing local-first workflow or concealing a real boundary violation. A real issue receives a minimal code fix and a regression test. An alert that is proven to be test-only or reachable only through an explicitly local, user-authorized interface receives a concise, individual audit record and, if the next CodeQL scan still reports it, an individual dismissal with an evidence-based reason. The work must not add a global CodeQL exclusion, query override, or source-code suppression.
 
-## Context and Evidence
+## Context and evidence
 
 CodeQL default setup completed successfully on `main` with the `remote_and_local` threat model. It reported 65 high-severity path-injection alerts:
 
@@ -34,7 +34,7 @@ The first inspection also confirmed existing boundary controls that must be pres
 
 These controls are meaningful evidence, but they are not treated as proof for every sink. Each alert still needs a source-to-sink review.
 
-## Threat Model and Trust Boundaries
+## Threat model and trust boundaries
 
 ### Untrusted package and replay data
 
@@ -68,7 +68,7 @@ CLI options such as `--workspace`, `--tape`, and `--output`, plus documented Con
 
 Temporary directories and filenames created only under `#[cfg(test)]` or in test files do not cross a production trust boundary. They remain subject to ordinary test hygiene, but their CodeQL alerts must be recorded as test-only rather than leading to production behavior changes.
 
-## Chosen Approach
+## Chosen approach
 
 Three approaches were considered:
 
@@ -78,7 +78,7 @@ Three approaches were considered:
 
 The selected approach preserves product semantics while establishing an auditable answer for every existing alert.
 
-## Resolution Rules
+## Resolution rules
 
 For every alert, the audit records the alert number, source, sink, reachable build target, trust boundary, current controls, added controls, test evidence, and final decision.
 
@@ -92,7 +92,7 @@ For every alert, the audit records the alert number, source, sink, reachable bui
 
 No rule permits a bulk dismissal, a repository-wide `@codeql` suppression, a CodeQL query exclusion, or a downgrade of the CodeQL threat model.
 
-## Implementation Shape
+## Implementation shape
 
 ### 1. Establish an auditable alert ledger
 
@@ -135,7 +135,7 @@ After code and test verification, trigger or await the CodeQL scan for the branc
 
 The final ledger records the new scan URL, commit SHA, alert state, and verification commands. A result is complete only when all 65 original alerts are either cleared by code changes or individually resolved with the recorded rationale, and no new open path-injection alert appears on the scanned revision.
 
-## Non-Goals
+## Non-goals
 
 - Changing SkillTape's local-first model or prohibiting documented local CLI paths.
 - Enabling Windows Replay/Verify.
@@ -143,7 +143,7 @@ The final ledger records the new scan URL, commit SHA, alert state, and verifica
 - Altering repository visibility, branch protection, Actions permissions, CodeQL query configuration, or secret-scanning settings.
 - Reformatting unrelated source or documentation.
 
-## Risks and Mitigations
+## Risks and mitigations
 
 | Risk | Mitigation |
 | --- | --- |
@@ -154,7 +154,7 @@ The final ledger records the new scan URL, commit SHA, alert state, and verifica
 | Audit comments disclose sensitive local details in the public repository | Use stable alert numbers and code references only; never paste command output, environment values, or absolute user paths. |
 | CodeQL results lag behind a branch revision | Record the exact scanned SHA and do not claim closure until the matching run has completed. |
 
-## Acceptance Criteria
+## Acceptance criteria
 
 - All 65 current alerts have one complete ledger entry and a reviewed classification.
 - Every confirmed production gap has a failing regression test before its fix, followed by focused and full verification.
