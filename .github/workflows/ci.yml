@@ -108,6 +108,9 @@ jobs:
         run: |
           python3 scripts/test_release_package.py
           python3 scripts/test_release_workflow.py
+          python3 scripts/test_user_documentation.py
+          cargo build --locked -p skilltape-cli
+          bash scripts/test_quickstart.sh target/debug/skilltape
           bash -n scripts/install.sh scripts/test_install.sh scripts/smoke_console.sh
           bash scripts/test_install.sh
 

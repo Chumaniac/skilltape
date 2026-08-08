@@ -1,6 +1,5 @@
-# Guides
+# Start using SkillTape
 
-This section covers practical installation and operational guidance for
-SkillTape users and release maintainers.
-
-- [Installation guide](installation.md) — source builds, release archives, installers, platform prerequisites, Console assets, and local verification.
+- [Get a verified first Skill](quickstart.md)
+- [Install or update SkillTape](installation.md)
+- [Configure optional paths](configuration.md)
