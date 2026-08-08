@@ -30,10 +30,10 @@ as practical.
 
 ## Reporting
 
-For a confidential conduct report, contact the repository owner through their
-[GitHub profile](https://github.com/Chumaniac). Do not post confidential
-details in a public Issue. Security vulnerabilities must follow
-[SECURITY.md](SECURITY.md).
+For a conduct report, check the repository owner's [GitHub profile](https://github.com/Chumaniac)
+for a private contact method, if one is listed. Do not post confidential
+conduct details or sensitive personal information in a public Issue. Security
+vulnerabilities must follow [SECURITY.md](SECURITY.md).
 
 ## Attribution
 

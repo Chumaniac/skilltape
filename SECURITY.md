@@ -61,13 +61,12 @@ these nondeterministic fields.
 
 ## Vulnerability disclosure
 
-GitHub Private Vulnerability Reporting is the preferred route when the GitHub
-Private Vulnerability Report entry point is available. If that entry point is
-unavailable, contact the repository owner through their [GitHub profile](https://github.com/Chumaniac)
-using a private message. Do not publish exploitable sandbox escapes, path
-traversal, secret leakage, remote-execution details, or other exploit details
-in a public Issue or other public channel, and wait for a security response
-before disclosure.
+GitHub Private Vulnerability Reporting is enabled and is the confidential
+security-reporting channel for this repository. Use the Private Vulnerability
+Report entry point on the [repository Security page](https://github.com/Chumaniac/skilltape/security).
+If the Private Vulnerability Reporting button is not visible, do not use a
+public Issue for exploit details. Return to the repository Security page while
+signed in and look for the private reporting entry point.
 
 A report should include the affected version and platform, minimal
 reproduction steps, expected and actual behavior, whether specific
