@@ -15,8 +15,60 @@ permissions:
   contents: read
 
 jobs:
+  prepare:
+    name: Validate immutable release tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      tag: ${{ steps.release.outputs.tag }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Resolve and validate release tag
+        id: release
+        env:
+          RELEASE_VERSION_INPUT: ${{ inputs.version }}
+        shell: bash
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            tag="$GITHUB_REF_NAME"
+            version="${tag#v}"
+          else
+            version="$RELEASE_VERSION_INPUT"
+            tag="v$version"
+            if [[ "$GITHUB_REF" != "refs/tags/$tag" ]]; then
+              echo "manual release must be dispatched from the matching v<version> tag" >&2
+              exit 1
+            fi
+          fi
+          if [[ -z "$version" || "$version" == "." || "$version" == ".." || "$version" == *[!A-Za-z0-9._-]* ]]; then
+            echo "release version must be a non-empty safe path component" >&2
+            exit 1
+          fi
+          git ls-remote --exit-code origin "refs/tags/$tag"
+          peeled_ref="refs/tags/$tag^{}"
+          direct_ref="refs/tags/$tag"
+          tag_commit="$(git ls-remote origin "$direct_ref" "$peeled_ref" | awk -v peeled_ref="$peeled_ref" '$2 == peeled_ref { print $1; exit }')"
+          if [[ -z "$tag_commit" ]]; then
+            tag_commit="$(git ls-remote origin "$direct_ref" | awk -v direct_ref="$direct_ref" '$2 == direct_ref { print $1; exit }')"
+          fi
+          if [[ "$tag_commit" != "$GITHUB_SHA" ]]; then
+            echo "release tag $tag does not resolve to the workflow commit" >&2
+            exit 1
+          fi
+          if [[ "$tag" == "v0.1.0" ]]; then
+            echo "v0.1.0 is a historical checksum-only release and must not be republished" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
   build:
     name: Build ${{ matrix.target }}
+    needs: prepare
     strategy:
       fail-fast: false
       matrix:
@@ -30,25 +82,30 @@ jobs:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Select pinned Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
         with:
           toolchain: 1.97.1
           targets: ${{ matrix.target }}
 
       - name: Install Node.js 22
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: apps/skilltape-console/package-lock.json
 
       - name: Install Python 3
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: '3.x'
 
@@ -58,35 +115,42 @@ jobs:
       - name: Build Console UI
         run: npm --prefix apps/skilltape-console run build
 
-      - name: Resolve release version
-        id: version
-        env:
-          RELEASE_VERSION_INPUT: ${{ inputs.version }}
-        shell: bash
-        run: |
-          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
-            version="${GITHUB_REF_NAME#v}"
-          else
-            version="$RELEASE_VERSION_INPUT"
-          fi
-          if [[ -z "$version" || "$version" == *[!A-Za-z0-9._-]* ]]; then
-            echo "release version must be a non-empty safe path component" >&2
-            exit 1
-          fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-
       - name: Build Rust binaries
         run: cargo build --locked --release --target "${{ matrix.target }}" -p skilltape-cli -p skilltape-console-api
 
       - name: Package release archive
+        id: package
         shell: bash
         run: |
-          python scripts/package_release.py \
-            --version "${{ steps.version.outputs.version }}" \
+          archive="$(python scripts/package_release.py \
+            --version "${{ needs.prepare.outputs.version }}" \
             --target "${{ matrix.target }}" \
             --binary-dir "target/${{ matrix.target }}/release" \
             --ui-dist apps/skilltape-console/dist \
-            --output-dir release
+            --output-dir release)"
+          test -f "$archive"
+          echo "archive=$archive" >> "$GITHUB_OUTPUT"
+          echo "sbom=$archive.spdx.json" >> "$GITHUB_OUTPUT"
+
+      - name: Generate archive SPDX SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          file: ${{ steps.package.outputs.archive }}
+          format: spdx-json
+          output-file: ${{ steps.package.outputs.sbom }}
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Attest release archive provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: ${{ steps.package.outputs.archive }}
+
+      - name: Attest release archive SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: ${{ steps.package.outputs.archive }}
+          sbom-path: ${{ steps.package.outputs.sbom }}
 
       - name: Smoke test packaged Console
         if: runner.os != 'Windows'
@@ -97,7 +161,7 @@ jobs:
           bash scripts/smoke_console.sh "$(mktemp -d)"
 
       - name: Upload release artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: release-${{ matrix.target }}
           path: release/*
@@ -105,35 +169,18 @@ jobs:
 
   publish:
     name: Publish release
-    needs: build
+    needs: [prepare, build]
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - name: Download release artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: release-*
           path: release-assets
           merge-multiple: true
-
-      - name: Resolve release tag
-        id: release
-        env:
-          RELEASE_VERSION_INPUT: ${{ inputs.version }}
-        shell: bash
-        run: |
-          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
-            version="${GITHUB_REF_NAME#v}"
-          else
-            version="$RELEASE_VERSION_INPUT"
-          fi
-          if [[ -z "$version" || "$version" == *[!A-Za-z0-9._-]* ]]; then
-            echo "release version must be a non-empty safe path component" >&2
-            exit 1
-          fi
-          echo "tag=v$version" >> "$GITHUB_OUTPUT"
 
       - name: Generate checksums
         working-directory: release-assets
@@ -152,40 +199,42 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          tag="${{ steps.release.outputs.tag }}"
+          tag="${{ needs.prepare.outputs.tag }}"
+          git init --quiet
+          git remote add origin "https://github.com/$GITHUB_REPOSITORY.git"
+          verify_release_tag() {
+            git ls-remote --exit-code origin "refs/tags/$tag"
+            peeled_ref="refs/tags/$tag^{}"
+            direct_ref="refs/tags/$tag"
+            tag_commit="$(git ls-remote origin "$direct_ref" "$peeled_ref" | awk -v peeled_ref="$peeled_ref" '$2 == peeled_ref { print $1; exit }')"
+            if [[ -z "$tag_commit" ]]; then
+              tag_commit="$(git ls-remote origin "$direct_ref" | awk -v direct_ref="$direct_ref" '$2 == direct_ref { print $1; exit }')"
+            fi
+            if [[ "$tag_commit" != "$GITHUB_SHA" ]]; then
+              echo "release tag $tag changed after preparation" >&2
+              exit 1
+            fi
+          }
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            verify_release_tag
             gh release upload "$tag" --repo "$GITHUB_REPOSITORY" release-assets/* --clobber
           else
-            gh release create "$tag" --repo "$GITHUB_REPOSITORY" release-assets/* \
+            verify_release_tag
+            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --verify-tag release-assets/* \
               --title "SkillTape $tag" \
               --generate-notes
           fi
 
   windows-installer:
     name: Windows installer smoke
-    needs: publish
+    needs: [prepare, publish]
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     permissions:
       contents: read
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
-
-      - name: Resolve release version
-        id: version
-        shell: pwsh
-        run: |
-          $version = if ("${{ github.event_name }}" -eq "push") {
-            "${{ github.ref_name }}".TrimStart("v")
-          }
-          else {
-            "${{ inputs.version }}"
-          }
-          if ([string]::IsNullOrWhiteSpace($version) -or $version -match "[^A-Za-z0-9._-]") {
-            throw "release version must be a non-empty safe path component"
-          }
-          "version=$version" >> $env:GITHUB_OUTPUT
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Install and verify the published Windows release
         shell: pwsh
@@ -196,7 +245,7 @@ jobs:
         run: |
           $installDir = Join-Path $env:RUNNER_TEMP "skilltape-install\bin"
           $installerParameters = @{
-            Version = "${{ steps.version.outputs.version }}"
+            Version = "${{ needs.prepare.outputs.version }}"
             InstallDir = $installDir
             Target = "x86_64-pc-windows-msvc"
           }
@@ -215,4 +264,4 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $smokePackage "skilltape.yaml") -PathType Leaf)) {
             throw "installed skilltape.exe could not create a package"
           }
-          Write-Output "Windows installer smoke passed for ${{ steps.version.outputs.version }}"
+          Write-Output "Windows installer smoke passed for ${{ needs.prepare.outputs.version }}"

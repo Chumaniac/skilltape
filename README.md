@@ -23,7 +23,7 @@ while macOS uses the system `/usr/bin/sandbox-exec`. See the
 prebuilt release installation.
 
 ```bash
-git clone <your-skilltape-repository>
+git clone https://github.com/Chumaniac/skilltape.git
 cd skilltape
 
 # Build the CLI; core commands do not require Node.js or cloud services
@@ -103,10 +103,10 @@ non-zero code. CI should assert failures rather than ignore them.
 ## CI and Skill repository integration
 
 - `.github/workflows/ci.yml` runs fmt, Clippy, workspace tests, valid-example lint, expected-failure assertions for invalid fixtures, and release/installer fixture gates.
-- `.github/workflows/release.yml` builds Linux, macOS, and Windows archives on a `v*` tag or manual version input, generates `checksums.txt`, and grants `contents: write` only to the final publish job.
+- `.github/workflows/release.yml` validates that future releases use an existing matching `v<version>` tag resolving to the workflow commit, builds Linux, macOS, and Windows archives, generates an archive-local SPDX SBOM and GitHub artifact attestations, publishes `checksums.txt`, and grants `contents: write` only to the final publish job.
 - `.github/workflows/skill-verify.yml` is a template that runs only the local CLI; it does not upload Tapes, Receipts, logs, or secrets.
 - The release installation script requires a fixed version, downloads a checksum, and does not replace an existing binary until verification succeeds; see the [installation guide](docs/guides/installation.md) for the exact parameters.
-- The implementation and release workflow are merged on `main` at `beb0bba1870e20e03e5bc80a2d9234c04fc1c6f6`; final release run `31167200699` is green, and [SkillTape v0.1.0](https://github.com/Chumaniac/skilltape/releases/tag/v0.1.0) is published with four verified archives and `checksums.txt`.
+- The implementation and release workflow are merged on `main` at `beb0bba1870e20e03e5bc80a2d9234c04fc1c6f6`; final release run `31167200699` is green, and [SkillTape v0.1.0](https://github.com/Chumaniac/skilltape/releases/tag/v0.1.0) is published with four verified archives and `checksums.txt`. That historical release predates provenance and SBOM generation, so it is not claimed as attested.
 
 ## Security, compatibility, and benchmarks
 
@@ -128,7 +128,7 @@ equivalent restricted executor is integrated.
 
 ## Documentation
 
-- [Documentation index](docs/README.md) — audience-oriented paths through the complete documentation set.
+- [Documentation index](https://github.com/Chumaniac/skilltape/tree/main/docs) — audience-oriented paths through the complete documentation set.
 - [Installation, releases, and GitHub Actions](docs/guides/installation.md)
 - [Release readiness checklist](docs/release-readiness.md)
 - [Contributing guide](CONTRIBUTING.md)

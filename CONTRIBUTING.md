@@ -1,5 +1,21 @@
 # Contributing to SkillTape
 
+## Public contribution workflow
+
+- Follow the [Code of Conduct](CODE_OF_CONDUCT.md) when participating in the
+  project.
+- Use the GitHub Issue Forms in the [live issue chooser](https://github.com/Chumaniac/skilltape/issues/new/choose)
+  for reproducible problems and feature proposals. Blank Issues are disabled
+  so that public reports stay structured and actionable.
+- Review the [pull request template](.github/pull_request_template.md) before
+  opening a pull request. It covers scope, tests, documentation, and
+  secret-free evidence.
+- [Dependabot](.github/dependabot.yml) opens weekly Cargo, Console npm, and
+  GitHub Actions update pull requests, with at most five open updates per
+  ecosystem.
+- Do not publish vulnerability or exploit details in an Issue or pull request;
+  follow [SECURITY.md](SECURITY.md) for private disclosure.
+
 ## Development prerequisites
 
 - Rust 1.97.1; the repository `rust-toolchain.toml` selects the pinned toolchain.

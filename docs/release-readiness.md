@@ -18,7 +18,23 @@ release documentation.
   smoke job for published release assets.
 - The `v0.1.0` tag points to the release commit above, and the [published
   GitHub Release](https://github.com/Chumaniac/skilltape/releases/tag/v0.1.0)
-  contains the four target archives and `checksums.txt`.
+  contains the four target archives and `checksums.txt`. It was published
+  before archive SPDX SBOM and GitHub provenance/SBOM attestation generation
+  was added, so it remains a historical checksum-only release.
+
+## Future-release integrity contract
+
+Future release runs must begin from an existing matching `v<version>` tag
+whose commit resolves to the workflow commit. For every target archive, the
+workflow must:
+
+- generate an archive-local SPDX JSON sidecar named `<archive>.spdx.json`;
+- create GitHub artifact attestations for the archive's build provenance and
+  its SPDX SBOM predicate; and
+- publish SHA-256 entries for the archive and sidecar in `checksums.txt`.
+
+These requirements apply to future releases only. They do not add provenance
+or an SBOM retroactively to `v0.1.0`.
 
 ## Local verification evidence
 
