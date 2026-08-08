@@ -67,27 +67,31 @@ checksum, checks all three asset classes, and stages them before replacement;
 download, verification, extraction, or staging failures do not overwrite the
 existing CLI.
 
-The current installer requires an explicit release download root to avoid
-downloading from the wrong project while the repository owner, mirror, or
-private release is not determined:
+The installer requires an explicit HTTPS release download root so it cannot
+silently select a different project. For the public SkillTape repository, use
+the following runnable example:
 
 ```bash
-export SKILLTAPE_RELEASE_BASE_URL="https://github.com/<owner>/<repo>/releases/download"
+export SKILLTAPE_RELEASE_BASE_URL="https://github.com/Chumaniac/skilltape/releases/download"
 SKILLTAPE_VERSION=0.1.0 ./scripts/install.sh
 ```
+
+Keep `SKILLTAPE_RELEASE_BASE_URL` explicit when using a trusted mirror or
+private release: replace only its value with that release's HTTPS download
+root, and keep the version and target fixed.
 
 The version can also be passed as the first argument, with the installation
 directory and target overridden:
 
 ```bash
-SKILLTAPE_RELEASE_BASE_URL="https://github.com/<owner>/<repo>/releases/download" \
+SKILLTAPE_RELEASE_BASE_URL="https://github.com/Chumaniac/skilltape/releases/download" \
   ./scripts/install.sh 0.1.0 "$HOME/.local/bin" "aarch64-apple-darwin"
 ```
 
 Windows PowerShell:
 
 ```powershell
-$env:SKILLTAPE_RELEASE_BASE_URL = "https://github.com/<owner>/<repo>/releases/download"
+$env:SKILLTAPE_RELEASE_BASE_URL = "https://github.com/Chumaniac/skilltape/releases/download"
 $env:SKILLTAPE_VERSION = "0.1.0"
 .\scripts\install.ps1
 ```
@@ -96,8 +100,10 @@ The [release workflow](../../.github/workflows/release.yml) is triggered by a
 `v*` tag or manual version input and covers Linux x86_64, macOS x86_64/arm64,
 and Windows x86_64. The workflow does not upload Tapes, Receipts, logs,
 environment variables, or provider credentials. [SkillTape v0.1.0](https://github.com/Chumaniac/skilltape/releases/tag/v0.1.0)
-is the published release and includes the four target archives plus
-`checksums.txt`.
+is the published checksum-verified release and includes the four target
+archives plus `checksums.txt`. It was published before provenance and SBOM
+generation was added, so this historical release has no archive-local SBOM or
+GitHub attestation claim.
 
 The script downloads the archive and `checksums.txt` into a random temporary
 directory, compares the target asset's SHA-256, validates the CLI, API
@@ -107,6 +113,41 @@ missing archive asset, or permission failure leaves the existing binary
 untouched. The version, download root, and target can all be fixed; the script
 does not read or write tokens, cookies, environment secrets, or the project's
 `.env`.
+
+## Verify future release integrity
+
+Future release workflows require an existing protected `v<version>` tag whose
+commit matches the workflow commit. For each target, the workflow publishes
+the release archive, an archive-local SPDX JSON sidecar named
+`<archive>.spdx.json`, GitHub artifact attestations for build provenance and
+the SPDX predicate, and SHA-256 entries in `checksums.txt` for the archive and
+its sidecar. These are future-release requirements; they do not change the
+historical evidence for `v0.1.0`.
+
+After downloading a future archive and its adjacent SPDX sidecar into the
+current directory, set its version and target (the values below are an
+example), then verify the archive's default build-provenance attestation and
+its signed SPDX predicate:
+
+```bash
+version=0.2.0
+target=x86_64-unknown-linux-gnu
+archive="skilltape-v${version}-${target}.tar.gz"
+sbom="${archive}.spdx.json"
+test -f "$archive" && test -f "$sbom"
+
+gh attestation verify "$archive" \
+  --repo Chumaniac/skilltape
+gh attestation verify "$archive" \
+  --repo Chumaniac/skilltape \
+  --predicate-type https://spdx.dev/Document/v2.3 \
+  --format json \
+  --jq '.[].verificationResult.statement.predicate'
+```
+
+The second command verifies the SPDX predicate attached to the archive; the
+sidecar is the human-downloadable SBOM document. For the checksum gate, use
+the matching entry in `checksums.txt` before extracting the archive.
 
 ## Capture → Compile → Verify
 
