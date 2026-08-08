@@ -139,8 +139,23 @@ test -f "$archive" && test -f "$sbom"
 curl --fail --location --silent --show-error \
   --output checksums.txt \
   "https://github.com/Chumaniac/skilltape/releases/download/v${version}/checksums.txt"
-awk -v asset="$archive" '$2 == asset { print }' checksums.txt | sha256sum -c -
-awk -v asset="$sbom" '$2 == asset { print }' checksums.txt | sha256sum -c -
+
+verify_checksum_entry() {
+  local asset="$1"
+  local entry_count
+  entry_count="$(awk -v asset="$asset" '$2 == asset { count += 1 } END { print count + 0 }' checksums.txt)"
+  if [[ "$entry_count" -ne 1 ]]; then
+    echo "checksums.txt must contain exactly one entry for $asset (found $entry_count)" >&2
+    return 1
+  fi
+  if ! awk -v asset="$asset" '$2 == asset { print }' checksums.txt | sha256sum -c -; then
+    echo "checksum verification failed for $asset" >&2
+    return 1
+  fi
+}
+
+verify_checksum_entry "$archive"
+verify_checksum_entry "$sbom"
 
 gh attestation verify "$archive" \
   --repo Chumaniac/skilltape
