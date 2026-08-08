@@ -342,7 +342,7 @@ Use these exact evidence anchors in the individual rows rather than vague phrase
   path for alert 49.
 ```
 
-For alert 49, state that its sink is a test-only fake adapter using the static relative names `inputs/fixture.txt` and `scripts/emit.sh`. For alerts 17-20, 21-22, 23-46, 25-26, 29-30, and 63, state that Task 1 removes the environment-derived source; if a matching scan still reports them, the only allowed disposition is `used in tests` with this documented reason.
+For alert 49, state that its sink is a test-only fake adapter using the static relative names `inputs/fixture.txt` and `scripts/emit.sh`. For alerts 17-46 and 63, state that Task 1 removes the environment-derived source; if a matching scan still reports them, the only allowed disposition is `used in tests` with this documented reason.
 
 - [ ] **Step 3: Add a reproducible read-only CodeQL query and the non-goals**
 
