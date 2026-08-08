@@ -35,6 +35,12 @@ class UserDocumentationContractTests(unittest.TestCase):
         self.assertIn(
             "https://github.com/Chumaniac/skilltape/releases/tag/v0.1.0", text
         )
+        destinations = {
+            destination.split("#", 1)[0].strip().strip("<>")
+            for destination in LINK_RE.findall(text)
+        }
+        self.assertIn("docs/assets/quickstart-terminal.svg", destinations)
+        self.assertIn("docs/assets/quickstart-terminal.txt", destinations)
 
     def test_visual_demo_svg_is_accessible(self):
         self.assertTrue(VISUAL.is_file())
