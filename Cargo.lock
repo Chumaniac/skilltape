@@ -1527,6 +1527,7 @@ dependencies = [
  "skilltape-core",
  "skilltape-schema",
  "skilltape-tape",
+ "tempfile",
  "thiserror 2.0.19",
 ]
 
@@ -1557,6 +1558,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "skilltape-schema",
+ "tempfile",
  "thiserror 2.0.19",
 ]
 

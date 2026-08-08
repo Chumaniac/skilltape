@@ -1,25 +1,21 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use skilltape_core::{DiagnosticLevel, PackageError, SkillPackage};
-
-static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(0);
+use tempfile::TempDir;
 
 struct TestPackage {
+    _temp: TempDir,
     root: PathBuf,
 }
 
 impl TestPackage {
     fn valid() -> Self {
-        let id = NEXT_TEMP_ID.fetch_add(1, Ordering::Relaxed);
-        let root = std::env::temp_dir().join(format!(
-            "skilltape-package-validation-{}-{id}",
-            std::process::id()
-        ));
+        let temp = TempDir::new().expect("temporary package parent");
+        let root = temp.path().join("package");
         fs::create_dir(&root).expect("temporary package root should be created");
 
-        let package = Self { root };
+        let package = Self { _temp: temp, root };
         package.write(
             "skilltape.yaml",
             r#"schema: skilltape.dev/skill/v1
@@ -98,13 +94,9 @@ steps:
     fn write(&self, file: &str, contents: &str) {
         fs::write(self.path(file), contents).expect("fixture file should be written");
     }
-}
 
-impl Drop for TestPackage {
-    fn drop(&mut self) {
-        let temp = std::env::temp_dir();
-        assert!(self.root.starts_with(&temp));
-        let _ = fs::remove_dir_all(&self.root);
+    fn sibling(&self, name: &str) -> PathBuf {
+        self._temp.path().join(name)
     }
 }
 
@@ -513,10 +505,7 @@ fn rejects_required_file_symlink_that_escapes_package_root() {
     use std::os::unix::fs::symlink;
 
     let package = TestPackage::valid();
-    let outside = std::env::temp_dir().join(format!(
-        "skilltape-outside-permissions-{}",
-        std::process::id()
-    ));
+    let outside = package.sibling("outside-permissions.json");
     fs::write(&outside, "{}").unwrap();
     fs::remove_file(package.path("permissions.json")).unwrap();
     symlink(&outside, package.path("permissions.json")).unwrap();
@@ -528,7 +517,6 @@ fn rejects_required_file_symlink_that_escapes_package_root() {
         PackageError::UnsafePackagePath { ref file } if file == "permissions.json"
     ));
     assert!(error.to_string().contains("PKG007"));
-    fs::remove_file(outside).unwrap();
 }
 
 #[test]

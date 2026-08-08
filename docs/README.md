@@ -29,6 +29,7 @@ path by audience, or browse the documentation sections below.
 
 - [Contributing guide](../CONTRIBUTING.md) — development workflow and quality gates.
 - [Security policy](../SECURITY.md) — security boundaries and vulnerability reporting.
+- [CodeQL path-safety audit](security/codeql-path-audit.md) — evidence and disposition criteria for path-injection findings.
 - [Product design record](design/2026-08-04-skilltape-design.md) — historical product and architecture context.
 - [Documentation design specification](superpowers/specs/2026-08-07-skilltape-documentation-design.md) — the approved documentation information architecture.
 - [Documentation migration plan](superpowers/plans/2026-08-07-skilltape-english-documentation.md) — the migration tasks and verification gates.

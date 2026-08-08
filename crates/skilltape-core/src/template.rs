@@ -133,33 +133,24 @@ const LOCKFILE: &str = r#"{
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicU64, Ordering};
-
     use super::*;
+    use tempfile::TempDir;
 
-    static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(0);
-
-    struct TestDir(PathBuf);
+    struct TestDir(TempDir);
 
     impl TestDir {
         fn new(label: &str) -> Self {
-            let id = NEXT_TEMP_ID.fetch_add(1, Ordering::Relaxed);
-            let path = std::env::temp_dir().join(format!(
-                "skilltape-template-{label}-{}-{id}",
-                std::process::id()
-            ));
-            fs::create_dir(&path).expect("test directory");
-            Self(path)
+            let prefix = format!("skilltape-template-{label}-");
+            Self(
+                tempfile::Builder::new()
+                    .prefix(&prefix)
+                    .tempdir()
+                    .expect("test directory"),
+            )
         }
 
         fn join(&self, path: impl AsRef<Path>) -> PathBuf {
-            self.0.join(path)
-        }
-    }
-
-    impl Drop for TestDir {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.0);
+            self.0.path().join(path)
         }
     }
 
