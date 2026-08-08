@@ -70,6 +70,7 @@ intentionally fail closed until an equivalent restricted executor is integrated.
 
 - [Quickstart](docs/guides/quickstart.md) — the same first verified result with troubleshooting.
 - [Installation](docs/guides/installation.md) — platform, update, source-build, and release details.
+- [Configuration](docs/guides/configuration.md) — optional release, installation, and Console settings.
 - [Minimal Skill example](examples/minimal-skill/README.md) — a small valid package to inspect.
 - [Security](SECURITY.md) — sandbox boundaries, redaction, and responsible disclosure.
 - [Contributing](CONTRIBUTING.md) — development and contribution guidance.

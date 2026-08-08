@@ -43,26 +43,36 @@ Run the installer again with the version you want. It safely replaces the
 installed files only after the new archive has passed all checks:
 
 ```bash
+installer_path="$(mktemp)"
+curl --fail --location --silent --show-error --output "$installer_path" \
+  "https://raw.githubusercontent.com/Chumaniac/skilltape/beb0bba1870e20e03e5bc80a2d9234c04fc1c6f6/scripts/install.sh"
 export SKILLTAPE_RELEASE_BASE_URL="https://github.com/Chumaniac/skilltape/releases/download"
-SKILLTAPE_VERSION="0.1.0" ./scripts/install.sh
+export SKILLTAPE_VERSION="0.1.0"
+bash "$installer_path"
 ```
 
 Pass a version, installation directory, and target explicitly to install in a
 custom Unix location:
 
 ```bash
+installer_path="$(mktemp)"
+curl --fail --location --silent --show-error --output "$installer_path" \
+  "https://raw.githubusercontent.com/Chumaniac/skilltape/beb0bba1870e20e03e5bc80a2d9234c04fc1c6f6/scripts/install.sh"
 SKILLTAPE_RELEASE_BASE_URL="https://github.com/Chumaniac/skilltape/releases/download" \
-  ./scripts/install.sh 0.1.0 "$HOME/.local/bin" "aarch64-apple-darwin"
+  bash "$installer_path" 0.1.0 "$HOME/.local/bin" "aarch64-apple-darwin"
 ```
 
-On Windows, set the same values in PowerShell before running `install.ps1`:
+On Windows, download the fixed installer source before setting the same values
+in PowerShell:
 
 ```powershell
+$installerPath = Join-Path $env:TEMP "skilltape-install.ps1"
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Chumaniac/skilltape/beb0bba1870e20e03e5bc80a2d9234c04fc1c6f6/scripts/install.ps1" -OutFile $installerPath
 $env:SKILLTAPE_RELEASE_BASE_URL = "https://github.com/Chumaniac/skilltape/releases/download"
 $env:SKILLTAPE_VERSION = "0.1.0"
 $env:SKILLTAPE_INSTALL_DIR = "$env:LOCALAPPDATA\SkillTape\bin"
 $env:SKILLTAPE_TARGET = "x86_64-pc-windows-msvc"
-.\scripts\install.ps1
+& $installerPath
 ```
 
 ## Use the packaged Console
