@@ -61,6 +61,10 @@ these nondeterministic fields.
 
 ## Vulnerability disclosure
 
+GitHub Private Vulnerability Reporting is enabled as the preferred disclosure
+path for this repository. The corresponding GitHub remote setting will be
+enabled immediately after this branch is merged.
+
 Do not publish exploitable sandbox escapes, path traversal, secret leakage, or
 remote-execution details in a public Issue. Prefer creating a Private
 Vulnerability Report through the repository's GitHub Security page. If that

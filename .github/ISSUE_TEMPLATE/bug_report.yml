@@ -1,0 +1,78 @@
+name: Bug report
+description: Report a reproducible problem with SkillTape.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve SkillTape. Please remove sensitive data before submitting.
+
+        Do not include sensitive Tape or Receipt content, credentials, cookies, tokens, environment values, or private data. Redact or replace them with safe placeholders. Do not report vulnerabilities or exploit details in a public Issue; follow [SECURITY.md](https://github.com/Chumaniac/skilltape/blob/main/SECURITY.md).
+
+  - type: input
+    id: version
+    attributes:
+      label: SkillTape version
+      description: Provide the release version or commit used when the problem occurred.
+      placeholder: v0.1.0 or commit SHA
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      description: Select the platform where the problem occurred.
+      options:
+        - macOS
+        - Linux
+        - Windows
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Provide the smallest safe set of steps or commands that reproduces the problem.
+      placeholder: |
+        1. Run ...
+        2. Run ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: Expected behavior
+      description: What did you expect SkillTape to do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual_behavior
+    attributes:
+      label: Actual behavior
+      description: What did SkillTape do instead? Include only redacted, non-sensitive output.
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: Additional context
+      description: Add safe context, links, or screenshots that help explain the problem.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: safe_to_share
+    attributes:
+      label: Safety check
+      options:
+        - label: I confirm that this report contains no sensitive Tape or Receipt content, credentials, tokens, cookies, or private data.
+          required: true
