@@ -40,17 +40,18 @@ skilltape lint "$workspace/skill" --strict --json
 skilltape verify "$workspace/skill" --receipt "$workspace/receipt.json" --json
 ```
 
-On Linux, Verify requires `bwrap`/Bubblewrap and an available user namespace.
-Debian and Ubuntu users can install it with `sudo apt-get install bubblewrap`.
-macOS uses `/usr/bin/sandbox-exec`.
+On Linux, Replay and Verify require `bwrap`/Bubblewrap and an available user
+namespace. Debian and Ubuntu users can install it with
+`sudo apt-get install bubblewrap`. macOS uses `/usr/bin/sandbox-exec` for
+Replay and Verify.
 
-## If Verify cannot start
+## If Replay or Verify cannot start
 
-Install or enable the required local sandbox before trying Verify again. If it
-is unavailable, Capture, Compile, Lint, and Export remain usable; Verify fails
-closed rather than pretending to isolate the replay. Windows currently supports
-those non-execution commands, while Replay and Verify fail closed until an
-equivalent restricted executor is integrated.
+Install or enable the required local sandbox before trying Replay or Verify
+again. If it is unavailable, Capture, Compile, Lint, and Export remain usable;
+Replay and Verify fail closed rather than pretending to isolate the replay.
+Windows currently supports those non-execution commands, while Replay and Verify
+fail closed until an equivalent restricted executor is integrated.
 
 ## What the result means
 

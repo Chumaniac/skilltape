@@ -47,10 +47,12 @@ completed successfully.
 
 ## What works today
 
-On Linux, Verify requires `bwrap`/Bubblewrap and an available user namespace.
-On macOS, Verify uses the system `/usr/bin/sandbox-exec`. Windows supports
-Capture, Compile, Lint, and Export; Replay and Verify intentionally fail closed
-until an equivalent restricted executor is integrated.
+On Linux, Replay and Verify require `bwrap`/Bubblewrap and an available user
+namespace. On macOS, Replay and Verify use the system
+`/usr/bin/sandbox-exec`. If that restricted executor is unavailable, Capture,
+Compile, Lint, and Export remain usable while Replay and Verify fail closed.
+Windows supports Capture, Compile, Lint, and Export; Replay and Verify
+intentionally fail closed until an equivalent restricted executor is integrated.
 
 ## Use SkillTape when
 
