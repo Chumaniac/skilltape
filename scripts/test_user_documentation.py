@@ -30,19 +30,34 @@ class UserDocumentationContractTests(unittest.TestCase):
         self.assertIn(PRIMARY_PROMISE, text)
         self.assertIn("**Beta**", text)
         self.assertIn("docs/assets/quickstart-terminal.svg", text)
+        self.assertIn("docs/assets/quickstart-terminal.txt", text)
         self.assertIn("docs/guides/quickstart.md", text)
         self.assertIn(
             "https://github.com/Chumaniac/skilltape/releases/tag/v0.1.0", text
         )
 
-    def test_visual_demo_is_accessible_and_has_a_transcript(self):
-        self.assertTrue(TRANSCRIPT.is_file())
+    def test_visual_demo_svg_is_accessible(self):
         self.assertTrue(VISUAL.is_file())
-        transcript = TRANSCRIPT.read_text(encoding="utf-8")
         visual = VISUAL.read_text(encoding="utf-8")
-        for fragment in ("<title>", "<desc>", "Capture", "Verify", "<workspace>"):
-            self.assertIn(fragment, transcript + visual)
-        self.assertNotIn("/tmp/", transcript + visual)
+        for fragment in ("<title>", "<desc>"):
+            self.assertIn(fragment, visual)
+
+    def test_visual_demo_transcript_has_commands_results_and_redaction(self):
+        self.assertTrue(TRANSCRIPT.is_file())
+        transcript = TRANSCRIPT.read_text(encoding="utf-8")
+        for fragment in (
+            "skilltape capture demo",
+            "skilltape compile",
+            "skilltape lint",
+            "skilltape verify",
+            '"ok":true',
+            "Compiled skill at",
+            '"errors":[]',
+            '"status":"succeeded"',
+            "<workspace>",
+        ):
+            self.assertIn(fragment, transcript)
+        self.assertNotIn("/tmp/", transcript)
 
     def test_readme_does_not_promote_retired_implementation_sections(self):
         text = README.read_text(encoding="utf-8")

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-if [[ $# -ne 1 || ! -x "$1" ]]; then
+if [[ $# -ne 1 || ! -f "$1" || ! -x "$1" ]]; then
   echo "usage: $0 <executable-skilltape-path>" >&2
   exit 2
 fi
