@@ -1,6 +1,4 @@
 use std::fs;
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde_json::json;
 use skilltape_compiler::{
@@ -9,8 +7,7 @@ use skilltape_compiler::{
 use skilltape_core::SkillPackage;
 use skilltape_schema::{SchemaId, Step};
 use skilltape_tape::{EventSource, RedactionState, TapeEvent, TapeEventKind};
-
-static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(0);
+use tempfile::TempDir;
 
 fn event(
     sequence: u64,
@@ -333,9 +330,10 @@ fn generated_package_support_files_load_and_lint_cleanly() {
     let output = DeterministicCompiler
         .compile(request(terminal_tape(), "lintable-skill"))
         .expect("terminal tape should compile");
-    let root = temporary_package_root();
+    let temporary = TempDir::new().expect("temporary package parent");
+    let root = temporary.path().join("package");
 
-    fs::create_dir_all(&root).expect("package root");
+    fs::create_dir(&root).expect("package root");
     for (path, contents) in &output.fixtures.files {
         write_package_file(&root, path, contents);
     }
@@ -366,8 +364,6 @@ fn generated_package_support_files_load_and_lint_cleanly() {
         "unexpected warnings: {:?}",
         report.warnings
     );
-
-    fs::remove_dir_all(&root).expect("temporary package cleanup");
 }
 
 #[test]
@@ -435,14 +431,6 @@ fn unpaired_terminal_output_is_an_ambiguous_grouping_error() {
         DeterministicCompiler.compile(output_only),
         Err(CompileError::AmbiguousTerminalGrouping { sequence: 0, .. })
     ));
-}
-
-fn temporary_package_root() -> PathBuf {
-    let id = NEXT_TEMP_ID.fetch_add(1, Ordering::Relaxed);
-    std::env::temp_dir().join(format!(
-        "skilltape-deterministic-package-{}-{id}",
-        std::process::id()
-    ))
 }
 
 fn write_package_file(root: &std::path::Path, relative: &str, contents: &str) {
