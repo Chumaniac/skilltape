@@ -25,18 +25,22 @@ def workflow_paths(directory: Path = WORKFLOW_DIRECTORY) -> tuple[Path, ...]:
     return tuple(sorted((*directory.glob("*.yml"), *directory.glob("*.yaml"))))
 
 
-def yaml_code_and_mask(line: str, quote: str | None) -> tuple[str, list[bool], str, str | None]:
+def yaml_code_and_mask(
+    line: str, quote: str | None
+) -> tuple[str, list[bool], list[bool], str, str | None]:
     code = []
     outside_quotes = []
+    quote_openings = []
     index = 0
 
     while index < len(line):
         character = line[index]
         if quote is None:
             if character == "#" and (index == 0 or line[index - 1].isspace()):
-                return "".join(code), outside_quotes, line[index:], quote
+                return "".join(code), outside_quotes, quote_openings, line[index:], quote
             code.append(character)
             outside_quotes.append(character not in {"'", '"'})
+            quote_openings.append(character in {"'", '"'})
             if character in {"'", '"'}:
                 quote = character
             index += 1
@@ -44,10 +48,12 @@ def yaml_code_and_mask(line: str, quote: str | None) -> tuple[str, list[bool], s
 
         code.append(character)
         outside_quotes.append(False)
+        quote_openings.append(False)
         if quote == "'" and character == "'":
             if index + 1 < len(line) and line[index + 1] == "'":
                 code.append(line[index + 1])
                 outside_quotes.append(False)
+                quote_openings.append(False)
                 index += 2
                 continue
             quote = None
@@ -55,17 +61,27 @@ def yaml_code_and_mask(line: str, quote: str | None) -> tuple[str, list[bool], s
             if character == "\\" and index + 1 < len(line):
                 code.append(line[index + 1])
                 outside_quotes.append(False)
+                quote_openings.append(False)
                 index += 2
                 continue
             if character == '"':
                 quote = None
         index += 1
 
-    return "".join(code), outside_quotes, "", quote
+    return "".join(code), outside_quotes, quote_openings, "", quote
 
 
-def mapping_uses_reference(code: str, outside_quotes: list[bool], start: int) -> str | None:
-    if not all(outside_quotes[start : start + 4]):
+def mapping_uses_reference(
+    code: str,
+    outside_quotes: list[bool],
+    quote_openings: list[bool],
+    start: int,
+    key: str,
+) -> str | None:
+    if key == "uses":
+        if not all(outside_quotes[start : start + len(key)]):
+            return None
+    elif not quote_openings[start]:
         return None
     previous = start - 1
     while previous >= 0 and code[previous].isspace():
@@ -73,7 +89,12 @@ def mapping_uses_reference(code: str, outside_quotes: list[bool], start: int) ->
     if previous >= 0 and code[previous] not in "-{,":
         return None
 
-    value_start = start + 5
+    value_start = start + len(key)
+    while value_start < len(code) and code[value_start].isspace():
+        value_start += 1
+    if value_start == len(code) or code[value_start] != ":":
+        return None
+    value_start += 1
     while value_start < len(code) and code[value_start].isspace():
         value_start += 1
     if value_start == len(code):
@@ -109,14 +130,17 @@ def action_references(workflow: str) -> tuple[tuple[str, str], ...]:
             if indentation > scalar_indent:
                 continue
             scalar_indent = None
-        code, outside_quotes, comment, quote = yaml_code_and_mask(line, quote)
+        code, outside_quotes, quote_openings, comment, quote = yaml_code_and_mask(line, quote)
         if not code.strip():
             continue
         if block_scalar.match(code):
             scalar_indent = indentation
             continue
-        for match in re.finditer(r"\buses\s*:", code):
-            reference = mapping_uses_reference(code, outside_quotes, match.start())
+        for match in re.finditer(r"uses|'uses'|\"uses\"", code):
+            key = match.group()
+            reference = mapping_uses_reference(
+                code, outside_quotes, quote_openings, match.start(), key
+            )
             if reference is not None:
                 references.append((reference, comment))
 
@@ -234,6 +258,7 @@ continued_note: "first line
   uses: actions/checkout@v7"
 continued_single_note: 'first line
   uses: actions/checkout@v7'
+quoted_note: 'fake "uses": actions/checkout@v7'
 """,
                 encoding="utf-8",
             )
@@ -247,6 +272,22 @@ continued_single_note: 'first line
             )
             with self.assertRaisesRegex(AssertionError, "action is not SHA-pinned"):
                 assert_actions_are_immutable(workflow_paths(directory))
+
+    def test_action_pinning_rejects_mutable_quoted_mapping_keys(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            cases = {
+                "normal.yaml": "- 'uses': actions/checkout@v7 # v7\n",
+                "flow.yaml": 'steps: [{ "uses": actions/checkout@v7, name: checkout }]\n',
+            }
+            for filename, workflow in cases.items():
+                with self.subTest(filename=filename):
+                    path = directory / filename
+                    path.write_text(workflow, encoding="utf-8")
+                    with self.assertRaisesRegex(
+                        AssertionError, "action is not SHA-pinned"
+                    ):
+                        assert_actions_are_immutable((path,))
 
     def test_action_pinning_rejects_mutable_flow_sequence_mapping(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -366,6 +407,16 @@ continued_single_note: 'first line
         self.assertEqual(with_value(sbom, "format"), "spdx-json")
         self.assertEqual(with_value(sbom, "upload-artifact"), "false")
         self.assertEqual(with_value(sbom, "upload-release-assets"), "false")
+        provenance = named_step(build_steps, "Attest release archive provenance")
+        self.assertRegex(
+            step_value(provenance, "uses"),
+            r"actions/attest@[0-9a-f]{40}(?:\s+#\s+[^\s#]+)?$",
+        )
+        self.assertEqual(
+            with_value(provenance, "subject-path"),
+            "${{ steps.package.outputs.archive }}",
+        )
+        self.assertNotRegex(provenance, r"^          sbom-path: ", re.MULTILINE)
         sbom_attestation = next(
             step_body
             for _, step_body in build_steps
