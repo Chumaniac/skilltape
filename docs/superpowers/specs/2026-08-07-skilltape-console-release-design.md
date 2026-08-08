@@ -130,9 +130,10 @@ constraints for Replay/Verify and are not hidden by the release workflow.
 - Missing API or UI assets fail before the CLI starts a child process.
 - Any checksum, extraction, or staging error leaves the destination binaries
   unchanged.
-- The repository has a configured Git remote, but no versioned GitHub Release has
-  been published yet. Release readiness and explicit release-tag approval are
-  tracked on the [release-readiness page](../../release-readiness.md).
+- Historical note: when this design was approved, the repository had a
+  configured Git remote but no versioned GitHub Release had been published yet.
+  The current `v0.1.0` release is published on [GitHub](https://github.com/Chumaniac/skilltape/releases/tag/v0.1.0),
+  and current readiness is tracked on the [release-readiness page](../../release-readiness.md).
 - Cross-compiling the Windows target and installing Playwright browsers are
   CI-only checks; local macOS verification must not be presented as proof for
   those targets.

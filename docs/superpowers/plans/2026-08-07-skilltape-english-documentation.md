@@ -16,7 +16,7 @@
 - Preserve historical dates, task IDs, evidence, acceptance criteria, and limitations; add archival context when a historical status is no longer current.
 - Keep user-provided fixture payloads unchanged when they test arbitrary bytes rather than document product behavior.
 - Use relative Markdown links for repository files and update links whenever a file moves or a stale path is removed.
-- Treat `main` at commit `bdd82937fc652190917a8259098bc92ae48553cb` as the current merged implementation state; no versioned GitHub Release has been published.
+- Treat `main` at commit `bdd82937fc652190917a8259098bc92ae48553cb` as the historical merged implementation state for this migration plan. The current `main` branch is at commit `4c484fdb7a2b2e792617a552a4e26bbe12fed67a`, and the versioned `v0.1.0` GitHub Release is published.
 
 ---
 
