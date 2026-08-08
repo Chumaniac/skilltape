@@ -53,6 +53,36 @@ Replay and Verify fail closed rather than pretending to isolate the replay.
 Windows currently supports those non-execution commands, while Replay and Verify
 fail closed until an equivalent restricted executor is integrated.
 
+## Windows: create and export a Skill
+
+Use PowerShell to download the fixed installer source and install the public
+release. This path does not require a compiler or a checkout of this repository.
+
+```powershell
+$installerPath = Join-Path $env:TEMP "skilltape-install.ps1"
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Chumaniac/skilltape/beb0bba1870e20e03e5bc80a2d9234c04fc1c6f6/scripts/install.ps1" -OutFile $installerPath
+$env:SKILLTAPE_RELEASE_BASE_URL = "https://github.com/Chumaniac/skilltape/releases/download"
+$env:SKILLTAPE_VERSION = "0.1.0"
+$env:SKILLTAPE_TARGET = "x86_64-pc-windows-msvc"
+& $installerPath
+$env:PATH = "$env:LOCALAPPDATA\SkillTape\bin;$env:PATH"
+skilltape --help
+```
+
+Capture a harmless Windows command, then Compile, Lint, and Export the Skill:
+
+```powershell
+$workspace = Join-Path $env:TEMP "skilltape-quickstart-$([guid]::NewGuid())"
+New-Item -ItemType Directory -Path $workspace | Out-Null
+
+skilltape capture demo --workspace $workspace --command whoami.exe --output "$workspace\tape" --yes --json
+skilltape compile "$workspace\tape" --output "$workspace\skill"
+skilltape lint "$workspace\skill" --strict --json
+skilltape export "$workspace\skill" --target generic --output "$workspace\exported-skill" --json
+```
+
+Replay/Verify fail closed on Windows, so this path deliberately stops after Export.
+
 ## What the result means
 
 `"status":"succeeded"` means the declared Skill replay completed in the
@@ -62,7 +92,8 @@ permissions before sharing it.
 
 ## Next steps
 
-Read the [installation guide](installation.md) for supported platforms, update
-details, source builds, and release archives. Inspect the
-[minimal Skill example](../../examples/minimal-skill/README.md) to see the
-package you can review and adapt.
+Read the [installation guide](installation.md) for supported platforms, updates,
+source builds, and release archives. See [optional configuration](configuration.md)
+for installer paths and local Console overrides. Inspect the [minimal Skill
+example](../../examples/minimal-skill/README.md) to see the package you can
+review and adapt.

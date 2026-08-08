@@ -10,6 +10,14 @@ GUIDES_INDEX = ROOT / "docs" / "guides" / "README.md"
 QUICKSTART = ROOT / "docs" / "guides" / "quickstart.md"
 TRANSCRIPT = ROOT / "docs" / "assets" / "quickstart-terminal.txt"
 VISUAL = ROOT / "docs" / "assets" / "quickstart-terminal.svg"
+PUBLIC_DOCUMENTS = (
+    README,
+    DOCS_INDEX,
+    GUIDES_INDEX,
+    QUICKSTART,
+    ROOT / "docs" / "guides" / "installation.md",
+    ROOT / "docs" / "guides" / "configuration.md",
+)
 
 PRIMARY_PROMISE = (
     "Turn a real local workflow into a reviewable Agent Skill you can replay "
@@ -79,11 +87,29 @@ class UserDocumentationContractTests(unittest.TestCase):
             "sandbox-exec",
             "beb0bba1870e20e03e5bc80a2d9234c04fc1c6f6",
             "installation.md",
+            "configuration.md",
+            "whoami.exe",
+            "Replay/Verify fail closed",
         ):
             self.assertIn(fragment, text)
 
+    def test_user_indexes_route_to_tasks_not_internal_plans(self):
+        required = (
+            "guides/quickstart.md",
+            "guides/installation.md",
+            "guides/configuration.md",
+            "../examples/minimal-skill/README.md",
+            "../SECURITY.md",
+            "../CONTRIBUTING.md",
+        )
+        combined = DOCS_INDEX.read_text(encoding="utf-8") + GUIDES_INDEX.read_text(encoding="utf-8")
+        for fragment in required:
+            self.assertIn(fragment, combined)
+        for retired in ("superpowers/", "release-readiness.md", "CodeQL path-safety audit"):
+            self.assertNotIn(retired, combined)
+
     def test_public_relative_markdown_links_resolve(self):
-        for source in (README, QUICKSTART):
+        for source in PUBLIC_DOCUMENTS:
             self.assertTrue(source.is_file())
             for destination in LINK_RE.findall(source.read_text(encoding="utf-8")):
                 target = destination.split("#", 1)[0].strip().strip("<>")
