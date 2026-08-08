@@ -33,7 +33,7 @@ def yaml_code_and_mask(line: str, quote: str | None) -> tuple[str, list[bool], s
     while index < len(line):
         character = line[index]
         if quote is None:
-            if character == "#":
+            if character == "#" and (index == 0 or line[index - 1].isspace()):
                 return "".join(code), outside_quotes, line[index:], quote
             code.append(character)
             outside_quotes.append(character not in {"'", '"'})
@@ -94,7 +94,9 @@ def mapping_uses_reference(code: str, outside_quotes: list[bool], start: int) ->
 
 
 def action_references(workflow: str) -> tuple[tuple[str, str], ...]:
-    block_scalar = re.compile(r"^\s*(?:-\s+)?[^:#][^:]*:\s*[>|][+-]?\s*(?:#.*)?$")
+    block_scalar = re.compile(
+        r"^\s*(?:-\s+)?[^:#][^:]*:\s*[>|](?:[1-9][+-]?|[+-][1-9]?)?\s*$"
+    )
     references = []
     scalar_indent = None
     quote = None
@@ -110,7 +112,7 @@ def action_references(workflow: str) -> tuple[tuple[str, str], ...]:
         code, outside_quotes, comment, quote = yaml_code_and_mask(line, quote)
         if not code.strip():
             continue
-        if block_scalar.match(line):
+        if block_scalar.match(code):
             scalar_indent = indentation
             continue
         for match in re.finditer(r"\buses\s*:", code):
@@ -255,6 +257,25 @@ continued_single_note: 'first line
             )
             with self.assertRaisesRegex(AssertionError, "action is not SHA-pinned"):
                 assert_actions_are_immutable(workflow_paths(directory))
+
+    def test_action_pinning_rejects_mutable_flow_mapping_after_plain_hash_scalar(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "flow.yml"
+            path.write_text(
+                "steps: [{ name: foo#bar, uses: actions/checkout@v7 }]\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(AssertionError, "action is not SHA-pinned"):
+                assert_actions_are_immutable((path,))
+
+    def test_action_pinning_ignores_explicit_indentation_block_scalar(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "scalar.yaml"
+            path.write_text(
+                "steps:\n  - run: |2\n      uses: actions/checkout@v7\n",
+                encoding="utf-8",
+            )
+            assert_actions_are_immutable((path,))
 
     def test_release_workflow_enforces_immutable_release_relationships(self) -> None:
         self.assertTrue(WORKFLOW.is_file(), "release workflow is missing")
