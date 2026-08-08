@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
+import copy
 import re
 import tempfile
 import unittest
 from pathlib import Path
+
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
@@ -25,140 +28,98 @@ def workflow_paths(directory: Path = WORKFLOW_DIRECTORY) -> tuple[Path, ...]:
     return tuple(sorted((*directory.glob("*.yml"), *directory.glob("*.yaml"))))
 
 
-def yaml_code_and_mask(
-    line: str, quote: str | None
-) -> tuple[str, list[bool], list[bool], str, str | None]:
-    code = []
-    outside_quotes = []
-    quote_openings = []
-    index = 0
-
-    while index < len(line):
-        character = line[index]
-        if quote is None:
-            if character == "#" and (index == 0 or line[index - 1].isspace()):
-                return "".join(code), outside_quotes, quote_openings, line[index:], quote
-            code.append(character)
-            outside_quotes.append(character not in {"'", '"'})
-            quote_openings.append(character in {"'", '"'})
-            if character in {"'", '"'}:
-                quote = character
-            index += 1
-            continue
-
-        code.append(character)
-        outside_quotes.append(False)
-        quote_openings.append(False)
-        if quote == "'" and character == "'":
-            if index + 1 < len(line) and line[index + 1] == "'":
-                code.append(line[index + 1])
-                outside_quotes.append(False)
-                quote_openings.append(False)
-                index += 2
-                continue
-            quote = None
-        elif quote == '"':
-            if character == "\\" and index + 1 < len(line):
-                code.append(line[index + 1])
-                outside_quotes.append(False)
-                quote_openings.append(False)
-                index += 2
-                continue
-            if character == '"':
-                quote = None
-        index += 1
-
-    return "".join(code), outside_quotes, quote_openings, "", quote
+def load_workflow(path: Path) -> object:
+    try:
+        return yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as error:
+        raise AssertionError(f"invalid workflow YAML: {path}") from error
 
 
-def mapping_uses_reference(
-    code: str,
-    outside_quotes: list[bool],
-    quote_openings: list[bool],
-    start: int,
-    key: str,
-) -> str | None:
-    if key == "uses":
-        if not all(outside_quotes[start : start + len(key)]):
-            return None
-    elif not quote_openings[start]:
-        return None
-    previous = start - 1
-    while previous >= 0 and code[previous].isspace():
-        previous -= 1
-    if previous >= 0 and code[previous] not in "-{,":
-        return None
+def parsed_action_references(node: object) -> tuple[str, ...]:
+    references: list[str] = []
 
-    value_start = start + len(key)
-    while value_start < len(code) and code[value_start].isspace():
-        value_start += 1
-    if value_start == len(code) or code[value_start] != ":":
-        return None
-    value_start += 1
-    while value_start < len(code) and code[value_start].isspace():
-        value_start += 1
-    if value_start == len(code):
-        return None
-    if code[value_start] in {"'", '"'}:
-        quote = code[value_start]
-        value_end = value_start + 1
-        while value_end < len(code) and code[value_end] != quote:
-            value_end += 1
-        if value_end == len(code):
-            return None
-        return code[value_start + 1 : value_end]
+    def visit(value: object) -> None:
+        if isinstance(value, dict):
+            for key, child in value.items():
+                if key == "uses":
+                    if not isinstance(child, str):
+                        raise AssertionError("workflow uses value must be a string")
+                    references.append(child)
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
 
-    value_end = value_start
-    while value_end < len(code) and not code[value_end].isspace() and code[value_end] not in ",}]":
-        value_end += 1
-    return code[value_start:value_end]
-
-
-def action_references(workflow: str) -> tuple[tuple[str, str], ...]:
-    block_scalar = re.compile(
-        r"^\s*(?:-\s+)?[^:#][^:]*:\s*[>|](?:[1-9][+-]?|[+-][1-9]?)?\s*$"
-    )
-    references = []
-    scalar_indent = None
-    quote = None
-
-    for line in workflow.splitlines():
-        indentation = len(line) - len(line.lstrip(" "))
-        if not line.strip():
-            continue
-        if scalar_indent is not None:
-            if indentation > scalar_indent:
-                continue
-            scalar_indent = None
-        code, outside_quotes, quote_openings, comment, quote = yaml_code_and_mask(line, quote)
-        if not code.strip():
-            continue
-        if block_scalar.match(code):
-            scalar_indent = indentation
-            continue
-        for match in re.finditer(r"uses|'uses'|\"uses\"", code):
-            key = match.group()
-            reference = mapping_uses_reference(
-                code, outside_quotes, quote_openings, match.start(), key
-            )
-            if reference is not None:
-                references.append((reference, comment))
-
+    visit(node)
     return tuple(references)
 
 
 def assert_actions_are_immutable(workflow_files: tuple[Path, ...]) -> None:
     for workflow_path in workflow_files:
-        workflow = workflow_path.read_text(encoding="utf-8")
-        for action_reference, suffix in action_references(workflow):
+        for action_reference in parsed_action_references(load_workflow(workflow_path)):
             if not re.fullmatch(r"[^@\s]+@[0-9a-f]{40}", action_reference):
                 raise AssertionError(
                     f"action is not SHA-pinned: {workflow_path}: {action_reference}"
                 )
-            if not re.search(r"#\s+[^\s#]+", suffix):
-                raise AssertionError(
-                    f"action is missing a version comment: {workflow_path}: {action_reference}"
-                )
+
+
+def release_build_mapping(workflow: object) -> dict[str, object]:
+    if not isinstance(workflow, dict):
+        raise AssertionError("release workflow root must be a mapping")
+    jobs = workflow.get("jobs")
+    if not isinstance(jobs, dict):
+        raise AssertionError("release workflow is missing jobs mapping")
+    build = jobs.get("build")
+    if not isinstance(build, dict):
+        raise AssertionError("release workflow is missing build job")
+    return build
+
+
+def named_step_mapping(build: dict[str, object], name: str) -> dict[str, object]:
+    steps = build.get("steps")
+    if not isinstance(steps, list):
+        raise AssertionError("release workflow build job is missing steps")
+    for step in steps:
+        if isinstance(step, dict) and step.get("name") == name:
+            return step
+    raise AssertionError(f"release workflow is missing step: {name}")
+
+
+def assert_step_value(step: dict[str, object], key: str, expected: str) -> None:
+    value: object = step
+    for component in key.split("."):
+        if not isinstance(value, dict) or component not in value:
+            raise AssertionError(f"step is missing {key}")
+        value = value[component]
+    if value != expected:
+        raise AssertionError(f"step {key} must be {expected!r}")
+
+
+def assert_missing_step_value(step: dict[str, object], key: str) -> None:
+    value: object = step
+    for component in key.split("."):
+        if not isinstance(value, dict) or component not in value:
+            return
+        value = value[component]
+    raise AssertionError(f"step must not contain {key}")
+
+
+def assert_release_attestations(build: dict[str, object]) -> None:
+    provenance = named_step_mapping(build, "Attest release archive provenance")
+    assert_step_value(
+        provenance, "uses", "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6"
+    )
+    assert_step_value(
+        provenance, "with.subject-path", "${{ steps.package.outputs.archive }}"
+    )
+    assert_missing_step_value(provenance, "with.sbom-path")
+
+    sbom = named_step_mapping(build, "Attest release archive SBOM")
+    assert_step_value(
+        sbom, "uses", "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6"
+    )
+    assert_step_value(sbom, "with.subject-path", "${{ steps.package.outputs.archive }}")
+    assert_step_value(sbom, "with.sbom-path", "${{ steps.package.outputs.sbom }}")
 
 
 def job_block(workflow: str, job_name: str) -> str:
@@ -289,6 +250,56 @@ quoted_note: 'fake "uses": actions/checkout@v7'
                     ):
                         assert_actions_are_immutable((path,))
 
+    def test_action_pinning_parses_quoted_nested_and_flow_uses_mappings(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            valid = directory / "valid.yml"
+            valid.write_text(
+                """note: '\"uses\": actions/checkout@v7'
+run: |
+  echo 'uses: actions/checkout@v7'
+steps:
+  - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+""",
+                encoding="utf-8",
+            )
+            assert_actions_are_immutable((valid,))
+
+            cases = {
+                "normal-quoted.yml": """jobs:
+  test:
+    steps:
+      - 'uses': actions/checkout@v7
+""",
+                "flow-quoted.yaml": 'steps: [{ "uses": actions/checkout@v7 }]\n',
+                "nested-quoted.yaml": """jobs:
+  test:
+    steps:
+      - nested:
+          - uses: actions/checkout@v7
+""",
+                "explicit-quoted-key.yaml": """? 'uses'
+: actions/checkout@v7
+""",
+            }
+            for filename, workflow in cases.items():
+                with self.subTest(filename=filename):
+                    path = directory / filename
+                    path.write_text(workflow, encoding="utf-8")
+                    with self.assertRaisesRegex(
+                        AssertionError, "action is not SHA-pinned"
+                    ):
+                        assert_actions_are_immutable((path,))
+
+    def test_action_pinning_rejects_invalid_workflow_yaml(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "invalid.yaml"
+            path.write_text("jobs: [\n", encoding="utf-8")
+            with self.assertRaisesRegex(
+                AssertionError, rf"invalid workflow YAML: {re.escape(str(path))}"
+            ):
+                assert_actions_are_immutable((path,))
+
     def test_action_pinning_rejects_mutable_flow_sequence_mapping(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             directory = Path(temporary_directory)
@@ -321,6 +332,7 @@ quoted_note: 'fake "uses": actions/checkout@v7'
     def test_release_workflow_enforces_immutable_release_relationships(self) -> None:
         self.assertTrue(WORKFLOW.is_file(), "release workflow is missing")
         workflow = WORKFLOW.read_text(encoding="utf-8")
+        assert_release_attestations(release_build_mapping(load_workflow(WORKFLOW)))
         for fragment in (
             "tags:\n      - 'v*'",
             "workflow_dispatch:\n    inputs:\n      version:",
@@ -407,32 +419,87 @@ quoted_note: 'fake "uses": actions/checkout@v7'
         self.assertEqual(with_value(sbom, "format"), "spdx-json")
         self.assertEqual(with_value(sbom, "upload-artifact"), "false")
         self.assertEqual(with_value(sbom, "upload-release-assets"), "false")
-        provenance = named_step(build_steps, "Attest release archive provenance")
-        self.assertRegex(
-            step_value(provenance, "uses"),
-            r"actions/attest@[0-9a-f]{40}(?:\s+#\s+[^\s#]+)?$",
-        )
-        self.assertEqual(
-            with_value(provenance, "subject-path"),
-            "${{ steps.package.outputs.archive }}",
-        )
-        self.assertNotRegex(provenance, r"^          sbom-path: ", re.MULTILINE)
-        sbom_attestation = next(
-            step_body
-            for _, step_body in build_steps
-            if re.search(r"^        uses: actions/attest@", step_body, re.MULTILINE)
-            and re.search(r"^          sbom-path: ", step_body, re.MULTILINE)
-        )
-        self.assertEqual(
-            with_value(sbom_attestation, "subject-path"),
-            "${{ steps.package.outputs.archive }}",
-        )
-        self.assertEqual(
-            with_value(sbom_attestation, "sbom-path"),
-            "${{ steps.package.outputs.sbom }}",
-        )
         release_upload = named_step(build_steps, "Upload release artifact")
         self.assertEqual(with_value(release_upload, "path"), "release/*")
+
+    def test_release_attestations_reject_contract_mutations(self) -> None:
+        workflow = load_workflow(WORKFLOW)
+        build = release_build_mapping(workflow)
+        assert_release_attestations(build)
+
+        missing_provenance_uses = copy.deepcopy(build)
+        named_step_mapping(
+            missing_provenance_uses, "Attest release archive provenance"
+        ).pop("uses")
+        with self.assertRaisesRegex(AssertionError, "step is missing uses"):
+            assert_release_attestations(missing_provenance_uses)
+
+        retagged_provenance = copy.deepcopy(build)
+        named_step_mapping(retagged_provenance, "Attest release archive provenance")[
+            "uses"
+        ] = "evil/actions/attest@0123456789abcdef0123456789abcdef01234567"
+        with self.assertRaisesRegex(AssertionError, "step uses must be"):
+            assert_release_attestations(retagged_provenance)
+
+        provenance_with_sbom = copy.deepcopy(build)
+        provenance = named_step_mapping(
+            provenance_with_sbom, "Attest release archive provenance"
+        )
+        provenance_with = provenance.get("with")
+        self.assertIsInstance(provenance_with, dict)
+        provenance_with["sbom-path"] = "${{ steps.package.outputs.sbom }}"
+        with self.assertRaisesRegex(
+            AssertionError, "step must not contain with.sbom-path"
+        ):
+            assert_release_attestations(provenance_with_sbom)
+
+        missing_sbom_step = copy.deepcopy(build)
+        steps = missing_sbom_step.get("steps")
+        self.assertIsInstance(steps, list)
+        missing_sbom_step["steps"] = [
+            step
+            for step in steps
+            if not isinstance(step, dict)
+            or step.get("name") != "Attest release archive SBOM"
+        ]
+        with self.assertRaisesRegex(
+            AssertionError, "release workflow is missing step: Attest release archive SBOM"
+        ):
+            assert_release_attestations(missing_sbom_step)
+
+        changed_sbom_path = copy.deepcopy(build)
+        sbom_with = named_step_mapping(
+            changed_sbom_path, "Attest release archive SBOM"
+        ).get("with")
+        self.assertIsInstance(sbom_with, dict)
+        sbom_with["sbom-path"] = "release/archive.spdx.json"
+        with self.assertRaisesRegex(AssertionError, "step with.sbom-path must be"):
+            assert_release_attestations(changed_sbom_path)
+
+    def test_release_attestations_reject_quoted_provenance_sbom_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "quoted-provenance-sbom.yml"
+            path.write_text(
+                """jobs:
+  build:
+    steps:
+      - name: Attest release archive provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: ${{ steps.package.outputs.archive }}
+          "sbom-path": ${{ steps.package.outputs.sbom }}
+      - name: Attest release archive SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: ${{ steps.package.outputs.archive }}
+          sbom-path: ${{ steps.package.outputs.sbom }}
+""",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                AssertionError, "step must not contain with.sbom-path"
+            ):
+                assert_release_attestations(release_build_mapping(load_workflow(path)))
 
     def test_release_workflow_smokes_the_published_windows_installer(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
