@@ -25,47 +25,98 @@ def workflow_paths(directory: Path = WORKFLOW_DIRECTORY) -> tuple[Path, ...]:
     return tuple(sorted((*directory.glob("*.yml"), *directory.glob("*.yaml"))))
 
 
+def yaml_code_and_mask(line: str, quote: str | None) -> tuple[str, list[bool], str, str | None]:
+    code = []
+    outside_quotes = []
+    index = 0
+
+    while index < len(line):
+        character = line[index]
+        if quote is None:
+            if character == "#":
+                return "".join(code), outside_quotes, line[index:], quote
+            code.append(character)
+            outside_quotes.append(character not in {"'", '"'})
+            if character in {"'", '"'}:
+                quote = character
+            index += 1
+            continue
+
+        code.append(character)
+        outside_quotes.append(False)
+        if quote == "'" and character == "'":
+            if index + 1 < len(line) and line[index + 1] == "'":
+                code.append(line[index + 1])
+                outside_quotes.append(False)
+                index += 2
+                continue
+            quote = None
+        elif quote == '"':
+            if character == "\\" and index + 1 < len(line):
+                code.append(line[index + 1])
+                outside_quotes.append(False)
+                index += 2
+                continue
+            if character == '"':
+                quote = None
+        index += 1
+
+    return "".join(code), outside_quotes, "", quote
+
+
+def mapping_uses_reference(code: str, outside_quotes: list[bool], start: int) -> str | None:
+    if not all(outside_quotes[start : start + 4]):
+        return None
+    previous = start - 1
+    while previous >= 0 and code[previous].isspace():
+        previous -= 1
+    if previous >= 0 and code[previous] not in "-{,":
+        return None
+
+    value_start = start + 5
+    while value_start < len(code) and code[value_start].isspace():
+        value_start += 1
+    if value_start == len(code):
+        return None
+    if code[value_start] in {"'", '"'}:
+        quote = code[value_start]
+        value_end = value_start + 1
+        while value_end < len(code) and code[value_end] != quote:
+            value_end += 1
+        if value_end == len(code):
+            return None
+        return code[value_start + 1 : value_end]
+
+    value_end = value_start
+    while value_end < len(code) and not code[value_end].isspace() and code[value_end] not in ",}]":
+        value_end += 1
+    return code[value_start:value_end]
+
+
 def action_references(workflow: str) -> tuple[tuple[str, str], ...]:
-    block_action = re.compile(
-        r"^\s*(?:-\s+)?uses:\s*(?P<reference>\"[^\"]+\"|'[^']+'|[^,\s#}]+)(?P<suffix>.*)$"
-    )
-    inline_mapping = re.compile(
-        r"^\s*(?:-\s+)?\{(?P<mapping>.*)\}\s*(?P<suffix>#.*)?$"
-    )
-    inline_action = re.compile(
-        r"(?:^|,)\s*uses:\s*(?P<reference>\"[^\"]+\"|'[^']+'|[^,\s#}]+)"
-    )
     block_scalar = re.compile(r"^\s*(?:-\s+)?[^:#][^:]*:\s*[>|][+-]?\s*(?:#.*)?$")
     references = []
     scalar_indent = None
+    quote = None
 
     for line in workflow.splitlines():
         indentation = len(line) - len(line.lstrip(" "))
-        stripped = line.lstrip()
-        if not stripped:
+        if not line.strip():
             continue
         if scalar_indent is not None:
             if indentation > scalar_indent:
                 continue
             scalar_indent = None
-        if stripped.startswith("#"):
+        code, outside_quotes, comment, quote = yaml_code_and_mask(line, quote)
+        if not code.strip():
             continue
         if block_scalar.match(line):
             scalar_indent = indentation
             continue
-        match = block_action.match(line)
-        if match is not None:
-            references.append(
-                (match.group("reference").strip("\"'"), match.group("suffix"))
-            )
-            continue
-        mapping = inline_mapping.match(line)
-        if mapping is not None:
-            match = inline_action.search(mapping.group("mapping"))
-            if match is not None:
-                references.append(
-                    (match.group("reference").strip("\"'"), mapping.group("suffix") or "")
-                )
+        for match in re.finditer(r"\buses\s*:", code):
+            reference = mapping_uses_reference(code, outside_quotes, match.start())
+            if reference is not None:
+                references.append((reference, comment))
 
     return tuple(references)
 
@@ -177,6 +228,10 @@ jobs:
       - { uses: \"actions/setup-node@820762786026740c76f36085b0efc47a31fe5020\" } # v7
 # uses: actions/checkout@v7
 note: "uses: actions/checkout@v7"
+continued_note: "first line
+  uses: actions/checkout@v7"
+continued_single_note: 'first line
+  uses: actions/checkout@v7'
 """,
                 encoding="utf-8",
             )
@@ -187,6 +242,16 @@ note: "uses: actions/checkout@v7"
             mutable = directory / "mutable.yaml"
             mutable.write_text(
                 "- uses: actions/checkout@v7 # v7\n", encoding="utf-8"
+            )
+            with self.assertRaisesRegex(AssertionError, "action is not SHA-pinned"):
+                assert_actions_are_immutable(workflow_paths(directory))
+
+    def test_action_pinning_rejects_mutable_flow_sequence_mapping(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            (directory / "flow.yaml").write_text(
+                "steps: [{ uses: actions/checkout@v7, name: checkout }]\n",
+                encoding="utf-8",
             )
             with self.assertRaisesRegex(AssertionError, "action is not SHA-pinned"):
                 assert_actions_are_immutable(workflow_paths(directory))
