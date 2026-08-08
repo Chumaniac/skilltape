@@ -115,17 +115,19 @@ it with the implementation and `SECURITY.md`:
 ## Required language and link checks
 
 Run the repository-wide language scan for every documentation change and
-review every match. The scan intentionally excludes `Cargo.lock` because it
-is generated dependency data:
+review every match. The text scan ignores binary assets; if an asset contains
+natural-language text, document it separately and review it through the normal
+documentation process. The scan intentionally excludes `Cargo.lock` because
+it is generated dependency data:
 
 ```bash
-git grep -n --perl-regexp '[\x{3400}-\x{4DBF}\x{4E00}-\x{9FFF}]' -- . ':!Cargo.lock' || true
+git grep -I -n --perl-regexp '[\x{3400}-\x{4DBF}\x{4E00}-\x{9FFF}]' -- . ':!Cargo.lock' || true
 ```
 
 The final gate must fail if the scan reports a natural-language match:
 
 ```bash
-if git grep -n --perl-regexp '[\x{3400}-\x{4DBF}\x{4E00}-\x{9FFF}]' -- . ':!Cargo.lock'; then
+if git grep -I -n --perl-regexp '[\x{3400}-\x{4DBF}\x{4E00}-\x{9FFF}]' -- . ':!Cargo.lock'; then
   exit 1
 fi
 ```
