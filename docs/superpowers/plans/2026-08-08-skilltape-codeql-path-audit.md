@@ -31,6 +31,7 @@
 | `crates/skilltape-core/src/template.rs` | Uses `tempfile::TempDir` inside its existing `#[cfg(test)]` module; production template creation remains unchanged. |
 | `crates/skilltape-compiler/Cargo.toml` | Adds the existing workspace `tempfile` crate as a test-only dependency. |
 | `crates/skilltape-compiler/tests/deterministic_compile.rs` | Uses an owned `TempDir` in the generated-package test and removes the hand-built temporary path helper. |
+| `Cargo.lock` | Records the two test-only package dependency edges required for locked Cargo verification; no dependency version change is expected. |
 | `apps/skilltape-console-api/tests/routes.rs` | Proves that collection endpoints ignore symbolic-link entries and reject cross-platform unsafe route IDs. |
 | `docs/security/codeql-path-audit.md` | Contains the public, per-alert source/sink/control/decision ledger. |
 | `docs/README.md` | Links contributors to the CodeQL path-safety audit record. |
@@ -62,6 +63,7 @@ During ledger creation, expand the decision-map ranges into the exact individual
 - Modify: `crates/skilltape-core/src/template.rs`
 - Modify: `crates/skilltape-compiler/Cargo.toml`
 - Modify: `crates/skilltape-compiler/tests/deterministic_compile.rs`
+- Modify: `Cargo.lock`
 
 **Interfaces:**
 
@@ -165,14 +167,16 @@ Delete `fs::remove_dir_all(&root)` at the end of that test because `temporary` n
 Run:
 
 ```bash
-cargo fmt --all -- --check
+cargo test -p skilltape-core --test package_validation
 cargo test --locked -p skilltape-core --test package_validation
+cargo fmt --all -- --check
 cargo test --locked -p skilltape-core template::tests
 cargo test --locked -p skilltape-compiler --test deterministic_compile
+git diff -- Cargo.lock
 git diff --check
 ```
 
-Expected: every command passes. Confirm that only test code and test-only dependency declarations changed.
+Expected: every command passes. The first command updates the lockfile's package metadata if necessary; the following locked commands prove that the lockfile is synchronized. Confirm that `Cargo.lock` changes only the `skilltape-core` and `skilltape-compiler` package dependency lists and that no dependency version changes are introduced.
 
 - [ ] **Step 7: Commit the isolated fixture change**
 
@@ -181,7 +185,8 @@ git add crates/skilltape-core/Cargo.toml \
   crates/skilltape-core/tests/package_validation.rs \
   crates/skilltape-core/src/template.rs \
   crates/skilltape-compiler/Cargo.toml \
-  crates/skilltape-compiler/tests/deterministic_compile.rs
+  crates/skilltape-compiler/tests/deterministic_compile.rs \
+  Cargo.lock
 git commit -m "test: use managed temporary fixture directories"
 ```
 
