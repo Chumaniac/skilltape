@@ -1,0 +1,10 @@
+Only the temporary workspace path and nonrepeatable IDs/hashes are normalized in this transcript.
+
+$ skilltape capture demo --workspace <workspace> --command /bin/echo --output <workspace>/tape --yes --json
+{"ok":true,"name":"demo","tape_path":"<workspace>/tape","event_count":4,"command":"/bin/echo","exit_code":0}
+$ skilltape compile <workspace>/tape --output <workspace>/skill
+Compiled skill at <workspace>/skill
+$ skilltape lint <workspace>/skill --strict --json
+{"files_checked":6,"errors":[],"warnings":[]}
+$ skilltape verify <workspace>/skill --receipt <workspace>/receipt.json --json
+{"schema":"skilltape.dev/receipt/v1","status":"succeeded","steps":[{"step_id":"exec-0001","status":"succeeded","exit_code":0}]}
