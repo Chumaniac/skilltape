@@ -24,8 +24,8 @@ release documentation.
 
 ## Future-release integrity contract
 
-Future release runs must begin from an existing protected `v<version>` tag
-whose commit matches the workflow commit. For every target archive, the
+Future release runs must begin from an existing matching `v<version>` tag
+whose commit resolves to the workflow commit. For every target archive, the
 workflow must:
 
 - generate an archive-local SPDX JSON sidecar named `<archive>.spdx.json`;

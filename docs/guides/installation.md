@@ -116,8 +116,8 @@ does not read or write tokens, cookies, environment secrets, or the project's
 
 ## Verify future release integrity
 
-Future release workflows require an existing protected `v<version>` tag whose
-commit matches the workflow commit. For each target, the workflow publishes
+Future release workflows require an existing matching `v<version>` tag whose
+commit resolves to the workflow commit. For each target, the workflow publishes
 the release archive, an archive-local SPDX JSON sidecar named
 `<archive>.spdx.json`, GitHub artifact attestations for build provenance and
 the SPDX predicate, and SHA-256 entries in `checksums.txt` for the archive and
@@ -126,15 +126,21 @@ historical evidence for `v0.1.0`.
 
 After downloading a future archive and its adjacent SPDX sidecar into the
 current directory, set its version and target (the values below are an
-example), then verify the archive's default build-provenance attestation and
-its signed SPDX predicate:
+example), then download the matching `checksums.txt`:
 
 ```bash
+set -e
 version=0.2.0
 target=x86_64-unknown-linux-gnu
 archive="skilltape-v${version}-${target}.tar.gz"
 sbom="${archive}.spdx.json"
 test -f "$archive" && test -f "$sbom"
+
+curl --fail --location --silent --show-error \
+  --output checksums.txt \
+  "https://github.com/Chumaniac/skilltape/releases/download/v${version}/checksums.txt"
+awk -v asset="$archive" '$2 == asset { print }' checksums.txt | sha256sum -c -
+awk -v asset="$sbom" '$2 == asset { print }' checksums.txt | sha256sum -c -
 
 gh attestation verify "$archive" \
   --repo Chumaniac/skilltape
@@ -145,9 +151,10 @@ gh attestation verify "$archive" \
   --jq '.[].verificationResult.statement.predicate'
 ```
 
-The second command verifies the SPDX predicate attached to the archive; the
-sidecar is the human-downloadable SBOM document. For the checksum gate, use
-the matching entry in `checksums.txt` before extracting the archive.
+After both checksum commands succeed, the sidecar is the human-downloadable
+SBOM document. The first attestation command verifies the archive's default
+build-provenance claim; the second verifies the SPDX predicate attached to the
+archive before you rely on the sidecar's contents.
 
 ## Capture → Compile → Verify
 
