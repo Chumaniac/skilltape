@@ -108,6 +108,17 @@ class UserDocumentationContractTests(unittest.TestCase):
         for retired in ("superpowers/", "release-readiness.md", "CodeQL path-safety audit"):
             self.assertNotIn(retired, combined)
 
+    def test_ci_runs_user_documentation_and_quickstart_gates(self):
+        workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
+            encoding="utf-8"
+        )
+        for fragment in (
+            "python3 scripts/test_user_documentation.py",
+            "cargo build --locked -p skilltape-cli",
+            "bash scripts/test_quickstart.sh target/debug/skilltape",
+        ):
+            self.assertIn(fragment, workflow)
+
     def test_public_relative_markdown_links_resolve(self):
         for source in PUBLIC_DOCUMENTS:
             self.assertTrue(source.is_file())
