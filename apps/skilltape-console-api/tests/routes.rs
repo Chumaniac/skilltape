@@ -221,11 +221,7 @@ async fn collection_endpoints_ignore_symlinked_storage_entries() {
     let outside_receipt = root.join("outside-receipt.json");
     fs::create_dir(&outside_directory).expect("outside directory");
     fs::write(&outside_receipt, b"{}").expect("outside receipt");
-    symlink(
-        &outside_directory,
-        root.join(".skilltape/tapes/linked"),
-    )
-    .expect("tape symlink");
+    symlink(&outside_directory, root.join(".skilltape/tapes/linked")).expect("tape symlink");
     symlink(
         &outside_receipt,
         root.join(".skilltape/receipts/linked.json"),
@@ -237,8 +233,7 @@ async fn collection_endpoints_ignore_symlinked_storage_entries() {
     assert_eq!(workspaces["items"][0]["tape_count"], 1);
     assert_eq!(workspaces["items"][0]["receipt_count"], 1);
 
-    let (status, _body, tapes) =
-        request(&root, "/api/v1/workspaces/default/tapes", &[]).await;
+    let (status, _body, tapes) = request(&root, "/api/v1/workspaces/default/tapes", &[]).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(tapes["items"].as_array().expect("tape items").len(), 1);
     assert_eq!(tapes["items"][0]["id"], "tape-a");
