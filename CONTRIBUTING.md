@@ -4,10 +4,9 @@
 
 - Follow the [Code of Conduct](CODE_OF_CONDUCT.md) when participating in the
   project.
-- Use the [bug report form](.github/ISSUE_TEMPLATE/bug_report.yml) for
-  reproducible problems and the [feature request form](.github/ISSUE_TEMPLATE/feature_request.yml)
-  for proposals. Blank Issues are disabled so that public reports stay
-  structured and actionable.
+- Use the GitHub Issue Forms in the [live issue chooser](https://github.com/Chumaniac/skilltape/issues/new/choose)
+  for reproducible problems and feature proposals. Blank Issues are disabled
+  so that public reports stay structured and actionable.
 - Review the [pull request template](.github/pull_request_template.md) before
   opening a pull request. It covers scope, tests, documentation, and
   secret-free evidence.
