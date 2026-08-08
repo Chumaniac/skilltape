@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 import re
+import tempfile
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
-WORKFLOWS = tuple(sorted((ROOT / ".github" / "workflows").glob("*.yml")))
+WORKFLOW_DIRECTORY = ROOT / ".github" / "workflows"
 INSTALLER = ROOT / "scripts" / "install.ps1"
 
 EXPECTED_ACTION_REFERENCES = (
@@ -21,66 +21,234 @@ EXPECTED_ACTION_REFERENCES = (
 )
 
 
+def workflow_paths(directory: Path = WORKFLOW_DIRECTORY) -> tuple[Path, ...]:
+    return tuple(sorted((*directory.glob("*.yml"), *directory.glob("*.yaml"))))
+
+
+def action_references(workflow: str) -> tuple[tuple[str, str], ...]:
+    pattern = re.compile(
+        r"(?:^|[\s{,])uses:\s*(?P<reference>[^,\s}]+)(?P<suffix>[^\n]*)",
+        re.MULTILINE,
+    )
+    return tuple(
+        (match.group("reference").strip("\"'"), match.group("suffix"))
+        for match in pattern.finditer(workflow)
+    )
+
+
+def assert_actions_are_immutable(workflow_files: tuple[Path, ...]) -> None:
+    for workflow_path in workflow_files:
+        workflow = workflow_path.read_text(encoding="utf-8")
+        for action_reference, suffix in action_references(workflow):
+            if not re.fullmatch(r"[^@\s]+@[0-9a-f]{40}", action_reference):
+                raise AssertionError(
+                    f"action is not SHA-pinned: {workflow_path}: {action_reference}"
+                )
+            if not re.search(r"#\s+[^\s#]+", suffix):
+                raise AssertionError(
+                    f"action is missing a version comment: {workflow_path}: {action_reference}"
+                )
+
+
+def job_block(workflow: str, job_name: str) -> str:
+    start = re.search(rf"^  {re.escape(job_name)}:\n", workflow, re.MULTILINE)
+    if start is None:
+        raise AssertionError(f"release workflow is missing job: {job_name}")
+    remainder = workflow[start.end() :]
+    end = re.search(r"^  [A-Za-z0-9_-]+:\n", remainder, re.MULTILINE)
+    return remainder[: end.start()] if end is not None else remainder
+
+
+def job_needs(job: str) -> set[str]:
+    match = re.search(r"^    needs: (?P<value>.+)$", job, re.MULTILINE)
+    if match is None:
+        return set()
+    required_jobs = match.group("value").strip()
+    if isinstance(required_jobs, str):
+        if required_jobs.startswith("[") and required_jobs.endswith("]"):
+            return {item.strip() for item in required_jobs[1:-1].split(",")}
+        return {required_jobs}
+    raise AssertionError("workflow needs value is not a string")
+
+
+def job_steps(job: str) -> tuple[tuple[str, str], ...]:
+    return tuple(
+        (match.group("name"), match.group("body"))
+        for match in re.finditer(
+            r"^      - name: (?P<name>[^\n]+)\n(?P<body>.*?)(?=^      - |\Z)",
+            job,
+            re.MULTILINE | re.DOTALL,
+        )
+    )
+
+
+def named_step(steps: tuple[tuple[str, str], ...], name: str) -> str:
+    for step_name, step_body in steps:
+        if step_name == name:
+            return step_body
+    raise AssertionError(f"release workflow is missing step: {name}")
+
+
+def step_value(step: str, key: str) -> str:
+    match = re.search(rf"^        {re.escape(key)}: (?P<value>.+)$", step, re.MULTILINE)
+    if match is None:
+        raise AssertionError(f"step is missing {key}")
+    return match.group("value")
+
+
+def with_value(step: str, key: str) -> str:
+    match = re.search(rf"^          {re.escape(key)}: (?P<value>.+)$", step, re.MULTILINE)
+    if match is None:
+        raise AssertionError(f"step is missing with.{key}")
+    return match.group("value")
+
+
+def run_script(step: str) -> str:
+    match = re.search(
+        r"^        run: \|\n(?P<script>(?:^          .*\n?)*)", step, re.MULTILINE
+    )
+    if match is None:
+        raise AssertionError("step is missing a shell script")
+    return match.group("script")
+
+
 class ReleaseWorkflowTests(unittest.TestCase):
     def test_workflow_actions_are_full_sha_pinned_with_version_comments(self) -> None:
         # This catches a workflow-action reference being changed from an immutable
         # commit SHA to a mutable tag or branch.
-        for workflow_path in WORKFLOWS:
-            workflow = workflow_path.read_text(encoding="utf-8")
-            action_lines = [
-                line.strip()
-                for line in workflow.splitlines()
-                if re.match(r"^\s*uses:\s+", line)
-            ]
-            self.assertTrue(action_lines, f"workflow has no actions: {workflow_path}")
-            for action_line in action_lines:
-                self.assertRegex(
-                    action_line,
-                    r"^uses:\s+[^\s@]+@[0-9a-f]{40}\s+#\s+[^\s#]+$",
-                    f"action is not SHA-pinned with a version comment: {workflow_path}: {action_line}",
-                )
+        workflow_files = workflow_paths()
+        self.assertTrue(workflow_files, "workflow directory is empty")
+        assert_actions_are_immutable(workflow_files)
 
         all_workflows = "\n".join(
-            workflow_path.read_text(encoding="utf-8") for workflow_path in WORKFLOWS
+            workflow_path.read_text(encoding="utf-8") for workflow_path in workflow_files
         )
         for action_reference in EXPECTED_ACTION_REFERENCES:
             self.assertIn(action_reference, all_workflows)
 
-    def test_release_workflow_has_locked_builds_all_targets_and_a_single_write_job(self) -> None:
+    def test_action_pinning_scans_yaml_variants_and_rejects_mutable_references(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            (directory / "empty.yml").write_text("name: Empty\n", encoding="utf-8")
+            (directory / "valid.yaml").write_text(
+                """name: Valid
+jobs:
+  test:
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - { uses: \"actions/setup-node@820762786026740c76f36085b0efc47a31fe5020\" } # v7
+""",
+                encoding="utf-8",
+            )
+            discovered = workflow_paths(directory)
+            self.assertEqual({path.name for path in discovered}, {"empty.yml", "valid.yaml"})
+            assert_actions_are_immutable(discovered)
+
+            mutable = directory / "mutable.yaml"
+            mutable.write_text(
+                "- uses: actions/checkout@v7 # v7\n", encoding="utf-8"
+            )
+            with self.assertRaisesRegex(AssertionError, "action is not SHA-pinned"):
+                assert_actions_are_immutable(workflow_paths(directory))
+
+    def test_release_workflow_enforces_immutable_release_relationships(self) -> None:
         self.assertTrue(WORKFLOW.is_file(), "release workflow is missing")
         workflow = WORKFLOW.read_text(encoding="utf-8")
-        required_fragments = [
-            "tags:",
-            "v*",
-            "workflow_dispatch:",
-            "version:",
+        for fragment in (
+            "tags:\n      - 'v*'",
+            "workflow_dispatch:\n    inputs:\n      version:",
             "x86_64-unknown-linux-gnu",
             "x86_64-apple-darwin",
             "aarch64-apple-darwin",
             "x86_64-pc-windows-msvc",
-            "cargo build --locked --release",
-            "npm ci --prefix apps/skilltape-console",
-            "prepare:",
+        ):
+            self.assertIn(fragment, workflow)
+        prepare = job_block(workflow, "prepare")
+        build = job_block(workflow, "build")
+        publish = job_block(workflow, "publish")
+        windows_installer = job_block(workflow, "windows-installer")
+        self.assertEqual(job_needs(build), {"prepare"})
+        self.assertEqual(job_needs(publish), {"prepare", "build"})
+        self.assertEqual(job_needs(windows_installer), {"prepare", "publish"})
+
+        prepare_validation = run_script(
+            named_step(job_steps(prepare), "Resolve and validate release tag")
+        )
+        self.assertIn('if [[ "$tag" == "v0.1.0" ]]', prepare_validation)
+        self.assertIn('git ls-remote --exit-code origin "refs/tags/$tag"', prepare_validation)
+        self.assertIn("manual release must be dispatched from the matching v<version> tag", prepare_validation)
+        self.assertIn('[[ "$GITHUB_REF" != "refs/tags/$tag" ]]', prepare_validation)
+        self.assertIn('"$version" == "." || "$version" == ".."', prepare_validation)
+        self.assertIn("id-token: write", build)
+        self.assertIn("attestations: write", build)
+
+        publish_steps = job_steps(publish)
+        publish_index = next(
+            index
+            for index, step in enumerate(publish_steps)
+            if step[0] == "Publish GitHub release"
+        )
+        self.assertGreater(publish_index, 0)
+        revalidation = publish_steps[publish_index - 1]
+        self.assertEqual(revalidation[0], "Revalidate release tag before publishing")
+        revalidation_script = run_script(revalidation[1])
+        for fragment in (
+            'tag="${{ needs.prepare.outputs.tag }}"',
             'git ls-remote --exit-code origin "refs/tags/$tag"',
-            "manual release must be dispatched from the matching v<version> tag",
-            '[[ "$GITHUB_REF" != "refs/tags/$tag" ]]',
-            '"$version" == "." || "$version" == ".."',
+            'peeled_ref="refs/tags/$tag^{}"',
+            'git ls-remote origin "$direct_ref" "$peeled_ref"',
+            'git ls-remote origin "$direct_ref"',
+            '"$tag_commit" != "$GITHUB_SHA"',
+        ):
+            self.assertIn(fragment, revalidation_script)
+
+        publish_script = run_script(publish_steps[publish_index][1])
+        self.assertIn('gh release upload "$tag" --repo "$GITHUB_REPOSITORY"', publish_script)
+        self.assertIn(
             'gh release create "$tag" --repo "$GITHUB_REPOSITORY" --verify-tag',
-            "anchore/sbom-action@",
-            "actions/attest@",
-            "attestations: write",
-            "id-token: write",
-            "sbom-path:",
-            "sha256sum",
-            "GITHUB_TOKEN",
-            'gh release view "$tag" --repo "$GITHUB_REPOSITORY"',
-            'gh release upload "$tag" --repo "$GITHUB_REPOSITORY"',
-            "contents: read",
-            "contents: write",
-        ]
-        for fragment in required_fragments:
-            self.assertIn(fragment, workflow, f"missing workflow fragment: {fragment}")
-        self.assertEqual(workflow.count("contents: write"), 1)
+            publish_script,
+        )
+        self.assertIn('gh release view "$tag" --repo "$GITHUB_REPOSITORY"', publish_script)
+
+        checksums = run_script(named_step(publish_steps, "Generate checksums"))
+        self.assertIn('sha256sum "${archives[@]}" | sort > checksums.txt', checksums)
+
+        build_steps = job_steps(build)
+        self.assertIn(
+            'cargo build --locked --release --target "${{ matrix.target }}"', build
+        )
+        self.assertIn("npm ci --prefix apps/skilltape-console", build)
+        package = named_step(build_steps, "Package release archive")
+        self.assertEqual(step_value(package, "id"), "package")
+        package_script = run_script(package)
+        self.assertIn('echo "archive=$archive" >> "$GITHUB_OUTPUT"', package_script)
+        self.assertIn('echo "sbom=$archive.spdx.json" >> "$GITHUB_OUTPUT"', package_script)
+        sbom = next(
+            step_body
+            for _, step_body in build_steps
+            if re.search(r"^        uses: anchore/sbom-action@", step_body, re.MULTILINE)
+        )
+        self.assertEqual(with_value(sbom, "file"), "${{ steps.package.outputs.archive }}")
+        self.assertEqual(with_value(sbom, "output-file"), "${{ steps.package.outputs.sbom }}")
+        self.assertEqual(with_value(sbom, "format"), "spdx-json")
+        self.assertEqual(with_value(sbom, "upload-artifact"), "false")
+        self.assertEqual(with_value(sbom, "upload-release-assets"), "false")
+        sbom_attestation = next(
+            step_body
+            for _, step_body in build_steps
+            if re.search(r"^        uses: actions/attest@", step_body, re.MULTILINE)
+            and re.search(r"^          sbom-path: ", step_body, re.MULTILINE)
+        )
+        self.assertEqual(
+            with_value(sbom_attestation, "subject-path"),
+            "${{ steps.package.outputs.archive }}",
+        )
+        self.assertEqual(
+            with_value(sbom_attestation, "sbom-path"),
+            "${{ steps.package.outputs.sbom }}",
+        )
+        release_upload = named_step(build_steps, "Upload release artifact")
+        self.assertEqual(with_value(release_upload, "path"), "release/*")
 
     def test_release_workflow_smokes_the_published_windows_installer(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
