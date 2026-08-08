@@ -157,19 +157,55 @@ verify_checksum_entry() {
 verify_checksum_entry "$archive"
 verify_checksum_entry "$sbom"
 
+attestation_evidence="$(mktemp)"
+trap 'rm -f "$attestation_evidence"' EXIT
+
 gh attestation verify "$archive" \
   --repo Chumaniac/skilltape
 gh attestation verify "$archive" \
   --repo Chumaniac/skilltape \
   --predicate-type https://spdx.dev/Document/v2.3 \
   --format json \
-  --jq '.[].verificationResult.statement.predicate'
+  > "$attestation_evidence"
+
+python3 - "$sbom" "$attestation_evidence" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as stream:
+    sbom = json.load(stream)
+with open(sys.argv[2], encoding="utf-8") as stream:
+    attestation_results = json.load(stream)
+
+if not isinstance(sbom, dict):
+    raise SystemExit("downloaded SBOM is not a JSON object")
+if not isinstance(attestation_results, list):
+    raise SystemExit("attestation verification output was not a JSON array")
+
+for result in attestation_results:
+    if not isinstance(result, dict):
+        continue
+    verification_result = result.get("verificationResult")
+    if not isinstance(verification_result, dict):
+        continue
+    statement = verification_result.get("statement")
+    if not isinstance(statement, dict):
+        continue
+    predicate = statement.get("predicate")
+    if isinstance(predicate, dict) and predicate == sbom:
+        break
+else:
+    raise SystemExit("downloaded SBOM does not match a verified SPDX predicate")
+PY
 ```
 
 After both checksum commands succeed, the sidecar is the human-downloadable
 SBOM document. The first attestation command verifies the archive's default
-build-provenance claim; the second verifies the SPDX predicate attached to the
-archive before you rely on the sidecar's contents.
+build-provenance claim. The second verifies the SPDX predicate attached to the
+archive, saves the full verified results temporarily, and compares the parsed
+sidecar with each returned predicate. This binds the human-downloadable sidecar
+to an already verified attestation predicate before you rely on its contents;
+the temporary evidence file is removed when the shell exits.
 
 ## Capture → Compile → Verify
 
