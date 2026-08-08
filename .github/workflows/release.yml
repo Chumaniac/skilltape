@@ -194,33 +194,32 @@ jobs:
           sha256sum "${archives[@]}" | sort > checksums.txt
           test -s checksums.txt
 
-      - name: Revalidate release tag before publishing
-        shell: bash
-        run: |
-          tag="${{ needs.prepare.outputs.tag }}"
-          git init --quiet
-          git remote add origin "https://github.com/$GITHUB_REPOSITORY.git"
-          git ls-remote --exit-code origin "refs/tags/$tag"
-          peeled_ref="refs/tags/$tag^{}"
-          direct_ref="refs/tags/$tag"
-          tag_commit="$(git ls-remote origin "$direct_ref" "$peeled_ref" | awk -v peeled_ref="$peeled_ref" '$2 == peeled_ref { print $1; exit }')"
-          if [[ -z "$tag_commit" ]]; then
-            tag_commit="$(git ls-remote origin "$direct_ref" | awk -v direct_ref="$direct_ref" '$2 == direct_ref { print $1; exit }')"
-          fi
-          if [[ "$tag_commit" != "$GITHUB_SHA" ]]; then
-            echo "release tag $tag changed after preparation" >&2
-            exit 1
-          fi
-
       - name: Publish GitHub release
         env:
           GITHUB_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           tag="${{ needs.prepare.outputs.tag }}"
+          git init --quiet
+          git remote add origin "https://github.com/$GITHUB_REPOSITORY.git"
+          verify_release_tag() {
+            git ls-remote --exit-code origin "refs/tags/$tag"
+            peeled_ref="refs/tags/$tag^{}"
+            direct_ref="refs/tags/$tag"
+            tag_commit="$(git ls-remote origin "$direct_ref" "$peeled_ref" | awk -v peeled_ref="$peeled_ref" '$2 == peeled_ref { print $1; exit }')"
+            if [[ -z "$tag_commit" ]]; then
+              tag_commit="$(git ls-remote origin "$direct_ref" | awk -v direct_ref="$direct_ref" '$2 == direct_ref { print $1; exit }')"
+            fi
+            if [[ "$tag_commit" != "$GITHUB_SHA" ]]; then
+              echo "release tag $tag changed after preparation" >&2
+              exit 1
+            fi
+          }
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            verify_release_tag
             gh release upload "$tag" --repo "$GITHUB_REPOSITORY" release-assets/* --clobber
           else
+            verify_release_tag
             gh release create "$tag" --repo "$GITHUB_REPOSITORY" --verify-tag release-assets/* \
               --title "SkillTape $tag" \
               --generate-notes

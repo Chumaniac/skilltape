@@ -26,14 +26,48 @@ def workflow_paths(directory: Path = WORKFLOW_DIRECTORY) -> tuple[Path, ...]:
 
 
 def action_references(workflow: str) -> tuple[tuple[str, str], ...]:
-    pattern = re.compile(
-        r"(?:^|[\s{,])uses:\s*(?P<reference>[^,\s}]+)(?P<suffix>[^\n]*)",
-        re.MULTILINE,
+    block_action = re.compile(
+        r"^\s*(?:-\s+)?uses:\s*(?P<reference>\"[^\"]+\"|'[^']+'|[^,\s#}]+)(?P<suffix>.*)$"
     )
-    return tuple(
-        (match.group("reference").strip("\"'"), match.group("suffix"))
-        for match in pattern.finditer(workflow)
+    inline_mapping = re.compile(
+        r"^\s*(?:-\s+)?\{(?P<mapping>.*)\}\s*(?P<suffix>#.*)?$"
     )
+    inline_action = re.compile(
+        r"(?:^|,)\s*uses:\s*(?P<reference>\"[^\"]+\"|'[^']+'|[^,\s#}]+)"
+    )
+    block_scalar = re.compile(r"^\s*(?:-\s+)?[^:#][^:]*:\s*[>|][+-]?\s*(?:#.*)?$")
+    references = []
+    scalar_indent = None
+
+    for line in workflow.splitlines():
+        indentation = len(line) - len(line.lstrip(" "))
+        stripped = line.lstrip()
+        if not stripped:
+            continue
+        if scalar_indent is not None:
+            if indentation > scalar_indent:
+                continue
+            scalar_indent = None
+        if stripped.startswith("#"):
+            continue
+        if block_scalar.match(line):
+            scalar_indent = indentation
+            continue
+        match = block_action.match(line)
+        if match is not None:
+            references.append(
+                (match.group("reference").strip("\"'"), match.group("suffix"))
+            )
+            continue
+        mapping = inline_mapping.match(line)
+        if mapping is not None:
+            match = inline_action.search(mapping.group("mapping"))
+            if match is not None:
+                references.append(
+                    (match.group("reference").strip("\"'"), mapping.group("suffix") or "")
+                )
+
+    return tuple(references)
 
 
 def assert_actions_are_immutable(workflow_files: tuple[Path, ...]) -> None:
@@ -126,7 +160,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
         for action_reference in EXPECTED_ACTION_REFERENCES:
             self.assertIn(action_reference, all_workflows)
 
-    def test_action_pinning_scans_yaml_variants_and_rejects_mutable_references(self) -> None:
+    def test_action_pinning_ignores_scalar_text_and_rejects_mutable_references(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             directory = Path(temporary_directory)
             (directory / "empty.yml").write_text("name: Empty\n", encoding="utf-8")
@@ -135,8 +169,14 @@ class ReleaseWorkflowTests(unittest.TestCase):
 jobs:
   test:
     steps:
+      - name: Shell text is not an action
+        run: |
+          echo "uses: actions/checkout@v7"
+          # uses: actions/checkout@v7
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - { uses: \"actions/setup-node@820762786026740c76f36085b0efc47a31fe5020\" } # v7
+# uses: actions/checkout@v7
+note: "uses: actions/checkout@v7"
 """,
                 encoding="utf-8",
             )
@@ -183,15 +223,14 @@ jobs:
         self.assertIn("attestations: write", build)
 
         publish_steps = job_steps(publish)
-        publish_index = next(
-            index
-            for index, step in enumerate(publish_steps)
-            if step[0] == "Publish GitHub release"
+        self.assertNotIn(
+            "Revalidate release tag before publishing",
+            {step_name for step_name, _ in publish_steps},
         )
-        self.assertGreater(publish_index, 0)
-        revalidation = publish_steps[publish_index - 1]
-        self.assertEqual(revalidation[0], "Revalidate release tag before publishing")
-        revalidation_script = run_script(revalidation[1])
+        for step_name, step_body in publish_steps:
+            if step_name != "Publish GitHub release":
+                self.assertNotIn("git ls-remote", step_body)
+        publish_script = run_script(named_step(publish_steps, "Publish GitHub release"))
         for fragment in (
             'tag="${{ needs.prepare.outputs.tag }}"',
             'git ls-remote --exit-code origin "refs/tags/$tag"',
@@ -200,13 +239,21 @@ jobs:
             'git ls-remote origin "$direct_ref"',
             '"$tag_commit" != "$GITHUB_SHA"',
         ):
-            self.assertIn(fragment, revalidation_script)
-
-        publish_script = run_script(publish_steps[publish_index][1])
-        self.assertIn('gh release upload "$tag" --repo "$GITHUB_REPOSITORY"', publish_script)
-        self.assertIn(
-            'gh release create "$tag" --repo "$GITHUB_REPOSITORY" --verify-tag',
+            self.assertIn(fragment, publish_script)
+        self.assertEqual(publish_script.count("verify_release_tag"), 3)
+        self.assertRegex(
             publish_script,
+            r'if gh release view "\$tag" --repo "\$GITHUB_REPOSITORY".*?then\n'
+            r'\s+verify_release_tag\n'
+            r'\s+gh release upload "\$tag" --repo "\$GITHUB_REPOSITORY"',
+            "existing-release publication must revalidate immediately before upload",
+        )
+        self.assertRegex(
+            publish_script,
+            r'else\n'
+            r'\s+verify_release_tag\n'
+            r'\s+gh release create "\$tag" --repo "\$GITHUB_REPOSITORY" --verify-tag',
+            "new-release publication must revalidate immediately before creation",
         )
         self.assertIn('gh release view "$tag" --repo "$GITHUB_REPOSITORY"', publish_script)
 
