@@ -15,7 +15,11 @@ fn rejects_workflow_with_unknown_action() {
 
     let errors = validate_json(SchemaId::WorkflowV1, &document).expect_err("must reject");
 
-    assert!(errors.iter().any(|error| error.keyword == "enum"));
+    assert!(errors.iter().any(|error| {
+        error.instance_path == "/steps/0/action"
+            && error.keyword == "enum"
+            && error.message == "\"shell\" is not one of \"exec\", \"script\" or 2 other candidates"
+    }));
 }
 
 #[test]

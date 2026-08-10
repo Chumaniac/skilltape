@@ -22,7 +22,7 @@ impl SchemaDiagnostic {
     }
 
     fn from_error(error: jsonschema::ValidationError<'_>) -> Self {
-        let schema_path = error.schema_path.as_str();
+        let schema_path = error.schema_path().as_str();
         let keyword = schema_path
             .rsplit('/')
             .find(|segment| !segment.is_empty())
@@ -30,7 +30,7 @@ impl SchemaDiagnostic {
             .to_owned();
 
         Self {
-            instance_path: error.instance_path.as_str().to_owned(),
+            instance_path: error.instance_path().as_str().to_owned(),
             keyword,
             message: error.to_string(),
         }
