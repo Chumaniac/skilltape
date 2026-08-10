@@ -242,10 +242,10 @@ async fn capture(config: CaptureConfig) -> Result<CaptureJsonSummary, CaptureCom
     };
     let capture_cancelled = cancel.is_cancelled();
 
-    // PollWatcher checks at 50 ms intervals and batches raw events for 40 ms;
-    // leave enough time for both phases to flush a short-lived command's
-    // metadata events before stopping the watcher.
-    tokio::time::sleep(Duration::from_millis(150)).await;
+    // PollWatcher checks at 50 ms intervals and batches raw events for 40 ms.
+    // Three complete poll-and-batch windows leave a bounded margin for macOS
+    // CI scheduling before stopping the watcher for a short-lived command.
+    tokio::time::sleep(Duration::from_millis(300)).await;
     watcher_cancel.cancel();
     let watcher_result = watcher_task
         .await
