@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img">
+  <title>SkillTape first verified Skill</title>
+  <desc>The image shows a local command captured, compiled, linted, and verified with a successful Receipt.</desc>
+  <rect width="1280" height="720" fill="#10131a"/>
+  <rect x="32" y="32" width="1216" height="656" rx="18" fill="#171c26" stroke="#30394a" stroke-width="2"/>
+  <path d="M32 96h1216" stroke="#30394a" stroke-width="2"/>
+  <circle cx="64" cy="64" r="10" fill="#ff6b6b"/>
+  <circle cx="96" cy="64" r="10" fill="#f7c948"/>
+  <circle cx="128" cy="64" r="10" fill="#5dd39e"/>
+  <text x="640" y="71" fill="#b8c0d0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" text-anchor="middle">skilltape — first verified Skill</text>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16">
+    <text x="64" y="136" fill="#82aaff">$ skilltape capture demo --workspace &lt;workspace&gt; --command /bin/echo</text>
+    <text x="64" y="160" fill="#82aaff">  --output &lt;workspace&gt;/tape --yes --json</text>
+    <text x="64" y="184" fill="#c3e88d">{&quot;ok&quot;:true,&quot;name&quot;:&quot;demo&quot;,&quot;tape_path&quot;:&quot;&lt;workspace&gt;/tape&quot;,&quot;event_count&quot;:4,&quot;command&quot;:&quot;/bin/echo&quot;,&quot;exit_code&quot;:0}</text>
+    <text x="64" y="248" fill="#82aaff">$ skilltape compile &lt;workspace&gt;/tape --output &lt;workspace&gt;/skill</text>
+    <text x="64" y="272" fill="#c3e88d">Compiled skill at &lt;workspace&gt;/skill</text>
+    <text x="64" y="336" fill="#82aaff">$ skilltape lint &lt;workspace&gt;/skill --strict --json</text>
+    <text x="64" y="360" fill="#c3e88d">{&quot;files_checked&quot;:6,&quot;errors&quot;:[],&quot;warnings&quot;:[]}</text>
+    <text x="64" y="424" fill="#82aaff">$ skilltape verify &lt;workspace&gt;/skill --receipt &lt;workspace&gt;/receipt.json --json</text>
+    <text x="64" y="448" fill="#c3e88d">{&quot;schema&quot;:&quot;skilltape.dev/receipt/v1&quot;,&quot;status&quot;:&quot;succeeded&quot;,</text>
+    <text x="64" y="472" fill="#c3e88d">&quot;steps&quot;:[{&quot;step_id&quot;:&quot;exec-0001&quot;,&quot;status&quot;:&quot;succeeded&quot;,&quot;exit_code&quot;:0}]}</text>
+  </g>
+  <rect x="64" y="536" width="1152" height="104" rx="12" fill="#202a38"/>
+  <text x="96" y="579" fill="#5dd39e" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="26">✓ Receipt succeeded</text>
+  <text x="96" y="613" fill="#b8c0d0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18">Captured → Compiled → Linted → Verified locally</text>
+</svg>
