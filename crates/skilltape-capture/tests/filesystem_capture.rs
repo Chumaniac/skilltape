@@ -369,5 +369,8 @@ fn tape_event(occurred_at_ms: u64, sequence: u64) -> TapeEvent {
 }
 
 fn sha256(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
+    Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>()
 }

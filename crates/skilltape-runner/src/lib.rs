@@ -558,7 +558,10 @@ fn execute_assert(
                     .as_deref()
                     .ok_or_else(|| "file_hash assertion requires a hash".to_owned())?;
                 let contents = fs::read(&path).map_err(|error| error.to_string())?;
-                let actual = format!("{:x}", Sha256::digest(contents));
+                let actual = Sha256::digest(contents)
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>();
                 if actual.eq_ignore_ascii_case(expected) {
                     Ok(())
                 } else {
