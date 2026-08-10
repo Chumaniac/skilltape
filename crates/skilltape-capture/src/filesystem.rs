@@ -687,7 +687,13 @@ fn file_metadata_with_opener(
         hasher.update(&buffer[..read]);
     }
     Ok((
-        Some(format!("{:x}", hasher.finalize())),
+        Some(
+            hasher
+                .finalize()
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>(),
+        ),
         Some(metadata.len()),
     ))
 }
@@ -779,6 +785,23 @@ mod tests {
         .expect("disappearance is transient");
 
         assert_eq!(metadata, (None, None));
+    }
+
+    #[test]
+    fn records_lowercase_sha256_for_file_contents() {
+        let temp = TempDir::new().expect("temp directory");
+        let file = temp.path().join("contents.txt");
+        std::fs::write(&file, b"skilltape").expect("file");
+
+        let metadata = file_metadata(&file).expect("file metadata");
+
+        assert_eq!(
+            metadata,
+            (
+                Some("6e8275552bb3e59d231c1d4942e6b960cd41c9d5f712c427bfeea6eee67bd6b1".to_owned()),
+                Some(9),
+            )
+        );
     }
 
     #[test]

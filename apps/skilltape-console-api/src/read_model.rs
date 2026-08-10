@@ -623,7 +623,11 @@ fn lint_summary(report: skilltape_core::LintReport) -> LintSummary {
 fn sha256(contents: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(contents);
-    format!("{:x}", hasher.finalize())
+    hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>()
 }
 
 fn map_tape_error(error: TapeStoreError) -> ReadModelError {
