@@ -126,7 +126,11 @@ fn digest_tree(root: &Path) -> io::Result<String> {
         hasher.update((contents.len() as u64).to_be_bytes());
         hasher.update(contents);
     }
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>())
 }
 
 fn digest_parts(parts: &[&[u8]]) -> String {
@@ -136,7 +140,11 @@ fn digest_parts(parts: &[&[u8]]) -> String {
         hasher.update((part.len() as u64).to_be_bytes());
         hasher.update(part);
     }
-    format!("{:x}", hasher.finalize())
+    hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>()
 }
 
 fn collect_files(

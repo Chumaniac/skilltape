@@ -115,7 +115,11 @@ fn evaluate_one(
                     }
                     hasher.update(&buffer[..bytes_read]);
                 }
-                let actual = format!("{:x}", hasher.finalize());
+                let actual = hasher
+                    .finalize()
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>();
                 (actual.eq_ignore_ascii_case(sha256), "file hash matches")
             }
         }

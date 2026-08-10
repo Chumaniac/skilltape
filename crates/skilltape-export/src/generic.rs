@@ -233,7 +233,11 @@ fn hash_files(package: &LoadedSkillPackage, files: &[String]) -> Result<String, 
         hasher.update((contents.len() as u64).to_be_bytes());
         hasher.update(contents);
     }
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>())
 }
 
 fn copy_file(

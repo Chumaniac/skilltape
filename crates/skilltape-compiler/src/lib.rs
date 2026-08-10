@@ -321,7 +321,10 @@ impl CompileOutput {
     /// `CompileRequest` envelope is not included in this hash.
     pub fn content_hash(&self) -> Result<String, CompileError> {
         let bytes = self.deterministic_json()?;
-        Ok(format!("{:x}", Sha256::digest(bytes)))
+        Ok(Sha256::digest(bytes)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>())
     }
 
     pub fn deterministic_hash(&self) -> Result<String, CompileError> {
