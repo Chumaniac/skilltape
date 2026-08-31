@@ -2,7 +2,13 @@ use thiserror::Error;
 
 use crate::{ClaudeCodeExporter, CodexExporter, CursorExporter, Exporter, GenericExporter};
 
-const SUPPORTED_TARGETS: [&str; 5] = ["generic", "generic-agent-skill", "claude-code", "codex", "cursor"];
+const SUPPORTED_TARGETS: [&str; 5] = [
+    "generic",
+    "generic-agent-skill",
+    "claude-code",
+    "codex",
+    "cursor",
+];
 
 #[derive(Debug, Error, Eq, PartialEq)]
 pub enum RegistryError {

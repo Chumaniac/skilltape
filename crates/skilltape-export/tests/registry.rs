@@ -4,7 +4,13 @@ use skilltape_export::{exporter_for, supported_targets, RegistryError};
 fn registry_exposes_the_supported_targets_in_stable_order() {
     assert_eq!(
         supported_targets(),
-        &["generic", "generic-agent-skill", "claude-code", "codex", "cursor"]
+        &[
+            "generic",
+            "generic-agent-skill",
+            "claude-code",
+            "codex",
+            "cursor"
+        ]
     );
 }
 
