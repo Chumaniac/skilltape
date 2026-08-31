@@ -4,7 +4,7 @@ use skilltape_export::{exporter_for, supported_targets, RegistryError};
 fn registry_exposes_the_supported_targets_in_stable_order() {
     assert_eq!(
         supported_targets(),
-        &["generic", "generic-agent-skill", "claude-code"]
+        &["generic", "generic-agent-skill", "claude-code", "codex", "cursor"]
     );
 }
 
@@ -26,6 +26,14 @@ fn registry_returns_exporters_by_id() {
             .target_id(),
         "claude-code"
     );
+    assert_eq!(
+        exporter_for("codex").expect("codex exporter").target_id(),
+        "codex"
+    );
+    assert_eq!(
+        exporter_for("cursor").expect("cursor exporter").target_id(),
+        "cursor"
+    );
 }
 
 #[test]
@@ -38,7 +46,7 @@ fn registry_rejects_unknown_target_without_a_fallback() {
         error,
         RegistryError::UnknownTarget {
             target: "future-target".to_owned(),
-            supported: "generic, generic-agent-skill, claude-code".to_owned(),
+            supported: "generic, generic-agent-skill, claude-code, codex, cursor".to_owned(),
         }
     );
 }
