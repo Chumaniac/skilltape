@@ -14,6 +14,8 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 mod process;
+#[cfg(target_os = "windows")]
+mod windows;
 mod workspace;
 
 pub use process::{

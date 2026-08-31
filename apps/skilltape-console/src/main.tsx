@@ -3,12 +3,13 @@ import { createRoot } from 'react-dom/client'
 
 import { apiBaseLabel } from './api'
 import { CompileReviewPage } from './pages/CompileReview'
+import { ExportTargetsPage } from './pages/ExportTargets'
 import { PermissionReviewPage } from './pages/PermissionReview'
 import { ReceiptViewPage } from './pages/ReceiptView'
 import { TimelinePage } from './pages/Timeline'
 import './styles.css'
 
-type PageKey = 'timeline' | 'compile' | 'permissions' | 'receipt'
+type PageKey = 'timeline' | 'compile' | 'permissions' | 'receipt' | 'export'
 
 interface RouteState {
   page: PageKey
@@ -21,7 +22,7 @@ function readRoute(): RouteState {
   const hash = window.location.hash.replace(/^#/, '') || 'timeline'
   const [pageValue, query] = hash.split('?')
   const page: PageKey =
-    pageValue === 'compile' || pageValue === 'permissions' || pageValue === 'receipt'
+    pageValue === 'compile' || pageValue === 'permissions' || pageValue === 'receipt' || pageValue === 'export'
       ? pageValue
       : 'timeline'
   const params = new URLSearchParams(query)
@@ -63,6 +64,8 @@ function App() {
           <NavLink href="#compile?skill=demo" active={route.page === 'compile'} label="Compile review" icon="⌁" />
           <NavLink href="#permissions?skill=demo" active={route.page === 'permissions'} label="Permissions" icon="⊙" />
           <NavLink href="#receipt?run=run-a" active={route.page === 'receipt'} label="Verify Receipt" icon="✓" />
+          <p className="nav-label" style={{ marginTop: 16 }}>Export</p>
+          <NavLink href="#export" active={route.page === 'export'} label="Export targets" icon="⧉" />
         </nav>
         <div className="sidebar-bottom">
           <div className="local-card">
@@ -94,6 +97,7 @@ function App() {
           {route.page === 'compile' ? <CompileReviewPage skillId={route.skillId} /> : null}
           {route.page === 'permissions' ? <PermissionReviewPage skillId={route.skillId} /> : null}
           {route.page === 'receipt' ? <ReceiptViewPage receiptId={route.receiptId} /> : null}
+          {route.page === 'export' ? <ExportTargetsPage /> : null}
         </main>
 
         <footer className="app-footer">
@@ -128,6 +132,7 @@ function pageLabel(page: PageKey): string {
   if (page === 'compile') return 'Compile review'
   if (page === 'permissions') return 'Permission review'
   if (page === 'receipt') return 'Verify Receipt'
+  if (page === 'export') return 'Export targets'
   return 'Capture timeline'
 }
 
