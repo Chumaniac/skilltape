@@ -51,13 +51,15 @@ real credentials into tests, Issues, commit messages, or logs.
 | --- | --- | --- | --- |
 | macOS | Supported | Requires `/usr/bin/sandbox-exec` | PTY uses the system implementation; file watching uses the platform watcher; the sandbox profile opens only the temporary workspace |
 | Linux | Supported | Requires `bwrap`/`bubblewrap` and an available user namespace | `bwrap --unshare-all` isolates network, environment, and filesystem; CI preinstalls bubblewrap |
-| Windows | Supports non-execution commands and package operations | Fails closed and returns sandbox unavailable | Release packages may use the Windows installer; Replay/Verify support is not claimed until an equivalent restricted executor is integrated |
+| Windows | Supports non-execution commands and package operations | Fails closed with `sandbox_unavailable` (preview design at `docs/platform-windows-sandbox.md`) | Release packages may use the Windows installer; Replay/Verify require Job Objects + ACL + low integrity. Preview stub returns `SandboxUnavailable` with guidance; see `crates/skilltape-runner/src/windows.rs` |
 
 Complete product and security CI gates run on the Linux and macOS matrix, while
 the release packaging matrix covers Linux, macOS, and Windows. PTY terminal
 size, signal semantics, and filesystem-watcher event coalescing may differ by
 platform; Tape and Receipt schemas must not depend on the exact time values of
 these nondeterministic fields.
+
+Windows preview is explicitly fail-closed and does not satisfy the isolation threat model until the design in `docs/platform-windows-sandbox.md` is reviewed on a Windows runner.
 
 ## Vulnerability disclosure
 

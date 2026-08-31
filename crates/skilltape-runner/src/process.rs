@@ -221,7 +221,12 @@ fn sandboxed_command(request: &ProcessRequest) -> Result<Command, ProcessError> 
         linux_sandbox_command(request)
     }
 
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    #[cfg(target_os = "windows")]
+    {
+        crate::windows::windows_sandbox_command(request)
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
         let _ = request;
         Err(ProcessError::SandboxUnavailable)
