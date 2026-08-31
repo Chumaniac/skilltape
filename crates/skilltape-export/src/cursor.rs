@@ -22,16 +22,6 @@ impl Exporter for CursorExporter {
         package: &LoadedSkillPackage,
         output: &Path,
     ) -> Result<ExportManifest, ExportError> {
-        if !package
-            .manifest
-            .targets
-            .iter()
-            .any(|target| target == TARGET_ID)
-        {
-            return Err(ExportError::TargetNotDeclared {
-                target: TARGET_ID.to_owned(),
-            });
-        }
         validate_name(&package.manifest.name)?;
         validate_output(package, output)?;
 
