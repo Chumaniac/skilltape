@@ -1,8 +1,8 @@
 use thiserror::Error;
 
-use crate::{ClaudeCodeExporter, Exporter, GenericExporter};
+use crate::{ClaudeCodeExporter, CodexExporter, CursorExporter, Exporter, GenericExporter};
 
-const SUPPORTED_TARGETS: [&str; 3] = ["generic", "generic-agent-skill", "claude-code"];
+const SUPPORTED_TARGETS: [&str; 5] = ["generic", "generic-agent-skill", "claude-code", "codex", "cursor"];
 
 #[derive(Debug, Error, Eq, PartialEq)]
 pub enum RegistryError {
@@ -18,6 +18,8 @@ pub fn exporter_for(target: &str) -> Result<Box<dyn Exporter>, RegistryError> {
     match target {
         "generic" | "generic-agent-skill" => Ok(Box::new(GenericExporter)),
         "claude-code" => Ok(Box::new(ClaudeCodeExporter)),
+        "codex" => Ok(Box::new(CodexExporter)),
+        "cursor" => Ok(Box::new(CursorExporter)),
         _ => Err(RegistryError::UnknownTarget {
             target: target.to_owned(),
             supported: SUPPORTED_TARGETS.join(", "),

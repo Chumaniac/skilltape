@@ -12,6 +12,8 @@ mod plugin;
 mod registry;
 
 pub use claude_code::ClaudeCodeExporter;
+pub use codex::CodexExporter;
+pub use cursor::CursorExporter;
 pub use generic::GenericExporter;
 pub use plugin::{
     run_plugin, validate_plugin_manifest, validate_request, ExportRequest, PluginError,
@@ -21,6 +23,8 @@ pub use plugin::{
 pub use registry::{exporter_for, supported_targets, RegistryError};
 
 mod claude_code;
+mod codex;
+mod cursor;
 
 /// Exporter boundary shared by generic and platform-specific targets.
 pub trait Exporter {
