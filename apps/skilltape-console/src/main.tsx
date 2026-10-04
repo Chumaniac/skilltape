@@ -16,6 +16,13 @@ interface RouteState {
   skillId?: string
   receiptId?: string
   tapeId?: string
+  tapeOffset: number
+  eventOffset: number
+}
+
+function readOffset(value: string | null): number {
+  const offset = Number(value)
+  return Number.isSafeInteger(offset) && offset >= 0 ? offset : 0
 }
 
 function readRoute(): RouteState {
@@ -31,6 +38,8 @@ function readRoute(): RouteState {
     skillId: params.get('skill') ?? undefined,
     receiptId: params.get('run') ?? undefined,
     tapeId: params.get('tape') ?? undefined,
+    tapeOffset: readOffset(params.get('tapesOffset')),
+    eventOffset: readOffset(params.get('eventsOffset')),
   }
 }
 
@@ -93,7 +102,7 @@ function App() {
         </header>
 
         <main id="main-content" className="main-content">
-          {route.page === 'timeline' ? <TimelinePage tapeId={route.tapeId} /> : null}
+          {route.page === 'timeline' ? <TimelinePage tapeId={route.tapeId} tapeOffset={route.tapeOffset} eventOffset={route.eventOffset} /> : null}
           {route.page === 'compile' ? <CompileReviewPage skillId={route.skillId} /> : null}
           {route.page === 'permissions' ? <PermissionReviewPage skillId={route.skillId} /> : null}
           {route.page === 'receipt' ? <ReceiptViewPage receiptId={route.receiptId} /> : null}

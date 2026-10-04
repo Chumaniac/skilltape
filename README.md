@@ -54,6 +54,10 @@ Compile, Lint, and Export remain usable while Replay and Verify fail closed.
 Windows supports Capture, Compile, Lint, and Export; Replay and Verify
 intentionally fail closed until an equivalent restricted executor is integrated.
 
+The source Console supports previous/next navigation through Tapes and events,
+keeping only the current page in memory. See the [Console guide](docs/guides/configuration.md#local-console-overrides)
+for startup details. This improvement is not included in the published v0.1.0 assets.
+
 ## Use SkillTape when
 
 - You have a local command or workflow worth making repeatable and reviewable.
