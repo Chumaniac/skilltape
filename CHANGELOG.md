@@ -2,6 +2,14 @@
 
 All notable changes to SkillTape are documented here.
 
+## Unreleased
+
+### Fixed
+
+- Console timeline navigation now exposes all Tape and event pages, preserves
+  page positions in the URL, and retains only the current page in memory.
+- Captures with a zero completion timestamp now display Finished.
+
 ## [0.1.0] - 2026-08-07
 
 The implementation and release workflow are merged on `main` at commit

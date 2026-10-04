@@ -69,6 +69,22 @@ The following local checks passed for the implementation:
 
 ## Post-release follow-up
 
+### Source Console pagination — 2026-10-04
+
+- Added previous/next navigation for 50-Tape and 100-event pages, with URL
+  restoration, failed-page retry, and bounded current-page rendering.
+- Reproduced the missing navigation and zero-timestamp status defects before
+  changing the implementation. The Console production build and all 5
+  Playwright tests passed after the change, including 51 synthetic Tapes and
+  101 synthetic events. Desktop and 390px mobile screenshots were reviewed.
+- Browser responses were mocked. No real capture, replay, Rust workspace
+  tests, API smoke, or release packaging was run for this UI-only change.
+  The published v0.1.0 assets remain unchanged.
+- The language scan and whitespace check passed. The raw repository Markdown
+  link audit reported 8 existing example links inside fenced code blocks in
+  the historical user-first documentation plan; rendered prose links passed
+  a fence-aware audit. No historical example content was changed.
+
 - Update the third-party GitHub Actions that currently emit Node.js 20
   deprecation warnings before the next maintenance release. This is a
   non-blocking warning for v0.1.0 because the final release run completed

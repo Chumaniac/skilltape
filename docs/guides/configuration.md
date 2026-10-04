@@ -48,5 +48,14 @@ workspace directory:
 skilltape console --workspace .
 ```
 
+The source Console timeline shows up to 50 Tapes and 100 events per page.
+Use Previous/Next tapes to choose another group of captures and Previous/Next
+events to inspect the rest of a selected Tape. Changing the Tape resets the
+event page. The URL preserves both page positions for reload and browser
+back/forward navigation; pages replace earlier data rather than accumulating it.
+If a page request fails, Retry request reloads that same page. A finished
+capture is shown as Finished even when its completion timestamp is zero.
+These changes require a source build and are not part of the v0.1.0 release.
+
 Return to the [installation guide](installation.md) for supported targets and
 updates, or the [Quickstart](quickstart.md) to create your first Skill.

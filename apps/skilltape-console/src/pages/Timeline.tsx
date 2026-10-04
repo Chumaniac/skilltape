@@ -6,6 +6,8 @@ import { EmptyState, PageError, PageLoading, titleCase } from '../ui'
 
 interface TimelineProps {
   tapeId?: string
+  tapeOffset?: number
+  eventOffset?: number
 }
 
 interface TimelineData {
@@ -14,7 +16,7 @@ interface TimelineData {
   events: TapeEvents | null
 }
 
-export function TimelinePage({ tapeId }: TimelineProps) {
+export function TimelinePage({ tapeId, tapeOffset = 0, eventOffset = 0 }: TimelineProps) {
   const [data, setData] = useState<TimelineData | null>(null)
   const [error, setError] = useState('Could not load the local capture timeline.')
   const [loading, setLoading] = useState(true)
@@ -24,12 +26,13 @@ export function TimelinePage({ tapeId }: TimelineProps) {
     const controller = new AbortController()
     setLoading(true)
     setError('')
-    Promise.all([getWorkspaces(controller.signal), getTapes('default', controller.signal)])
+    Promise.all([getWorkspaces(controller.signal), getTapes('default', controller.signal, tapeOffset)])
       .then(async ([workspaces, tapes]) => {
         const selectedTape = tapeId ?? tapes.items[0]?.id
         const events = selectedTape
-          ? await getTapeEvents(selectedTape, controller.signal)
+          ? await getTapeEvents(selectedTape, controller.signal, eventOffset)
           : null
+        if (controller.signal.aborted) return
         setData({
           workspace: workspaces.items[0] ?? null,
           tapes,
@@ -45,11 +48,11 @@ export function TimelinePage({ tapeId }: TimelineProps) {
         if (!controller.signal.aborted) setLoading(false)
       })
     return () => controller.abort()
-  }, [reload, tapeId])
+  }, [reload, tapeId, tapeOffset, eventOffset])
 
   if (loading) return <PageLoading label="Loading capture timeline…" />
   if (error) return <PageError message={error} onRetry={() => setReload((value) => value + 1)} />
-  if (!data || data.tapes.items.length === 0) {
+  if (!data || data.tapes.total === 0) {
     return (
       <PageSection
         eyebrow="Capture timeline"
@@ -64,7 +67,15 @@ export function TimelinePage({ tapeId }: TimelineProps) {
     )
   }
 
-  const selectedTape = data.events?.tape_id ?? data.tapes.items[0].id
+  const selectedTape = data.events?.tape_id ?? data.tapes.items[0]?.id
+  const selectedSummary = data.tapes.items.find((tape) => tape.id === selectedTape)
+  const navigate = (nextTape: string | undefined, nextTapeOffset: number, nextEventOffset: number) => {
+    const params = new URLSearchParams()
+    if (nextTape) params.set('tape', nextTape)
+    if (nextTapeOffset) params.set('tapesOffset', String(nextTapeOffset))
+    if (nextEventOffset) params.set('eventsOffset', String(nextEventOffset))
+    window.location.hash = '#timeline?' + params.toString()
+  }
   return (
     <PageSection
       eyebrow="Capture timeline"
@@ -78,9 +89,10 @@ export function TimelinePage({ tapeId }: TimelineProps) {
             name="tape"
             value={selectedTape}
             onChange={(event) => {
-              window.location.hash = '#timeline?tape=' + encodeURIComponent(event.target.value)
+              navigate(event.target.value, tapeOffset, 0)
             }}
           >
+            {selectedTape && !selectedSummary ? <option value={selectedTape}>{selectedTape}</option> : null}
             {data.tapes.items.map((tape) => (
               <option key={tape.id} value={tape.id}>
                 {tape.id}
@@ -90,6 +102,15 @@ export function TimelinePage({ tapeId }: TimelineProps) {
         </label>
       }
     >
+      <PageNavigation
+        label="Tapes"
+        offset={data.tapes.offset}
+        count={data.tapes.items.length}
+        limit={data.tapes.limit}
+        total={data.tapes.total}
+        nextOffset={data.tapes.next_offset}
+        onPage={(offset) => navigate(undefined, offset, 0)}
+      />
       <div className="metric-grid">
         <div className="metric metric-accent">
           <span className="metric-label">Workspace</span>
@@ -101,9 +122,20 @@ export function TimelinePage({ tapeId }: TimelineProps) {
         </div>
         <div className="metric">
           <span className="metric-label">Tape status</span>
-          <strong>{data.tapes.items.find((tape) => tape.id === selectedTape)?.finished_at_ms ? 'Finished' : 'Open'}</strong>
+          <strong>{!selectedSummary ? 'Unknown' : selectedSummary.finished_at_ms !== null ? 'Finished' : 'Open'}</strong>
         </div>
       </div>
+      {data.events ? (
+        <PageNavigation
+          label="Events"
+          offset={data.events.offset}
+          count={data.events.events.length}
+          limit={data.events.limit}
+          total={data.events.total}
+          nextOffset={data.events.next_offset}
+          onPage={(offset) => navigate(selectedTape, tapeOffset, offset)}
+        />
+      ) : null}
       {data.events && data.events.events.length > 0 ? (
         <ol className="event-list" aria-label="Capture events">
           {data.events.events.map((event) => (
@@ -112,11 +144,36 @@ export function TimelinePage({ tapeId }: TimelineProps) {
         </ol>
       ) : (
         <EmptyState
-          title="This Tape is empty"
-          message="The capture exists, but no events have been persisted yet."
+          title={data.events?.total ? 'No events on this page' : 'This Tape is empty'}
+          message={data.events?.total ? 'Use Previous events to return to an earlier page.' : 'The capture exists, but no events have been persisted yet.'}
         />
       )}
     </PageSection>
+  )
+}
+
+function PageNavigation({
+  label, offset, count, limit, total, nextOffset, onPage,
+}: {
+  label: string
+  offset: number
+  count: number
+  limit: number
+  total: number
+  nextOffset: number | null
+  onPage: (offset: number) => void
+}) {
+  if (total <= limit && offset === 0) return null
+  return (
+    <nav className="page-navigation" aria-label={label + ' pagination'}>
+      <button className="button button-secondary" disabled={offset === 0} onClick={() => onPage(Math.max(0, offset - limit))}>
+        Previous {label.toLowerCase()}
+      </button>
+      <span>{label} {count === 0 ? 0 : formatNumber(offset + 1)}–{formatNumber(offset + count)} of {formatNumber(total)}</span>
+      <button className="button button-secondary" disabled={nextOffset === null} onClick={() => { if (nextOffset !== null) onPage(nextOffset) }}>
+        Next {label.toLowerCase()}
+      </button>
+    </nav>
   )
 }
 
