@@ -1,0 +1,24 @@
+{
+  "schema": "skilltape.dev/permissions/v1",
+  "filesystem": {
+    "read": [
+      "inputs/metrics.csv",
+      "outputs/data/metrics.csv"
+    ],
+    "write": [
+      "outputs/data/metrics.csv"
+    ]
+  },
+  "process": {
+    "executables": [],
+    "max_processes": 1,
+    "default_timeout_ms": 1000
+  },
+  "network": {
+    "enabled": false,
+    "allow_hosts": []
+  },
+  "secrets": {
+    "read_environment": false
+  }
+}

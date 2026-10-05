@@ -1,0 +1,36 @@
+{
+  "schema": "skilltape.dev/skill/v1",
+  "name": "code-review",
+  "version": "0.1.0",
+  "description": "Code review evidence handoff using a guarded workspace and SHA-256 assertions.",
+  "engine": {
+    "min_version": "0.1.0"
+  },
+  "entrypoint": {
+    "workflow": "workflow.yaml",
+    "permissions": "permissions.json",
+    "lockfile": "skilltape.lock"
+  },
+  "inputs": [
+    {
+      "id": "review",
+      "type": "directory",
+      "required": true,
+      "description": "Small synthetic fixtures supplied with --input."
+    }
+  ],
+  "outputs": [
+    {
+      "id": "artifact-0",
+      "type": "file",
+      "path": "outputs/review/change.diff"
+    }
+  ],
+  "targets": [
+    "generic-agent-skill",
+    "claude-code",
+    "codex",
+    "cursor"
+  ],
+  "x-domain": "software-engineering"
+}

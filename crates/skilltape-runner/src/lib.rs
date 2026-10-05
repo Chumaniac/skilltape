@@ -2,6 +2,7 @@
 
 use std::collections::BTreeSet;
 use std::fs;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -559,8 +560,21 @@ fn execute_assert(
                     .hash
                     .as_deref()
                     .ok_or_else(|| "file_hash assertion requires a hash".to_owned())?;
-                let contents = fs::read(&path).map_err(|error| error.to_string())?;
-                let actual = Sha256::digest(contents)
+                let mut file = fs::File::open(&path).map_err(|error| error.to_string())?;
+                let mut hasher = Sha256::new();
+                let mut buffer = [0_u8; 8192];
+                loop {
+                    let bytes_read = match file.read(&mut buffer) {
+                        Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                        result => result.map_err(|error| error.to_string())?,
+                    };
+                    if bytes_read == 0 {
+                        break;
+                    }
+                    hasher.update(&buffer[..bytes_read]);
+                }
+                let actual = hasher
+                    .finalize()
                     .iter()
                     .map(|byte| format!("{byte:02x}"))
                     .collect::<String>();

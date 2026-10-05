@@ -1,7 +1,7 @@
 //! Deterministic verification and redacted Receipt generation.
 
 use std::fs;
-use std::io;
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
 use serde_json::to_vec;
@@ -120,11 +120,38 @@ fn digest_tree(root: &Path) -> io::Result<String> {
     collect_files(root, root, &mut files)?;
     files.sort_by(|left, right| left.0.cmp(&right.0));
     let mut hasher = Sha256::new();
-    for (relative, contents) in files {
+    for (relative, path) in files {
+        ensure_hash_file_path(root, &path)?;
+        let mut file = fs::File::open(&path)?;
+        let metadata = file.metadata()?;
+        if !metadata.is_file() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "not a regular hash input",
+            ));
+        }
         hasher.update(relative.as_bytes());
         hasher.update([0]);
-        hasher.update((contents.len() as u64).to_be_bytes());
-        hasher.update(contents);
+        hasher.update(metadata.len().to_be_bytes());
+        let mut buffer = [0_u8; 8192];
+        let mut total = 0_u64;
+        loop {
+            let bytes_read = match file.read(&mut buffer) {
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                result => result?,
+            };
+            if bytes_read == 0 {
+                break;
+            }
+            total += bytes_read as u64;
+            hasher.update(&buffer[..bytes_read]);
+        }
+        if total != metadata.len() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "hash input size changed",
+            ));
+        }
     }
     Ok(hasher
         .finalize()
@@ -150,7 +177,7 @@ fn digest_parts(parts: &[&[u8]]) -> String {
 fn collect_files(
     root: &Path,
     current: &Path,
-    files: &mut Vec<(String, Vec<u8>)>,
+    files: &mut Vec<(String, PathBuf)>,
 ) -> io::Result<()> {
     let mut entries = fs::read_dir(current)?.collect::<Result<Vec<_>, _>>()?;
     entries.sort_by_key(|entry| entry.file_name());
@@ -171,8 +198,74 @@ fn collect_files(
                 .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "path outside root"))?
                 .to_string_lossy()
                 .replace('\\', "/");
-            files.push((relative, fs::read(&path)?));
+            files.push((relative, path));
         }
     }
     Ok(())
+}
+
+fn ensure_hash_file_path(root: &Path, path: &Path) -> io::Result<()> {
+    let relative = path
+        .strip_prefix(root)
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "hash path outside root"))?;
+    ensure_directory(root)?;
+    let mut current = root.to_path_buf();
+    for component in relative {
+        current.push(component);
+        if fs::symlink_metadata(&current)?.file_type().is_symlink() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "symlink in hashed tree",
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tree_digest_tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::tempdir;
+
+    #[test]
+    fn large_binary_tree_keeps_the_legacy_digest_and_global_path_order() {
+        let temp = tempdir().expect("temporary tree");
+        let root = temp.path();
+        fs::create_dir(root.join("a")).expect("nested directory");
+        fs::write(root.join("a.txt"), b"first\n").expect("first file");
+        fs::write(root.join("a/second.txt"), b"second\n").expect("nested file");
+        let mut file = fs::File::create(root.join("large.bin")).expect("binary fixture");
+        for _ in 0..256 {
+            file.write_all(&[b'A'; 8192]).expect("fixture chunk");
+        }
+        file.write_all(&[b'A'; 17]).expect("partial final chunk");
+        drop(file);
+        assert_eq!(
+            digest_tree(root).expect("tree digest"),
+            "81956d7feb1aadf66e9e6405958c27581381b8851c27d4217cab9ba817584f6b"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_a_parent_replaced_with_a_symlink_after_inventory() {
+        let temp = tempdir().expect("temporary tree");
+        let root = temp.path().join("root");
+        let outside = temp.path().join("outside");
+        fs::create_dir_all(root.join("nested")).expect("root");
+        fs::create_dir(&outside).expect("outside");
+        fs::write(root.join("nested/data.txt"), b"inside").expect("inside fixture");
+        fs::write(outside.join("data.txt"), b"synthetic outside").expect("outside fixture");
+        let mut files = Vec::new();
+        collect_files(&root, &root, &mut files).expect("inventory");
+        fs::rename(root.join("nested"), root.join("original")).expect("move parent");
+        std::os::unix::fs::symlink(&outside, root.join("nested")).expect("replace parent");
+        assert_eq!(
+            ensure_hash_file_path(&root, &files[0].1)
+                .expect_err("must not follow the replacement")
+                .kind(),
+            io::ErrorKind::InvalidInput
+        );
+    }
 }
