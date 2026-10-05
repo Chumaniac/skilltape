@@ -128,7 +128,6 @@ async fn cancellation_sends_sigint_and_cleans_up_descendants() {
     let cancel = CancellationToken::new();
     let trigger = cancel.clone();
 
-    let started = std::time::Instant::now();
     let capture = tokio::spawn(capture_terminal(
         CaptureOptions {
             command: "/bin/sh".to_owned(),
@@ -136,7 +135,7 @@ async fn cancellation_sends_sigint_and_cleans_up_descendants() {
                 "-c".to_owned(),
                 concat!(
                     "trap 'printf SIGINT > \"$1\"; exit 130' INT; ",
-                    "/bin/sh -c 'trap \"\" INT TERM; /bin/sleep 2' & ",
+                    "/bin/sh -c 'trap \"\" INT TERM; /bin/sleep 10' & ",
                     "echo $! > \"$2\"; wait"
                 )
                 .to_owned(),
@@ -162,6 +161,8 @@ async fn cancellation_sends_sigint_and_cleans_up_descendants() {
         .expect("descendant pid is written before cancellation")
         .trim()
         .to_owned();
+    // Measure cancellation after readiness; slow runner startup is not cleanup time.
+    let started = std::time::Instant::now();
     trigger.cancel();
 
     let summary = tokio::time::timeout(std::time::Duration::from_secs(4), capture)
