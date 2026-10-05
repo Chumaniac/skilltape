@@ -1,0 +1,21 @@
+{
+  "schema": "skilltape.dev/workflow/v1",
+  "steps": [
+    {
+      "id": "copy-0",
+      "action": "file",
+      "operation": "copy",
+      "from": "inputs/change.diff",
+      "to": "outputs/review/change.diff"
+    },
+    {
+      "id": "check-0",
+      "action": "assert",
+      "assertion": {
+        "type": "file_hash",
+        "path": "outputs/review/change.diff",
+        "hash": "e345ddaf9f8295d0e27d8cd9a9bbedc1f3d57b2468cb834c966fdcc1b47b5fe6"
+      }
+    }
+  ]
+}
