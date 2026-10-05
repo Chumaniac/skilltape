@@ -7,6 +7,15 @@ use tempfile::TempDir;
 
 const DOMAINS: [&str; 3] = ["code-review", "knowledge-reference", "data-export"];
 
+fn fixture_files(domain: &str) -> &'static [&'static str] {
+    match domain {
+        "code-review" => &["change.diff"],
+        "knowledge-reference" => &["note.md", "source.md"],
+        "data-export" => &["metrics.csv"],
+        _ => panic!("unknown checked-in domain"),
+    }
+}
+
 fn example(domain: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../examples/domain-workflows")
@@ -57,9 +66,8 @@ fn domain_receipts_verify_fixture_integrity_and_reject_changed_material() {
         let temp = TempDir::new().expect("input directory");
         let input = temp.path().join("input");
         fs::create_dir(&input).expect("synthetic input");
-        for entry in fs::read_dir(&source).expect("fixtures") {
-            let entry = entry.expect("fixture entry");
-            fs::copy(entry.path(), input.join(entry.file_name())).expect("copy fixture");
+        for filename in fixture_files(domain) {
+            fs::copy(source.join(filename), input.join(filename)).expect("copy fixture");
         }
         let output = Command::cargo_bin("skilltape")
             .expect("binary")
@@ -77,12 +85,7 @@ fn domain_receipts_verify_fixture_integrity_and_reject_changed_material() {
             .clone();
         let receipt: Value = serde_json::from_slice(&output).expect("receipt JSON");
         assert_eq!(receipt["status"], "succeeded");
-        let first = fs::read_dir(&input)
-            .expect("input files")
-            .next()
-            .expect("one input")
-            .expect("entry")
-            .path();
+        let first = input.join(fixture_files(domain)[0]);
         fs::write(first, "synthetic changed material").expect("change test input");
         let failed = Command::cargo_bin("skilltape")
             .expect("binary")
