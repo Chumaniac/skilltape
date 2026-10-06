@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skilltape.dev/schemas/delivery/v1.json",
+  "type": "object",
+  "required": ["schema", "run_id", "skill_hash", "receipt_sha256", "artifact_set_sha256", "files"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "const": "skilltape.dev/delivery/v1" },
+    "run_id": { "$ref": "#/$defs/hash" },
+    "skill_hash": { "$ref": "#/$defs/hash" },
+    "receipt_sha256": { "$ref": "#/$defs/hash" },
+    "artifact_set_sha256": { "$ref": "#/$defs/hash" },
+    "files": {
+      "type": "array", "maxItems": 10000,
+      "items": {
+        "type": "object", "required": ["path", "bytes", "sha256"], "additionalProperties": false,
+        "properties": {
+          "path": { "type": "string", "minLength": 1, "maxLength": 1024 },
+          "bytes": { "type": "integer", "minimum": 0, "maximum": 16777216 },
+          "sha256": { "$ref": "#/$defs/hash" }
+        }
+      }
+    }
+  },
+  "$defs": { "hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" } }
+}

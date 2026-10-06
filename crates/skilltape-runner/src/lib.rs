@@ -15,6 +15,7 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 mod process;
+mod publication;
 #[cfg(target_os = "windows")]
 mod windows;
 mod workspace;
@@ -23,6 +24,7 @@ pub use process::{
     ProcessAdapter, ProcessError, ProcessFuture, ProcessOutput, ProcessRequest, ProcessStatus,
     TokioProcessAdapter,
 };
+pub use publication::publish_directory_noreplace;
 
 use workspace::{copy_path, make_directory, move_path, ReplayWorkspace, WorkspaceError};
 
@@ -772,7 +774,8 @@ fn validate_limits(
     Ok(())
 }
 
-fn validate_output_root(
+/// Reject an output directory overlapping a package or input tree.
+pub fn validate_output_root(
     package_root: &Path,
     input_root: &Path,
     output_root: &Path,
@@ -789,12 +792,29 @@ fn validate_output_root(
 }
 
 fn comparable_path(path: &Path) -> PathBuf {
-    if path.is_absolute() {
+    let absolute = if path.is_absolute() {
         path.to_path_buf()
     } else {
         std::env::current_dir()
             .map(|current| current.join(path))
             .unwrap_or_else(|_| path.to_path_buf())
+    };
+    let mut ancestor = absolute.as_path();
+    let mut pending = Vec::new();
+    loop {
+        if let Ok(mut canonical) = ancestor.canonicalize() {
+            for part in pending.iter().rev() {
+                canonical.push(part);
+            }
+            return canonical;
+        }
+        match (ancestor.file_name(), ancestor.parent()) {
+            (Some(part), Some(parent)) => {
+                pending.push(part.to_owned());
+                ancestor = parent;
+            }
+            _ => return absolute,
+        }
     }
 }
 

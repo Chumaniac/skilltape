@@ -10,6 +10,7 @@ model providers, or external platform connections.
 | `code-review` | Synthetic `change.diff` | An unchanged patch in `outputs/review/` | A person or separately authorized tool reviews the change |
 | `knowledge-reference` | Synthetic note and source Markdown | Both files in `outputs/knowledge/` | Review references before adding the material to a knowledge base |
 | `data-export` | Synthetic `metrics.csv` | An unchanged export in `outputs/data/` | Review the data before any analysis or publication |
+| `incident-review` | Synthetic incident report and review runbook | Both unchanged documents in `outputs/incident/` | A person reviews assumptions before any separately approved operational action |
 
 The asserted hashes describe the included fixtures. A changed or missing input
 must fail verification. An artifact hash establishes byte integrity; it does not
@@ -32,7 +33,7 @@ target/debug/skilltape export "$example" --target codex \
   --output "$receipt_dir/exported" --json
 ```
 
-Substitute `knowledge-reference` or `data-export` for the other examples. A
+Substitute `knowledge-reference`, `data-export`, or `incident-review` for the other examples. A
 successful Receipt reports `status: succeeded`; modified fixture material reports
 `status: run_failed` and exits with code 3. Receipt and export destinations must be new
 paths. The CLI does not overwrite existing Receipts.
@@ -49,7 +50,10 @@ Tree digests and workflow file-hash assertions read content in 8 KiB chunks whil
 preserving the existing digest format. The file inventory still grows with the
 number and length of paths. File copies and hashes perform work proportional to
 input size; an 8 KiB content buffer does not mean the entire program uses 8 KiB.
-The included input files are deliberately small synthetic materials.
+The included input files are deliberately small synthetic materials. The incident
+example contains two documents and no executable commands. Missing material,
+modified bytes, or an undeclared write must fail; none of these checks establishes
+an incident root cause or authorizes service recovery.
 
 Keep normal datasets out of fixtures. Larger real inputs require review of file
 counts, storage space, privacy, and run time. No production capacity claim follows

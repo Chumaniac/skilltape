@@ -1,0 +1,41 @@
+{
+  "schema": "skilltape.dev/skill/v1",
+  "name": "incident-review",
+  "version": "0.1.0",
+  "description": "Synthetic incident review evidence handoff using guarded file copies and SHA-256 assertions.",
+  "engine": {
+    "min_version": "0.1.0"
+  },
+  "entrypoint": {
+    "workflow": "workflow.yaml",
+    "permissions": "permissions.json",
+    "lockfile": "skilltape.lock"
+  },
+  "inputs": [
+    {
+      "id": "incident",
+      "type": "directory",
+      "required": true,
+      "description": "Two small synthetic review documents supplied with --input."
+    }
+  ],
+  "outputs": [
+    {
+      "id": "artifact-0",
+      "type": "file",
+      "path": "outputs/incident/incident.md"
+    },
+    {
+      "id": "artifact-1",
+      "type": "file",
+      "path": "outputs/incident/runbook.md"
+    }
+  ],
+  "targets": [
+    "generic-agent-skill",
+    "claude-code",
+    "codex",
+    "cursor"
+  ],
+  "x-domain": "incident-operations"
+}
