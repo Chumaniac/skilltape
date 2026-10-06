@@ -1,13 +1,15 @@
 # Verified local delivery
 
 Use a source build to preserve a completed workflow's actual output files and
-independently inspect them with SkillSync. This is a local candidate feature;
+independently inspect them with SkillSync. This feature is available from source;
 published SkillTape v0.1.0 binaries do not include `--delivery-dir`.
 
 ## Run the synthetic order summary
 
 The [example](../../examples/verified-order-delivery/README.md) runs an existing
-system Perl interpreter in SkillTape's restricted executor. It computes daily
+system Perl interpreter through a locked shell launcher in SkillTape's restricted
+executor. The launcher selects a declared native Perl binary on macOS without
+changing the sandbox or inheriting environment variables. It computes daily
 order counts and integer-cent totals from three fictional input rows. It uses
 no account, model, provider, network, customer database or real order data.
 
@@ -26,7 +28,7 @@ target/debug/skilltape verify "$example" --input "$example/fixtures/input" \
 `receipt.json` and `delivery.json`. Stdout remains the existing v1 Receipt.
 Review the script, permissions and files before sharing them.
 
-In a matching SkillSync candidate source checkout, build with `npm ci && npm run
+In a matching SkillSync source checkout, build with `npm ci && npm run
 build`, then use the same delivery path:
 
 ```bash
@@ -67,6 +69,9 @@ An early conservative path/escaping budget bounds manifest and inventory
 allocation before serialization. Inventories still grow with entry count and
 path length within that budget. Crash/power-loss recovery
 is not established by a successful local publication.
+Canonical containment and no-follow file reads reject escapes and leaf symlink
+replacements. They do not fully isolate against hostile same-user ancestor
+directory replacement races.
 
 ## Meaning of the evidence
 

@@ -4,6 +4,7 @@
     "read": [
       "inputs/orders.csv",
       "scripts/summarize_orders.pl",
+      "scripts/run_orders.sh",
       "outputs/metrics.csv",
       "outputs/summary.json"
     ],
@@ -14,6 +15,9 @@
   },
   "process": {
     "executables": [
+      "/bin/sh",
+      "/usr/bin/perl5.34",
+      "/usr/bin/perl5.30",
       "/usr/bin/perl"
     ],
     "max_processes": 1,

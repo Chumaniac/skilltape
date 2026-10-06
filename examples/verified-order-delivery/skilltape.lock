@@ -5,6 +5,18 @@
   },
   "tools": [
     {
+      "program": "/bin/sh",
+      "version": "system"
+    },
+    {
+      "program": "/usr/bin/perl5.34",
+      "version": "system"
+    },
+    {
+      "program": "/usr/bin/perl5.30",
+      "version": "system"
+    },
+    {
       "program": "/usr/bin/perl",
       "version": "system"
     }
@@ -13,6 +25,10 @@
     {
       "path": "scripts/summarize_orders.pl",
       "sha256": "0c04d672d8fa033d3f48a9a47f98048f62482f851ef56cf3f907c2b53eee2674"
+    },
+    {
+      "path": "scripts/run_orders.sh",
+      "sha256": "a98055a47bc1d786d38255c5b616a68d193a7e9f479efbb4b246d6831305e546"
     }
   ]
 }

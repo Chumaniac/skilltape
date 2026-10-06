@@ -4,9 +4,9 @@
     {
       "id": "summarize",
       "action": "exec",
-      "program": "/usr/bin/perl",
+      "program": "/bin/sh",
       "args": [
-        "scripts/summarize_orders.pl",
+        "scripts/run_orders.sh",
         "--input",
         "inputs/orders.csv",
         "--output-dir",
