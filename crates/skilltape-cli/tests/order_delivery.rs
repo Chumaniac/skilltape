@@ -20,7 +20,7 @@ fn the_synthetic_order_script_runs_and_its_delivery_survives_the_cli() {
         .args(["--strict", "--json"])
         .assert()
         .success();
-    let stdout = Command::cargo_bin("skilltape")
+    let result = Command::cargo_bin("skilltape")
         .expect("binary")
         .arg("verify")
         .arg(&package)
@@ -29,11 +29,32 @@ fn the_synthetic_order_script_runs_and_its_delivery_survives_the_cli() {
         .arg("--delivery-dir")
         .arg(&delivery)
         .arg("--json")
-        .assert()
-        .success()
-        .get_output()
-        .stdout
-        .clone();
+        .assert();
+    #[cfg(target_os = "macos")]
+    if !result.get_output().status.success() {
+        // The public Receipt deliberately omits stderr. Diagnose only this fixed,
+        // synthetic interpreter startup without reading user data or environment.
+        use skilltape_runner::{ProcessAdapter, ProcessRequest, TokioProcessAdapter};
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("diagnostic runtime");
+        let probe = runtime.block_on(TokioProcessAdapter.run(
+            ProcessRequest {
+                program: "/usr/bin/perl".into(),
+                args: vec![
+                    "-e".into(),
+                    "use JSON::PP; use Encode; use Getopt::Long; print qq(perl-ready\\n);".into(),
+                ],
+                cwd: temp.path().to_path_buf(),
+                timeout: std::time::Duration::from_secs(3),
+                max_output_bytes: 1024,
+            },
+            tokio_util::sync::CancellationToken::new(),
+        ));
+        eprintln!("controlled interpreter startup: {probe:?}");
+    }
+    let stdout = result.success().get_output().stdout.clone();
     let receipt: Value = serde_json::from_slice(&stdout).expect("Receipt");
     assert_eq!(receipt["status"], "succeeded");
     assert_eq!(

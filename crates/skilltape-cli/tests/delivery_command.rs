@@ -112,6 +112,21 @@ fn delivery_rejects_existing_destinations_and_input_overlap() {
         .code(2);
     assert!(!input.join("delivery").exists());
     assert!(!package.join("delivery").exists());
+    verify(&package, &input, &temp.path().join("input/../escaped"))
+        .assert()
+        .code(2);
+    assert!(!temp.path().join("escaped").exists());
+}
+
+#[test]
+fn delivery_can_create_missing_parent_directories() {
+    let (temp, package, input) = fixture();
+    let target = temp.path().join("new/nested/delivery");
+    verify(&package, &input, &target).assert().success();
+    assert_eq!(
+        fs::read(target.join("artifacts/result.txt")).expect("retained artifact"),
+        b"private synthetic material"
+    );
 }
 
 #[test]

@@ -74,24 +74,22 @@ impl Delivery {
         }
         validate_output_root(package, input, &target)
             .map_err(|_| DeliveryError::InvalidDestination)?;
-        match fs::symlink_metadata(&target) {
-            Ok(_) => return Err(DeliveryError::Exists),
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-            Err(error) => return Err(error.into()),
-        }
-        let parent = target.parent().ok_or(DeliveryError::InvalidDestination)?;
-        fs::create_dir_all(parent)?;
-        if !super::ancestors_are_safe(&target) {
-            return Err(DeliveryError::InvalidDestination);
-        }
-        let parent = parent.canonicalize()?;
+        let parent = prepare_parent(target.parent().ok_or(DeliveryError::InvalidDestination)?)?;
         let target = parent.join(
             target
                 .file_name()
                 .ok_or(DeliveryError::InvalidDestination)?,
         );
+        if !target.starts_with(&parent) || !super::ancestors_are_safe(&target) {
+            return Err(DeliveryError::InvalidDestination);
+        }
         validate_output_root(package, input, &target)
             .map_err(|_| DeliveryError::InvalidDestination)?;
+        match fs::symlink_metadata(&target) {
+            Ok(_) => return Err(DeliveryError::Exists),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
         let stage = Builder::new()
             .prefix(".skilltape-delivery-")
             .tempdir_in(&parent)?;
@@ -136,13 +134,17 @@ impl Delivery {
         if !root.exists() {
             fs::create_dir(&root)?;
         }
+        let canonical_root = root.canonicalize()?;
+        if canonical_root != root || !canonical_root.starts_with(self.stage.path()) {
+            return Err(DeliveryError::Assembly("artifact root escaped staging"));
+        }
         let mut files = Vec::new();
         let mut entries = 0;
         let mut total = 0;
         let mut metadata_budget = 1024;
         collect(
-            &root,
-            &root,
+            &canonical_root,
+            &canonical_root,
             0,
             &mut entries,
             &mut total,
@@ -175,6 +177,42 @@ impl Delivery {
     }
 }
 
+fn prepare_parent(parent: &Path) -> Result<PathBuf, DeliveryError> {
+    let mut ancestor = parent;
+    let mut missing = Vec::new();
+    let mut resolved = loop {
+        match ancestor.canonicalize() {
+            Ok(path) => break path,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                missing.push(
+                    ancestor
+                        .file_name()
+                        .ok_or(DeliveryError::InvalidDestination)?,
+                );
+                ancestor = ancestor.parent().ok_or(DeliveryError::InvalidDestination)?;
+            }
+            Err(error) => return Err(error.into()),
+        }
+    };
+    for name in missing.into_iter().rev() {
+        let child = resolved.join(name);
+        if !child.starts_with(&resolved) || !super::ancestors_are_safe(&child) {
+            return Err(DeliveryError::InvalidDestination);
+        }
+        match fs::create_dir(&child) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+            Err(error) => return Err(error.into()),
+        }
+        let canonical = child.canonicalize()?;
+        if canonical != child || !canonical.starts_with(&resolved) {
+            return Err(DeliveryError::InvalidDestination);
+        }
+        resolved = canonical;
+    }
+    Ok(resolved)
+}
+
 fn write_synced(path: &Path, bytes: &[u8]) -> io::Result<()> {
     use std::io::Write;
     let mut file = File::create_new(path)?;
@@ -194,12 +232,18 @@ fn collect(
     if depth > 64 {
         return Err(DeliveryError::Assembly("directory depth exceeds limit"));
     }
-    let metadata = fs::symlink_metadata(current)?;
+    let resolved = current.canonicalize()?;
+    if resolved != current || !resolved.starts_with(root) {
+        return Err(DeliveryError::Assembly(
+            "path escaped artifacts or is a symlink",
+        ));
+    }
+    let metadata = fs::symlink_metadata(&resolved)?;
     if metadata.is_symlink() {
         return Err(DeliveryError::Assembly("symlink artifact rejected"));
     }
     if metadata.is_dir() {
-        for entry in fs::read_dir(current)? {
+        for entry in fs::read_dir(&resolved)? {
             *entries += 1;
             if *entries > MAX_ENTRIES {
                 return Err(DeliveryError::Assembly("entry limit exceeded"));
@@ -220,7 +264,7 @@ fn collect(
         }
         *total += metadata.len();
         let mut parts = Vec::new();
-        for part in current
+        for part in resolved
             .strip_prefix(root)
             .map_err(|_| DeliveryError::Assembly("path escaped artifacts"))?
             .components()
@@ -245,7 +289,25 @@ fn collect(
         if *metadata_budget > MAX_METADATA_BYTES {
             return Err(DeliveryError::Assembly("manifest budget exceeded"));
         }
-        let mut file = File::open(current)?;
+        let mut options = File::options();
+        options.read(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+        }
+        let mut file = options.open(&resolved)?;
+        let opened = file.metadata()?;
+        if !opened.is_file() || opened.len() != metadata.len() {
+            return Err(DeliveryError::Assembly("artifact changed before assembly"));
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            if opened.dev() != metadata.dev() || opened.ino() != metadata.ino() {
+                return Err(DeliveryError::Assembly("artifact replaced before assembly"));
+            }
+        }
         let mut digest = Sha256::new();
         let mut buffer = [0; 8 * 1024];
         let mut count = 0;
@@ -297,6 +359,29 @@ mod tests {
             assertions: Vec::new(),
             policy_decisions: Vec::new(),
         }
+    }
+
+    #[test]
+    fn artifact_inventory_rejects_an_empty_directory_outside_its_root() {
+        let temp = tempfile::tempdir().expect("temporary inventory");
+        let root = temp.path().join("artifacts");
+        let outside = temp.path().join("outside");
+        fs::create_dir(&root).expect("root");
+        fs::create_dir(&outside).expect("outside");
+        let mut entries = 0;
+        let mut total = 0;
+        let mut budget = 1024;
+        let mut files = Vec::new();
+        assert!(collect(
+            &root,
+            &outside,
+            0,
+            &mut entries,
+            &mut total,
+            &mut budget,
+            &mut files,
+        )
+        .is_err());
     }
 
     #[test]
