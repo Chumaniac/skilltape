@@ -129,9 +129,11 @@ impl ReplayWorkspace {
                 path: output_root.to_path_buf(),
             });
         }
-        fs::rename(staging.path(), output_root).map_err(|source| WorkspaceError::Io {
-            path: output_root.to_path_buf(),
-            source,
+        crate::publish_directory_noreplace(staging.path(), output_root).map_err(|source| {
+            WorkspaceError::Io {
+                path: output_root.to_path_buf(),
+                source,
+            }
         })?;
 
         Ok(())

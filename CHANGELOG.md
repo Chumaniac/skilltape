@@ -4,8 +4,21 @@ All notable changes to SkillTape are documented here.
 
 ## Unreleased
 
+### Added
+
+- Source Verify can publish a new `--delivery-dir` containing actual artifacts,
+  the unchanged v1 Receipt and a checksummed manifest. Completed files survive
+  assembly/publication failure in private staging. An order-summary example runs
+  a local system script and is independently checked by a SkillSync contract.
+- A synthetic incident-review material package with explicit file permissions,
+  input-integrity assertions, and generic/Claude Code/Codex/Cursor exports.
+  Local checks cover changed or missing material and an undeclared write. The
+  example prepares review evidence; it does not analyze incidents or recover services.
+
 ### Fixed
 
+- Output-directory publication now uses exclusive native rename on Linux/macOS,
+  closing an empty-destination race; overlap checks resolve existing ancestors.
 - Console timeline navigation now exposes all Tape and event pages, preserves
   page positions in the URL, and retains only the current page in memory.
 - Captures with a zero completion timestamp now display Finished.

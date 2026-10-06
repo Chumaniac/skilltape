@@ -5,13 +5,19 @@ use assert_cmd::Command;
 use serde_json::Value;
 use tempfile::TempDir;
 
-const DOMAINS: [&str; 3] = ["code-review", "knowledge-reference", "data-export"];
+const DOMAINS: [&str; 4] = [
+    "code-review",
+    "knowledge-reference",
+    "data-export",
+    "incident-review",
+];
 
 fn fixture_files(domain: &str) -> &'static [&'static str] {
     match domain {
         "code-review" => &["change.diff"],
         "knowledge-reference" => &["note.md", "source.md"],
         "data-export" => &["metrics.csv"],
+        "incident-review" => &["incident.md", "runbook.md"],
         _ => panic!("unknown checked-in domain"),
     }
 }
@@ -59,7 +65,7 @@ fn domain_packages_lint_and_export_to_the_registered_targets() {
 }
 
 #[test]
-fn domain_receipts_verify_fixture_integrity_and_reject_changed_material() {
+fn domain_receipts_reject_changed_or_missing_material() {
     for domain in DOMAINS {
         let package = example(domain);
         let source = package.join("fixtures/input");
@@ -104,5 +110,74 @@ fn domain_receipts_verify_fixture_integrity_and_reject_changed_material() {
         let receipt: Value = serde_json::from_slice(&failed).expect("failed receipt JSON");
         assert_eq!(receipt["status"], "run_failed");
         assert!(!String::from_utf8_lossy(&failed).contains("synthetic changed material"));
+        fs::remove_file(input.join(fixture_files(domain)[0])).expect("remove required material");
+        let missing = Command::cargo_bin("skilltape")
+            .expect("binary")
+            .arg("verify")
+            .arg(&package)
+            .arg("--input")
+            .arg(&input)
+            .arg("--receipt")
+            .arg(temp.path().join("missing.json"))
+            .arg("--json")
+            .assert()
+            .code(3)
+            .get_output()
+            .stdout
+            .clone();
+        let receipt: Value = serde_json::from_slice(&missing).expect("missing-input receipt JSON");
+        assert_eq!(receipt["status"], "run_failed");
     }
+}
+
+#[test]
+fn incident_review_denies_a_copy_to_an_undeclared_output() {
+    let source = example("incident-review");
+    let temp = TempDir::new().expect("package directory");
+    let package = temp.path().join("package");
+    fs::create_dir(&package).expect("synthetic package");
+    for filename in [
+        "README.md",
+        "SKILL.md",
+        "skilltape.yaml",
+        "workflow.yaml",
+        "permissions.json",
+        "skilltape.lock",
+    ] {
+        fs::copy(source.join(filename), package.join(filename)).expect("copy package file");
+    }
+    let workflow_path = package.join("workflow.yaml");
+    let mut workflow: Value = serde_json::from_slice(&fs::read(&workflow_path).expect("workflow"))
+        .expect("workflow JSON");
+    workflow["steps"][0]["to"] = "outputs/unapproved/incident.md".into();
+    fs::write(
+        &workflow_path,
+        serde_json::to_vec(&workflow).expect("modified workflow"),
+    )
+    .expect("write synthetic workflow");
+    let output = Command::cargo_bin("skilltape")
+        .expect("binary")
+        .arg("verify")
+        .arg(&package)
+        .arg("--input")
+        .arg(source.join("fixtures/input"))
+        .arg("--receipt")
+        .arg(temp.path().join("denied.json"))
+        .arg("--json")
+        .assert()
+        .code(3)
+        .get_output()
+        .stdout
+        .clone();
+    let receipt: Value = serde_json::from_slice(&output).expect("denied receipt JSON");
+    assert_eq!(receipt["status"], "run_failed");
+    assert_eq!(receipt["steps"].as_array().expect("steps").len(), 1);
+    assert_eq!(receipt["steps"][0]["status"], "denied");
+    assert!(receipt["policy_decisions"]
+        .as_array()
+        .expect("policy decisions")
+        .iter()
+        .any(|decision| decision["allowed"] == false
+            && decision["code"] == skilltape_policy::codes::WRITE_SCOPE));
+    assert!(!String::from_utf8_lossy(&output).contains("example-queue-delay"));
 }

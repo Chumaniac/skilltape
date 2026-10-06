@@ -72,8 +72,9 @@ for startup details. This improvement is not included in the published v0.1.0 as
 
 ## Learn more
 
+- [Verified local delivery](docs/guides/verified-delivery.md) — source-only persistent artifacts, Receipt/file hashes, and an independently checked order-summary example.
 - [Project overview](https://chumanic.com/projects/skilltape/) — Chinese introduction and current platform boundaries.
-- [Domain workflow examples](docs/guides/domain-workflows.md) — source examples for code-review evidence, knowledge references, and data-export integrity; no external execution or platform connection.
+- [Domain workflow examples](docs/guides/domain-workflows.md) — source examples for code-review evidence, knowledge references, data-export integrity, and incident-review materials; no external execution or platform connection.
 - [Quickstart](docs/guides/quickstart.md) — the same first verified result with troubleshooting.
 - [Installation](docs/guides/installation.md) — platform, update, source-build, and release details.
 - [Configuration](docs/guides/configuration.md) — optional release, installation, and Console settings.
