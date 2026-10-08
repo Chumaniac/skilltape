@@ -60,11 +60,11 @@ counts, storage space, privacy, and run time. No production capacity claim follo
 from these examples. No real code review, knowledge-base connection, database,
 or analytics provider was used by their checks.
 
-## Local source candidate: input-capacity preflight
+## Input-capacity preflight in source
 
-The local `codex/heartbeat-20261008-input-capacity` candidate adds a metadata-only
-preflight before Verify reads hash content and before Replay copies inputs. It is
-not merged into main or published in download assets.
+The source implementation adds a metadata-only preflight before Verify reads
+hash content and before Replay copies inputs. Use a current source build; this
+extension is not included in the published v0.1.0 download assets.
 
 | Observed input dimension | Inclusive ceiling |
 | --- | --- |
@@ -86,7 +86,7 @@ quota**. Verify checks before hashing; Replay checks again before workspace
 setup. The source is not frozen, and concurrent changes after either check can
 change copy/hash work. Package scripts, outputs, execution time and memory are
 outside this input preflight. Split and review larger datasets deliberately; no
-automatic override is available in this candidate.
+automatic override is available in this source implementation.
 
 Local checks use sparse synthetic files, empty directories and the existing small
 domain fixtures. They verify rejection and boundaries, not production capacity,
