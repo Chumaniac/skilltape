@@ -133,6 +133,15 @@ fn rejects_symlinked_entries_and_ancestors_without_following_them() {
 
 #[cfg(unix)]
 #[test]
+fn rejects_a_dangling_symlink_as_an_existing_unsafe_entry() {
+    use std::os::unix::fs::symlink;
+    let root = tempdir().expect("root");
+    symlink(root.path().join("missing"), root.path().join("dangling")).expect("dangling fixture");
+    assert!(preflight_input_capacity(root.path()).is_err());
+}
+
+#[cfg(unix)]
+#[test]
 fn rejects_a_fifo_without_opening_it() {
     use std::ffi::CString;
     use std::os::unix::ffi::OsStrExt;

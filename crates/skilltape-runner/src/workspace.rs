@@ -262,6 +262,23 @@ pub(crate) fn validate_input_capacity(input_root: &Path) -> Result<(), Workspace
 }
 
 fn canonical_input_root(input_root: &Path) -> Result<PathBuf, WorkspaceError> {
+    let expected = lexical_workspace_path(input_root)?;
+    let resolved = expected
+        .canonicalize()
+        .map_err(|source| WorkspaceError::Io {
+            path: input_root.to_path_buf(),
+            source,
+        })?;
+    if resolved != expected || !resolved.starts_with(&expected) {
+        return Err(WorkspaceError::InvalidInputRoot {
+            path: input_root.to_path_buf(),
+        });
+    }
+    ensure_input_root(&resolved)?;
+    Ok(resolved)
+}
+
+fn lexical_workspace_path(input_root: &Path) -> Result<PathBuf, WorkspaceError> {
     if input_root
         .components()
         .any(|part| matches!(part, Component::ParentDir))
@@ -287,19 +304,7 @@ fn canonical_input_root(input_root: &Path) -> Result<PathBuf, WorkspaceError> {
                 })?;
         }
     }
-    let resolved = expected
-        .canonicalize()
-        .map_err(|source| WorkspaceError::Io {
-            path: input_root.to_path_buf(),
-            source,
-        })?;
-    if resolved != expected || !resolved.starts_with(&expected) {
-        return Err(WorkspaceError::InvalidInputRoot {
-            path: input_root.to_path_buf(),
-        });
-    }
-    ensure_input_root(&resolved)?;
-    Ok(resolved)
+    Ok(expected)
 }
 
 fn inspect_input_directory(
@@ -527,15 +532,35 @@ fn is_allowed_system_alias(_path: &Path) -> bool {
 }
 
 fn symlink_metadata(path: &Path) -> Result<Option<fs::Metadata>, WorkspaceError> {
-    if path
-        .components()
-        .any(|part| matches!(part, Component::ParentDir))
-    {
-        return Err(WorkspaceError::UnsafePath {
-            path: path.to_string_lossy().into_owned(),
+    let expected = lexical_workspace_path(path)?;
+    let resolved = match expected.canonicalize() {
+        Ok(resolved) => resolved,
+        Err(source) if source.kind() == io::ErrorKind::NotFound => {
+            // A dangling link is an existing unsafe entry, not an absent target.
+            return match fs::read_link(&expected) {
+                Ok(_) => Err(WorkspaceError::Symlink {
+                    path: path.to_path_buf(),
+                }),
+                Err(source) if source.kind() == io::ErrorKind::NotFound => Ok(None),
+                Err(source) => Err(WorkspaceError::Io {
+                    path: path.to_path_buf(),
+                    source,
+                }),
+            };
+        }
+        Err(source) => {
+            return Err(WorkspaceError::Io {
+                path: path.to_path_buf(),
+                source,
+            })
+        }
+    };
+    if resolved != expected || !resolved.starts_with(&expected) {
+        return Err(WorkspaceError::Symlink {
+            path: path.to_path_buf(),
         });
     }
-    match fs::symlink_metadata(path) {
+    match fs::symlink_metadata(&resolved) {
         Ok(metadata) => Ok(Some(metadata)),
         Err(source) if source.kind() == io::ErrorKind::NotFound => Ok(None),
         Err(source) => Err(WorkspaceError::Io {
