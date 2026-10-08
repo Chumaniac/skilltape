@@ -60,7 +60,7 @@ counts, storage space, privacy, and run time. No production capacity claim follo
 from these examples. No real code review, knowledge-base connection, database,
 or analytics provider was used by their checks.
 
-## Input-capacity preflight in source
+## Bounded input preflight and I/O in source
 
 The source implementation adds a metadata-only preflight before Verify reads
 hash content and before Replay copies inputs. Use a current source build; this
@@ -81,12 +81,29 @@ entries rather than retaining the entire listing, reads no file content, and
 adds no dependency or provider access. Code-review patches, knowledge materials,
 data exports and incident documents share the same preflight.
 
-This is an observed metadata budget, **not a copy-time or operating-system disk
-quota**. Verify checks before hashing; Replay checks again before workspace
-setup. The source is not frozen, and concurrent changes after either check can
-change copy/hash work. Package scripts, outputs, execution time and memory are
-outside this input preflight. Split and review larger datasets deliberately; no
-automatic override is available in this source implementation.
+Input hashing and staging now build their own bounded inventories using these
+same ceilings. Each file read stops at its observed size plus one probe byte;
+the probe is never hashed or copied. A growing or truncated file fails instead
+of being read to an unbounded EOF. Inventories include directories and are
+checked again after I/O, rejecting additions, removals and observed metadata
+changes. Regular files are opened no-follow and nonblocking on Unix; Windows
+opens reparse points themselves and rejects them. Stable inputs preserve the
+existing path/length/content digest, Receipt fields, file contents and modes.
+
+At most 64 MiB of content is hashed or staged per invocation, with at most one
+additional probe byte per file. The 8 KiB content buffer is reused; inventories
+remain proportional to the bounded entry count and path lengths. Input staging
+stays in the existing disposable workspace; failures precede run events and
+final output publication. Package scripts and generated outputs retain their
+existing separate copy behavior.
+
+These are bounded application reads and staging, **not an operating-system disk
+quota or a frozen filesystem**. Hashing and Replay staging check separate source
+snapshots; this slice does not authenticate identity or bind a same-user hostile
+writer across both phases. Ancestor replacement races remain outside complete
+isolation. Package scripts, outputs, execution time and measured RSS are outside
+this input budget. Split and review larger datasets deliberately; no automatic
+override is available.
 
 Use a direct relative path or an absolute input path without `..` components.
 Metadata paths reject parent-directory references before access; the scanner
@@ -99,8 +116,8 @@ real semantic review or a platform sandbox integration.
 ## Next adaptation slices
 
 1. Add domain-specific assertions for bounded, versioned input formats.
-2. Enforce bounded content reads and workspace copies after the metadata preflight,
-   including inputs that grow or change during a run.
+2. Bind verification and execution to one immutable prepared input snapshot,
+   while preserving the existing Receipt and output publication contracts.
 3. Connect separately approved local review/formatting commands while preserving
    executable allowlists and platform sandbox requirements.
 4. Review external Agent layout changes against their primary documentation

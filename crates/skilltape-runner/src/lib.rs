@@ -14,6 +14,7 @@ use thiserror::Error;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
+mod input_io;
 mod process;
 mod publication;
 #[cfg(target_os = "windows")]
@@ -163,9 +164,15 @@ pub enum RunError {
 ///
 /// The metadata snapshot permits at most 10,000 descendant entries, depth 64,
 /// 16 MiB per regular file and 64 MiB in total. It does not freeze the source,
-/// enforce copy-time/disk quotas, or validate domain semantics.
+/// enforce disk quotas, or validate domain semantics. Input hashing and staging
+/// separately bound actual reads and recheck the inventory after completion.
 pub fn preflight_input_capacity(input_root: &Path) -> Result<(), RunError> {
     workspace::validate_input_capacity(input_root).map_err(workspace_setup_error)
+}
+
+/// Hash a bounded input snapshot using the existing path/length/content digest format.
+pub fn digest_input_tree(input_root: &Path) -> Result<String, RunError> {
+    input_io::digest_input_tree(input_root).map_err(workspace_setup_error)
 }
 
 fn workspace_setup_error(error: WorkspaceError) -> RunError {

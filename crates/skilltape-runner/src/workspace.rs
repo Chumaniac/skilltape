@@ -8,7 +8,7 @@ use skilltape_schema::Step;
 use tempfile::{Builder, TempDir};
 use thiserror::Error;
 
-// Metadata preflight only; copy-time quotas require a separate bounded-copy slice.
+// Shared metadata and actual input I/O ceilings; package scripts and outputs use separate paths.
 const INPUT_MAX_ENTRIES: u64 = 10_000;
 const INPUT_MAX_DEPTH: u64 = 64;
 const INPUT_MAX_FILE_BYTES: u64 = 16 * 1024 * 1024;
@@ -61,7 +61,7 @@ impl ReplayWorkspace {
         })?;
         let root = tempdir.path().to_path_buf();
 
-        copy_entry(input_root, &root.join("inputs"))?;
+        crate::input_io::copy_input_tree(input_root, &root.join("inputs"))?;
         copy_referenced_scripts(package, &root)?;
 
         Ok(Self {
@@ -258,7 +258,40 @@ pub(crate) fn validate_input_capacity(input_root: &Path) -> Result<(), Workspace
     let root = canonical_input_root(input_root)?;
     let mut entries = 0;
     let mut total_bytes = 0;
-    inspect_input_directory(&root, &root, 0, &mut entries, &mut total_bytes)
+    inspect_input_directory(
+        &root,
+        &root,
+        0,
+        &mut entries,
+        &mut total_bytes,
+        &mut |_, _| Ok(()),
+    )
+}
+
+pub(crate) struct InputSnapshot {
+    pub root: PathBuf,
+    pub metadata: fs::Metadata,
+    pub entries: Vec<(PathBuf, fs::Metadata)>,
+}
+
+/// Retain at most the shared entry ceiling, for deterministic bounded input I/O.
+pub(crate) fn input_snapshot(input_root: &Path) -> Result<InputSnapshot, WorkspaceError> {
+    let root = canonical_input_root(input_root)?;
+    let metadata = fs::metadata(&root).map_err(|source| WorkspaceError::Io {
+        path: root.clone(),
+        source,
+    })?;
+    let mut entries = Vec::new();
+    inspect_input_directory(&root, &root, 0, &mut 0, &mut 0, &mut |path, metadata| {
+        entries.push((path.to_path_buf(), metadata.clone()));
+        Ok(())
+    })?;
+    entries.sort_by(|left, right| left.0.cmp(&right.0));
+    Ok(InputSnapshot {
+        root,
+        metadata,
+        entries,
+    })
 }
 
 fn canonical_input_root(input_root: &Path) -> Result<PathBuf, WorkspaceError> {
@@ -313,6 +346,7 @@ fn inspect_input_directory(
     depth: u64,
     entries: &mut u64,
     total_bytes: &mut u64,
+    visit: &mut impl FnMut(&Path, &fs::Metadata) -> Result<(), WorkspaceError>,
 ) -> Result<(), WorkspaceError> {
     let resolved = current
         .canonicalize()
@@ -349,12 +383,14 @@ fn inspect_input_directory(
             return Err(WorkspaceError::Symlink { path });
         }
         if metadata.is_dir() {
-            inspect_input_directory(root, &path, depth + 1, entries, total_bytes)?;
+            visit(&path, &metadata)?;
+            inspect_input_directory(root, &path, depth + 1, entries, total_bytes, visit)?;
         } else if metadata.is_file() {
             check_input_limit(metadata.len(), INPUT_MAX_FILE_BYTES, "file_bytes")?;
             // Both addends have already been capped; the sum cannot overflow u64.
             *total_bytes += metadata.len();
             check_input_limit(*total_bytes, INPUT_MAX_TOTAL_BYTES, "total_bytes")?;
+            visit(&path, &metadata)?;
         } else {
             return Err(WorkspaceError::Io {
                 path,
