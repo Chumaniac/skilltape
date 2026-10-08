@@ -8,10 +8,18 @@ use skilltape_schema::Step;
 use tempfile::{Builder, TempDir};
 use thiserror::Error;
 
+// Metadata preflight only; copy-time quotas require a separate bounded-copy slice.
+const INPUT_MAX_ENTRIES: u64 = 10_000;
+const INPUT_MAX_DEPTH: u64 = 64;
+const INPUT_MAX_FILE_BYTES: u64 = 16 * 1024 * 1024;
+const INPUT_MAX_TOTAL_BYTES: u64 = 64 * 1024 * 1024;
+
 #[derive(Debug, Error)]
 pub(crate) enum WorkspaceError {
     #[error("input root is not a regular directory: {path}")]
     InvalidInputRoot { path: PathBuf },
+    #[error("input capacity exceeded: {dimension} limit is {limit}")]
+    InputCapacity { dimension: &'static str, limit: u64 },
     #[error("workspace path is unsafe: {path}")]
     UnsafePath { path: String },
     #[error("symlinks are not allowed in a replay workspace: {path}")]
@@ -243,6 +251,71 @@ fn ensure_input_root(input_root: &Path) -> Result<(), WorkspaceError> {
         });
     }
     ensure_no_symlink_ancestors(input_root)
+}
+
+/// Count metadata without reading input bytes or collecting an unbounded directory list.
+pub(crate) fn validate_input_capacity(input_root: &Path) -> Result<(), WorkspaceError> {
+    ensure_input_root(input_root)?;
+    let mut entries = 0;
+    let mut total_bytes = 0;
+    inspect_input_directory(input_root, 0, &mut entries, &mut total_bytes)
+}
+
+fn inspect_input_directory(
+    current: &Path,
+    depth: u64,
+    entries: &mut u64,
+    total_bytes: &mut u64,
+) -> Result<(), WorkspaceError> {
+    ensure_no_symlink_ancestors(current)?;
+    let directory = fs::read_dir(current).map_err(|source| WorkspaceError::Io {
+        path: current.to_path_buf(),
+        source,
+    })?;
+    for entry in directory {
+        let path = entry
+            .map_err(|source| WorkspaceError::Io {
+                path: current.to_path_buf(),
+                source,
+            })?
+            .path();
+        *entries += 1;
+        check_input_limit(*entries, INPUT_MAX_ENTRIES, "entries")?;
+        check_input_limit(depth + 1, INPUT_MAX_DEPTH, "depth")?;
+        ensure_no_symlink_ancestors(&path)?;
+        let metadata = symlink_metadata(&path)?.ok_or_else(|| WorkspaceError::Io {
+            path: path.clone(),
+            source: io::Error::new(io::ErrorKind::NotFound, "input entry disappeared"),
+        })?;
+        if metadata.is_symlink() {
+            return Err(WorkspaceError::Symlink { path });
+        }
+        if metadata.is_dir() {
+            inspect_input_directory(&path, depth + 1, entries, total_bytes)?;
+        } else if metadata.is_file() {
+            check_input_limit(metadata.len(), INPUT_MAX_FILE_BYTES, "file_bytes")?;
+            // Both addends have already been capped; the sum cannot overflow u64.
+            *total_bytes += metadata.len();
+            check_input_limit(*total_bytes, INPUT_MAX_TOTAL_BYTES, "total_bytes")?;
+        } else {
+            return Err(WorkspaceError::Io {
+                path,
+                source: io::Error::new(io::ErrorKind::InvalidInput, "unsupported input entry"),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn check_input_limit(
+    value: u64,
+    limit: u64,
+    dimension: &'static str,
+) -> Result<(), WorkspaceError> {
+    if value > limit {
+        return Err(WorkspaceError::InputCapacity { dimension, limit });
+    }
+    Ok(())
 }
 
 fn copy_referenced_scripts(

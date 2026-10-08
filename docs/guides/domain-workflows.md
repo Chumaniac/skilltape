@@ -60,10 +60,43 @@ counts, storage space, privacy, and run time. No production capacity claim follo
 from these examples. No real code review, knowledge-base connection, database,
 or analytics provider was used by their checks.
 
+## Local source candidate: input-capacity preflight
+
+The local `codex/heartbeat-20261008-input-capacity` candidate adds a metadata-only
+preflight before Verify reads hash content and before Replay copies inputs. It is
+not merged into main or published in download assets.
+
+| Observed input dimension | Inclusive ceiling |
+| --- | --- |
+| Descendant entries, including empty directories | 10,000 |
+| Descendant depth, with the input root at depth 0 | 64 |
+| Logical bytes per regular file | 16 MiB |
+| Logical bytes summed over all file paths | 64 MiB |
+
+Oversized static input returns a typed `InputCapacity` error and CLI exit 2 before
+run events, output materialization, or a successful Receipt. Nested symlinks and
+unsupported filesystem entries are rejected using the existing path checks;
+their existing error classification is retained. The scanner streams directory
+entries rather than retaining the entire listing, reads no file content, and
+adds no dependency or provider access. Code-review patches, knowledge materials,
+data exports and incident documents share the same preflight.
+
+This is an observed metadata budget, **not a copy-time or operating-system disk
+quota**. Verify checks before hashing; Replay checks again before workspace
+setup. The source is not frozen, and concurrent changes after either check can
+change copy/hash work. Package scripts, outputs, execution time and memory are
+outside this input preflight. Split and review larger datasets deliberately; no
+automatic override is available in this candidate.
+
+Local checks use sparse synthetic files, empty directories and the existing small
+domain fixtures. They verify rejection and boundaries, not production capacity,
+real semantic review or a platform sandbox integration.
+
 ## Next adaptation slices
 
 1. Add domain-specific assertions for bounded, versioned input formats.
-2. Add explicit fixture-size and inventory limits with clear failure evidence.
+2. Enforce bounded content reads and workspace copies after the metadata preflight,
+   including inputs that grow or change during a run.
 3. Connect separately approved local review/formatting commands while preserving
    executable allowlists and platform sandbox requirements.
 4. Review external Agent layout changes against their primary documentation

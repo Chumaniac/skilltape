@@ -7,7 +7,9 @@ use std::path::{Path, PathBuf};
 use serde_json::to_vec;
 use sha2::{Digest, Sha256};
 use skilltape_core::LoadedSkillPackage;
-use skilltape_runner::{run_skill, ResourceLimits, RunError, RunEvent, RunRequest};
+use skilltape_runner::{
+    preflight_input_capacity, run_skill, ResourceLimits, RunError, RunEvent, RunRequest,
+};
 use thiserror::Error;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -53,6 +55,7 @@ pub async fn verify_run(request: VerifyRequest) -> Result<Receipt, VerifyError> 
             })?;
     }
     ensure_directory(&request.input_root).map_err(|_| VerifyError::InvalidInputRoot)?;
+    preflight_input_capacity(&request.input_root)?;
 
     let skill_hash = digest_tree(&request.package.root)?;
     let input_hash = digest_tree(&request.input_root)?;

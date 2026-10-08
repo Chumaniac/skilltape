@@ -145,6 +145,8 @@ pub struct RunSummary {
 pub enum RunError {
     #[error("input root is invalid: {path}")]
     InvalidInputRoot { path: PathBuf },
+    #[error("input capacity exceeded: {dimension} limit is {limit}")]
+    InputCapacity { dimension: &'static str, limit: u64 },
     #[error("resource limits are invalid: {message}")]
     InvalidLimits { message: String },
     #[error("output root overlaps an input or package path: {path}")]
@@ -155,6 +157,27 @@ pub enum RunError {
     Materialization { message: String },
     #[error("run event channel closed")]
     EventChannelClosed,
+}
+
+/// Reject oversized or unsafe input trees before content hashing or workspace copying.
+///
+/// The metadata snapshot permits at most 10,000 descendant entries, depth 64,
+/// 16 MiB per regular file and 64 MiB in total. It does not freeze the source,
+/// enforce copy-time/disk quotas, or validate domain semantics.
+pub fn preflight_input_capacity(input_root: &Path) -> Result<(), RunError> {
+    workspace::validate_input_capacity(input_root).map_err(workspace_setup_error)
+}
+
+fn workspace_setup_error(error: WorkspaceError) -> RunError {
+    match error {
+        WorkspaceError::InvalidInputRoot { path } => RunError::InvalidInputRoot { path },
+        WorkspaceError::InputCapacity { dimension, limit } => {
+            RunError::InputCapacity { dimension, limit }
+        }
+        error => RunError::Workspace {
+            message: error.to_string(),
+        },
+    }
 }
 
 /// Run a package with the real async process adapter.
@@ -186,17 +209,9 @@ where
         &request.output_root,
     )?;
 
-    let workspace = match ReplayWorkspace::prepare(&request.package, &request.input_root) {
-        Ok(workspace) => workspace,
-        Err(WorkspaceError::InvalidInputRoot { path }) => {
-            return Err(RunError::InvalidInputRoot { path });
-        }
-        Err(error) => {
-            return Err(RunError::Workspace {
-                message: error.to_string(),
-            })
-        }
-    };
+    preflight_input_capacity(&request.input_root)?;
+    let workspace = ReplayWorkspace::prepare(&request.package, &request.input_root)
+        .map_err(workspace_setup_error)?;
 
     let mut summary = RunSummary {
         status: RunStatus::Succeeded,

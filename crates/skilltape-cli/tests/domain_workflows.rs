@@ -12,6 +12,32 @@ const DOMAINS: [&str; 4] = [
     "incident-review",
 ];
 
+#[test]
+fn replay_and_verify_report_input_capacity_without_writing_a_receipt() {
+    let temp = TempDir::new().expect("capacity fixture");
+    let input = temp.path().join("input");
+    fs::create_dir(&input).expect("input");
+    fs::File::create(input.join("oversized.diff"))
+        .expect("sparse fixture")
+        .set_len(16 * 1024 * 1024 + 1)
+        .expect("fixture size");
+    for command in ["replay", "verify"] {
+        let receipt = temp.path().join(format!("{command}.json"));
+        let mut cli = Command::cargo_bin("skilltape").expect("binary");
+        cli.arg(command)
+            .arg(example("code-review"))
+            .arg("--input")
+            .arg(&input)
+            .arg("--json");
+        if command == "verify" {
+            cli.arg("--receipt").arg(&receipt);
+        }
+        let result = cli.assert().code(2).get_output().clone();
+        assert!(String::from_utf8_lossy(&result.stderr).contains("input capacity exceeded"));
+        assert!(!receipt.exists(), "capacity failure creates no Receipt");
+    }
+}
+
 fn fixture_files(domain: &str) -> &'static [&'static str] {
     match domain {
         "code-review" => &["change.diff"],

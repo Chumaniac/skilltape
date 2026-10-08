@@ -80,6 +80,29 @@ fn input_root(root: &Path) -> std::path::PathBuf {
     input
 }
 
+#[tokio::test]
+async fn input_capacity_fails_before_verification_receipt() {
+    let root = tempdir().expect("root");
+    let input = input_root(root.path());
+    fs::File::create(input.join("oversized.csv"))
+        .expect("sparse fixture")
+        .set_len(16 * 1024 * 1024 + 1)
+        .expect("fixture size");
+    let fixture = package(vec![], permissions(&[], &[], &[]));
+    let output = root.path().join("output");
+    let result = verify_run(VerifyRequest {
+        package: fixture.package,
+        input_root: input,
+        output_root: output.clone(),
+        limits: limits(),
+        assertions: vec![],
+    })
+    .await;
+    let error = result.expect_err("oversized inputs must fail before hashing");
+    assert!(error.to_string().contains("input capacity exceeded"));
+    assert!(!output.exists());
+}
+
 async fn verify_fixture(
     fixture: PackageFixture,
     input_root: &Path,
