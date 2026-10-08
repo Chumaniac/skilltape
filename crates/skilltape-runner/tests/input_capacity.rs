@@ -101,6 +101,18 @@ fn rejects_parent_components_before_input_metadata_access() {
     assert!(preflight_input_capacity(&indirect).is_err());
 }
 
+#[test]
+fn accepts_a_direct_relative_input_root() {
+    let current = std::env::current_dir().expect("current directory");
+    let root = tempfile::tempdir_in(&current).expect("relative fixture");
+    fs::write(root.path().join("note.md"), "synthetic").expect("note");
+    let relative = root
+        .path()
+        .strip_prefix(&current)
+        .expect("relative selection");
+    preflight_input_capacity(relative).expect("direct relative input");
+}
+
 #[cfg(unix)]
 #[test]
 fn rejects_symlinked_entries_and_ancestors_without_following_them() {

@@ -255,16 +255,51 @@ fn ensure_input_root(input_root: &Path) -> Result<(), WorkspaceError> {
 
 /// Count metadata without reading input bytes or collecting an unbounded directory list.
 pub(crate) fn validate_input_capacity(input_root: &Path) -> Result<(), WorkspaceError> {
-    ensure_input_root(input_root)?;
-    let root = input_root
+    let root = canonical_input_root(input_root)?;
+    let mut entries = 0;
+    let mut total_bytes = 0;
+    inspect_input_directory(&root, &root, 0, &mut entries, &mut total_bytes)
+}
+
+fn canonical_input_root(input_root: &Path) -> Result<PathBuf, WorkspaceError> {
+    if input_root
+        .components()
+        .any(|part| matches!(part, Component::ParentDir))
+    {
+        return Err(WorkspaceError::UnsafePath {
+            path: input_root.to_string_lossy().into_owned(),
+        });
+    }
+    let absolute = std::path::absolute(input_root).map_err(|source| WorkspaceError::Io {
+        path: input_root.to_path_buf(),
+        source,
+    })?;
+    let mut expected = PathBuf::new();
+    for part in absolute.components() {
+        expected.push(part);
+        // Preserve only the already-approved macOS /tmp, /var and /etc aliases.
+        if is_allowed_system_alias(&expected) {
+            expected = expected
+                .canonicalize()
+                .map_err(|source| WorkspaceError::Io {
+                    path: input_root.to_path_buf(),
+                    source,
+                })?;
+        }
+    }
+    let resolved = expected
         .canonicalize()
         .map_err(|source| WorkspaceError::Io {
             path: input_root.to_path_buf(),
             source,
         })?;
-    let mut entries = 0;
-    let mut total_bytes = 0;
-    inspect_input_directory(&root, &root, 0, &mut entries, &mut total_bytes)
+    if resolved != expected || !resolved.starts_with(&expected) {
+        return Err(WorkspaceError::InvalidInputRoot {
+            path: input_root.to_path_buf(),
+        });
+    }
+    ensure_input_root(&resolved)?;
+    Ok(resolved)
 }
 
 fn inspect_input_directory(
