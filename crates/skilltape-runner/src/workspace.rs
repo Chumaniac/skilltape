@@ -256,19 +256,37 @@ fn ensure_input_root(input_root: &Path) -> Result<(), WorkspaceError> {
 /// Count metadata without reading input bytes or collecting an unbounded directory list.
 pub(crate) fn validate_input_capacity(input_root: &Path) -> Result<(), WorkspaceError> {
     ensure_input_root(input_root)?;
+    let root = input_root
+        .canonicalize()
+        .map_err(|source| WorkspaceError::Io {
+            path: input_root.to_path_buf(),
+            source,
+        })?;
     let mut entries = 0;
     let mut total_bytes = 0;
-    inspect_input_directory(input_root, 0, &mut entries, &mut total_bytes)
+    inspect_input_directory(&root, &root, 0, &mut entries, &mut total_bytes)
 }
 
 fn inspect_input_directory(
+    root: &Path,
     current: &Path,
     depth: u64,
     entries: &mut u64,
     total_bytes: &mut u64,
 ) -> Result<(), WorkspaceError> {
+    let resolved = current
+        .canonicalize()
+        .map_err(|source| WorkspaceError::Io {
+            path: current.to_path_buf(),
+            source,
+        })?;
+    if resolved != current || !resolved.starts_with(root) {
+        return Err(WorkspaceError::UnsafePath {
+            path: current.to_string_lossy().into_owned(),
+        });
+    }
     ensure_no_symlink_ancestors(current)?;
-    let directory = fs::read_dir(current).map_err(|source| WorkspaceError::Io {
+    let directory = fs::read_dir(&resolved).map_err(|source| WorkspaceError::Io {
         path: current.to_path_buf(),
         source,
     })?;
@@ -291,7 +309,7 @@ fn inspect_input_directory(
             return Err(WorkspaceError::Symlink { path });
         }
         if metadata.is_dir() {
-            inspect_input_directory(&path, depth + 1, entries, total_bytes)?;
+            inspect_input_directory(root, &path, depth + 1, entries, total_bytes)?;
         } else if metadata.is_file() {
             check_input_limit(metadata.len(), INPUT_MAX_FILE_BYTES, "file_bytes")?;
             // Both addends have already been capped; the sum cannot overflow u64.
@@ -474,6 +492,14 @@ fn is_allowed_system_alias(_path: &Path) -> bool {
 }
 
 fn symlink_metadata(path: &Path) -> Result<Option<fs::Metadata>, WorkspaceError> {
+    if path
+        .components()
+        .any(|part| matches!(part, Component::ParentDir))
+    {
+        return Err(WorkspaceError::UnsafePath {
+            path: path.to_string_lossy().into_owned(),
+        });
+    }
     match fs::symlink_metadata(path) {
         Ok(metadata) => Ok(Some(metadata)),
         Err(source) if source.kind() == io::ErrorKind::NotFound => Ok(None),

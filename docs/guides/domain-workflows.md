@@ -88,6 +88,10 @@ change copy/hash work. Package scripts, outputs, execution time and memory are
 outside this input preflight. Split and review larger datasets deliberately; no
 automatic override is available in this source implementation.
 
+Use a direct relative path or an absolute input path without `..` components.
+Metadata paths reject parent-directory references before access; the scanner
+anchors recursive directory reads to the selected canonical input root.
+
 Local checks use sparse synthetic files, empty directories and the existing small
 domain fixtures. They verify rejection and boundaries, not production capacity,
 real semantic review or a platform sandbox integration.

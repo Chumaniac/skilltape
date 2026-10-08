@@ -92,6 +92,15 @@ fn rejects_a_file_as_input_root() {
     ));
 }
 
+#[test]
+fn rejects_parent_components_before_input_metadata_access() {
+    let root = tempdir().expect("root");
+    fs::create_dir(root.path().join("nested")).expect("nested");
+    fs::create_dir(root.path().join("selected")).expect("selected");
+    let indirect = root.path().join("nested/../selected");
+    assert!(preflight_input_capacity(&indirect).is_err());
+}
+
 #[cfg(unix)]
 #[test]
 fn rejects_symlinked_entries_and_ancestors_without_following_them() {
