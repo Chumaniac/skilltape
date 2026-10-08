@@ -442,6 +442,7 @@ fn verify_error_code(error: &VerifyError) -> u8 {
 fn runner_error_code(error: &RunError) -> u8 {
     match error {
         RunError::InvalidInputRoot { .. }
+        | RunError::InputCapacity { .. }
         | RunError::InvalidLimits { .. }
         | RunError::UnsafeOutputRoot { .. } => INPUT_ERROR_EXIT_CODE,
         RunError::Workspace { .. }
