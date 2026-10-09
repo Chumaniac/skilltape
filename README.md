@@ -11,6 +11,14 @@ configuration file.
 
 [Watch the 30-second terminal demo](docs/assets/quickstart-terminal.txt) · [Download v0.1.0](https://github.com/Chumaniac/skilltape/releases/tag/v0.1.0)
 
+## Release candidate and verified public version
+
+Source 0.2.0 is prepared with persistent verified deliveries, bounded input reads,
+explicit path containment and noninteractive capture concurrency fixes. Its new
+release requires successful four-platform builds, provenance/checksums and installer
+smoke tests. The historical v0.1.0 download and demo below remain valid until that
+publication succeeds; no older tag or successful demo asset is replaced.
+
 ## Get a verified Skill in five minutes
 
 Install the fixed public v0.1.0 release without piping a download into a shell.

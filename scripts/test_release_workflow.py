@@ -18,8 +18,8 @@ EXPECTED_ACTION_REFERENCES = (
     "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7",
     "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7",
     "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8",
-    "dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master",
-    "anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0",
+    "dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master",
+    "anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2",
     "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4",
 )
 
