@@ -17,6 +17,13 @@ All notable changes to SkillTape are documented here.
 
 ### Fixed
 
+- Noninteractive PTY readers no longer wait on an unrelated global stderr lock;
+  output limits and truncation evidence remain unchanged.
+- Each bounded input open now checks canonical containment in its selected
+  inventory root; snapshots reuse the metadata obtained during root validation.
+- Replay staging and Verify hashing enforce the same bounded input inventories
+  and length-limited reads. Detected file growth, truncation, entry changes, and
+  unsafe leaf replacements fail closed; stable inputs retain their existing digest.
 - Output-directory publication now uses exclusive native rename on Linux/macOS,
   closing an empty-destination race; overlap checks resolve existing ancestors.
 - Console timeline navigation now exposes all Tape and event pages, preserves

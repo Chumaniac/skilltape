@@ -292,12 +292,13 @@ fn read_bounded(
     let mut retained = Vec::with_capacity(limit.min(8 * 1024));
     let mut total = 0usize;
     let mut buffer = [0_u8; 8 * 1024];
-    let mut stderr = std::io::stderr().lock();
+    // A noninteractive capture must not serialize unrelated readers on stderr.
+    let mut stderr = echo_output.then(|| std::io::stderr().lock());
     loop {
         match reader.read(&mut buffer) {
             Ok(0) => break,
             Ok(read) => {
-                if echo_output {
+                if let Some(stderr) = stderr.as_mut() {
                     stderr.write_all(&buffer[..read])?;
                     stderr.flush()?;
                 }
@@ -349,6 +350,27 @@ mod tests {
                 None => Err(std::io::Error::other("fake PTY read failure")),
             }
         }
+    }
+
+    #[test]
+    fn noninteractive_reads_do_not_wait_for_an_unrelated_stderr_lock() {
+        use std::io::Cursor;
+        use std::sync::mpsc;
+        let stderr = std::io::stderr();
+        let held = stderr.lock();
+        let (sender, receiver) = mpsc::channel();
+        let worker = thread::spawn(move || {
+            let result = read_bounded(&mut Cursor::new(b"1234567890"), 5, false);
+            sender.send(result).expect("reader result");
+        });
+        let while_locked = receiver.recv_timeout(Duration::from_millis(250));
+        drop(held);
+        worker.join().expect("reader joined");
+        let result = while_locked.expect("noninteractive reads must not acquire stderr");
+        assert_eq!(
+            result.expect("read succeeds"),
+            (b"12345".to_vec(), 10, true)
+        );
     }
 
     #[test]

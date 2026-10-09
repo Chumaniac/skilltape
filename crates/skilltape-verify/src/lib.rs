@@ -8,7 +8,8 @@ use serde_json::to_vec;
 use sha2::{Digest, Sha256};
 use skilltape_core::LoadedSkillPackage;
 use skilltape_runner::{
-    preflight_input_capacity, run_skill, ResourceLimits, RunError, RunEvent, RunRequest,
+    digest_input_tree, preflight_input_capacity, run_skill, ResourceLimits, RunError, RunEvent,
+    RunRequest,
 };
 use thiserror::Error;
 use tokio::sync::mpsc;
@@ -58,7 +59,7 @@ pub async fn verify_run(request: VerifyRequest) -> Result<Receipt, VerifyError> 
     preflight_input_capacity(&request.input_root)?;
 
     let skill_hash = digest_tree(&request.package.root)?;
-    let input_hash = digest_tree(&request.input_root)?;
+    let input_hash = digest_input_tree(&request.input_root)?;
     let assertion_bytes = to_vec(&request.assertions)?;
     let run_id = digest_parts(&[
         skill_hash.as_bytes(),
