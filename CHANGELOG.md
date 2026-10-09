@@ -17,6 +17,8 @@ All notable changes to SkillTape are documented here.
 
 ### Fixed
 
+- Noninteractive PTY readers no longer wait on an unrelated global stderr lock;
+  output limits and truncation evidence remain unchanged.
 - Each bounded input open now checks canonical containment in its selected
   inventory root; snapshots reuse the metadata obtained during root validation.
 - Replay staging and Verify hashing enforce the same bounded input inventories
