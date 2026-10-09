@@ -11,7 +11,7 @@
 //! already maps `SandboxUnavailable` to a bounded `Denied` run event.
 
 use crate::process::{ProcessError, ProcessRequest};
-use std::process::Command;
+use tokio::process::Command;
 
 /// Windows sandbox command — preview (always fails closed).
 ///
@@ -45,7 +45,8 @@ mod tests {
             timeout: Duration::from_secs(1),
             max_output_bytes: 1024,
         };
-        let err = windows_sandbox_command(&req).unwrap_err();
+        let result: Result<tokio::process::Command, ProcessError> = windows_sandbox_command(&req);
+        let err = result.unwrap_err();
         assert!(matches!(err, ProcessError::SandboxUnavailable));
     }
 }

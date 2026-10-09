@@ -17,7 +17,7 @@ use tokio_util::sync::CancellationToken;
 mod input_io;
 mod process;
 mod publication;
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", test))]
 mod windows;
 mod workspace;
 

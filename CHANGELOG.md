@@ -2,7 +2,25 @@
 
 All notable changes to SkillTape are documented here.
 
+## [0.2.1] - 2026-10-09
+
+### Fixed
+
+- Align the Windows fail-closed executor with the async command type used by
+  the runner. Its existing denial test now compiles on every test host and
+  asserts the exact caller type; Windows Replay/Verify still remain unavailable.
+- Check production Windows binaries in ordinary CI before creating a release.
+- Harden the full-SHA-pinned Rust action's toolchain/target/component inputs.
+
+This is a source candidate until its independent four-platform release and
+published Windows installer checks pass. The immutable v0.2.0 tag below remains
+the record of the earlier failed Windows publication attempt.
+
 ## [0.2.0] - 2026-10-09
+
+The source tag's Linux and both Mac builds passed. Its Windows build failed
+with an async command type mismatch; publication and the published installer
+check were skipped. No public v0.2.0 release is claimed.
 
 ### Added
 
