@@ -2,10 +2,14 @@
 
 All notable changes to SkillTape are documented here.
 
-## Unreleased
+## [0.2.0] - 2026-10-09
 
 ### Added
 
+- Source release candidate 0.2.0 includes the verified delivery and bounded input
+  features below; public publication is verified by the new immutable tag workflow.
+- Refresh locked Rust and Console dependencies and pinned workflow actions after
+  compatibility and existing Console/sandbox checks.
 - Source Verify can publish a new `--delivery-dir` containing actual artifacts,
   the unchanged v1 Receipt and a checksummed manifest. Completed files survive
   assembly/publication failure in private staging. An order-summary example runs
