@@ -20,6 +20,10 @@ jobs:
           toolchain: 1.97.1
       - name: Check production binaries without enabling Windows replay
         run: cargo check --locked -p skilltape-cli -p skilltape-console-api
+      - name: Check Windows no-replace publication and portable exports
+        run: |
+          cargo test --locked -p skilltape-runner publication::tests -- --test-threads=1
+          cargo test --locked -p skilltape-export -- --test-threads=1
 
   rust:
     name: Rust (${{ matrix.os }})

@@ -9,7 +9,10 @@ use thiserror::Error;
 
 mod generic;
 mod plugin;
+mod receipt;
 mod registry;
+mod snapshot;
+pub use receipt::export_with_receipt;
 
 pub use claude_code::ClaudeCodeExporter;
 pub use codex::CodexExporter;
@@ -42,10 +45,28 @@ pub struct ExportManifest {
     pub target: String,
     pub files: Vec<String>,
     pub package_hash: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub receipt: Option<ReceiptReference>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct ReceiptReference {
+    pub run_id: String,
+    pub skill_hash: String,
+    pub receipt_sha256: String,
+    pub provenance: &'static str,
 }
 
 #[derive(Debug, Error)]
 pub enum ExportError {
+    #[error("export exceeds the bounded entry, depth or byte capacity")]
+    Capacity,
+    #[error("export source changed during the selected snapshot")]
+    ChangedSource,
+    #[error("Receipt must be bounded, unambiguous and internally consistent successful metadata")]
+    InvalidReceipt,
+    #[error("Receipt identity does not match the actual exported package bytes")]
+    ReceiptMismatch,
     #[error("export package lint failed with {errors} error(s)")]
     Lint { errors: usize },
     #[error("export output already exists: {path}")]

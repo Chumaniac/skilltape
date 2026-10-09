@@ -1,4 +1,4 @@
-use std::fs;
+use skilltape_runner::publish_directory_noreplace;
 use std::path::Path;
 
 use tempfile::Builder;
@@ -58,7 +58,7 @@ impl Exporter for ClaudeCodeExporter {
         let generic_manifest = GenericExporter.export(package, &package_output)?;
 
         ensure_output_absent(&output)?;
-        fs::rename(staging.path(), &output).map_err(|source| ExportError::Io {
+        publish_directory_noreplace(staging.path(), &output).map_err(|source| ExportError::Io {
             path: output.clone(),
             source,
         })?;
@@ -72,6 +72,7 @@ impl Exporter for ClaudeCodeExporter {
                 .map(|file| format!("{prefix}{file}"))
                 .collect(),
             package_hash: generic_manifest.package_hash,
+            receipt: generic_manifest.receipt,
         })
     }
 }

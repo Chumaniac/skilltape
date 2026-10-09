@@ -154,6 +154,36 @@ fn repeated_exports_have_the_same_manifest_and_bytes() {
 }
 
 #[test]
+fn export_rejects_a_file_above_the_replay_capacity_without_publishing() {
+    let (temp, package) = minimal_package();
+    let large = package.join("fixtures/input/large.bin");
+    fs::create_dir_all(large.parent().expect("fixture parent")).expect("fixture directory");
+    fs::File::create(large)
+        .expect("synthetic sparse fixture")
+        .set_len(16 * 1024 * 1024 + 1)
+        .expect("fixture size");
+    let loaded = SkillPackage::load(&package).expect("package");
+    let output = temp.path().join("exported");
+    assert!(GenericExporter.export(&loaded, &output).is_err());
+    assert!(!output.exists());
+}
+
+#[test]
+fn export_rejects_excessive_directory_depth_without_publishing() {
+    let (temp, package) = minimal_package();
+    let mut nested = package.join("fixtures");
+    for _ in 0..65 {
+        nested = nested.join("a");
+        fs::create_dir_all(&nested).expect("synthetic nested fixture");
+    }
+    fs::write(nested.join("data"), "synthetic").expect("data");
+    let loaded = SkillPackage::load(&package).expect("package");
+    let output = temp.path().join("exported");
+    assert!(GenericExporter.export(&loaded, &output).is_err());
+    assert!(!output.exists());
+}
+
+#[test]
 fn lint_failure_does_not_create_an_output_directory() {
     let (temp, package) = minimal_package();
     fs::write(

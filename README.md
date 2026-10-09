@@ -26,6 +26,21 @@ successful terminal demo below remain historical reproducible examples; they
 predate the new delivery and Console features. Download current builds from
 the v0.2.1 release above. No historical tag or successful demo is replaced.
 
+## Current source candidate
+
+Source 0.2.2 adds bounded stable exports, shared no-replace publication and
+optional `export --receipt` association with successful metadata and matching
+copied bytes. See [stable export evidence](docs/guides/export-evidence.md).
+These additions are not in the existing public v0.2.1 assets and do not
+authenticate a Receipt or enable Windows isolated execution.
+
+For a current published installation, download the
+[v0.2.1 assets](https://github.com/Chumaniac/skilltape/releases/tag/v0.2.1).
+The immutable installer source is available at release commit
+`b715967df7d06067a50f8146bcdce87fd9538733`; select `SKILLTAPE_VERSION=0.2.1`
+and keep the release base explicit. The historical v0.1.0 sequence below
+remains the independently recorded first-run demonstration.
+
 ## Get a verified Skill in five minutes
 
 Install the fixed public v0.1.0 release without piping a download into a shell.
@@ -93,6 +108,8 @@ concurrent-change limits. This source improvement is not in the published v0.1.0
 
 ## Learn more
 
+- [Expansion and deep optimization roadmap](docs/deep-optimization-roadmap.md) — concrete priorities, domain workflows, limits and release gates.
+- [Stable export and Receipt association](docs/guides/export-evidence.md) — source-only consistent bytes and explicitly unauthenticated evidence.
 - [Verified local delivery](docs/guides/verified-delivery.md) — source-only persistent artifacts, Receipt/file hashes, and an independently checked order-summary example.
 - [Project overview](https://chumanic.com/projects/skilltape/) — Chinese introduction and current platform boundaries.
 - [Domain workflow examples](docs/guides/domain-workflows.md) — source examples for code-review evidence, knowledge references, data-export integrity, and incident-review materials; no external execution or platform connection.

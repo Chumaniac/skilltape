@@ -34,7 +34,36 @@ pub fn publish_directory_noreplace(source: &Path, destination: &Path) -> io::Res
             Err(io::Error::last_os_error())
         }
     }
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn MoveFileW(source: *const u16, destination: *const u16) -> i32;
+        }
+        let encode = |path: &Path| -> io::Result<Vec<u16>> {
+            let mut value: Vec<u16> = path.as_os_str().encode_wide().collect();
+            if value.contains(&0) {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "invalid publication path",
+                ));
+            }
+            value.push(0);
+            Ok(value)
+        };
+        let source = encode(source)?;
+        let destination = encode(destination)?;
+        // MoveFileW refuses an existing destination; both buffers outlive the call.
+        // Directory moves across volumes fail instead of falling back to a partial copy.
+        let result = unsafe { MoveFileW(source.as_ptr(), destination.as_ptr()) };
+        if result != 0 {
+            Ok(())
+        } else {
+            Err(io::Error::last_os_error())
+        }
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
     {
         let _ = (source, destination);
         Err(io::Error::new(
@@ -44,7 +73,7 @@ pub fn publish_directory_noreplace(source: &Path, destination: &Path) -> io::Res
     }
 }
 
-#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+#[cfg(all(test, any(target_os = "linux", target_os = "macos", windows)))]
 mod tests {
     use super::*;
     use std::fs;

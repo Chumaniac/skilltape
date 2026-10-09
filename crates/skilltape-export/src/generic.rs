@@ -4,9 +4,12 @@ use std::path::{Component, Path, PathBuf};
 
 use sha2::{Digest, Sha256};
 use skilltape_core::LoadedSkillPackage;
+use skilltape_core::SkillPackage;
+use skilltape_runner::publish_directory_noreplace;
 use skilltape_schema::Step;
 use tempfile::Builder;
 
+use crate::snapshot::{Snapshot, MAX_DEPTH, MAX_ENTRIES};
 use crate::{ExportError, ExportManifest, Exporter};
 
 const TARGET_ID: &str = "generic-agent-skill";
@@ -52,7 +55,7 @@ impl Exporter for GenericExporter {
         let files = export_files(package)?;
         let output = output.to_owned();
         validate_output(package, &output)?;
-        let package_hash = hash_files(package, &files)?;
+        let snapshot = Snapshot::capture(&package.root, &files)?;
         let parent = output
             .parent()
             .filter(|parent| !parent.as_os_str().is_empty())
@@ -67,12 +70,19 @@ impl Exporter for GenericExporter {
                 path: parent.to_owned(),
                 source,
             })?;
-        for relative in &files {
-            copy_file(package, relative, staging.path())?;
+        snapshot.copy_to(staging.path())?;
+        let staged = SkillPackage::load(staging.path()).map_err(|_| ExportError::ChangedSource)?;
+        if !staged.lint(false).errors.is_empty() {
+            return Err(ExportError::ChangedSource);
+        }
+        let package_hash = hash_files(staging.path(), &files)?;
+        snapshot.check()?;
+        if export_files(package)? != files {
+            return Err(ExportError::ChangedSource);
         }
 
         ensure_output_absent(&output)?;
-        fs::rename(staging.path(), &output).map_err(|source| ExportError::Io {
+        publish_directory_noreplace(staging.path(), &output).map_err(|source| ExportError::Io {
             path: output.clone(),
             source,
         })?;
@@ -81,6 +91,7 @@ impl Exporter for GenericExporter {
             target: TARGET_ID.to_owned(),
             files,
             package_hash,
+            receipt: None,
         })
     }
 }
@@ -93,8 +104,9 @@ fn export_files(package: &LoadedSkillPackage) -> Result<Vec<String>, ExportError
     for relative in OPTIONAL_FILES {
         add_optional_file(package, relative, &mut files)?;
     }
+    let mut entries = files.len();
     for relative in OPTIONAL_DIRECTORIES {
-        collect_tree(package, relative, &mut files)?;
+        collect_tree(package, relative, &mut files, &mut entries, false)?;
     }
 
     let mut referenced_scripts = BTreeSet::new();
@@ -109,9 +121,18 @@ fn export_files(package: &LoadedSkillPackage) -> Result<Vec<String>, ExportError
         }
     }
     for relative in referenced_scripts {
+        if !files.contains(&relative) {
+            entries += 1;
+            if entries > MAX_ENTRIES {
+                return Err(ExportError::Capacity);
+            }
+        }
         add_file(package, &relative, &mut files)?;
     }
 
+    if files.len() > MAX_ENTRIES {
+        return Err(ExportError::Capacity);
+    }
     Ok(files.into_iter().collect())
 }
 
@@ -166,8 +187,13 @@ fn collect_tree(
     package: &LoadedSkillPackage,
     relative_root: &str,
     files: &mut BTreeSet<String>,
+    observed: &mut usize,
+    root_counted: bool,
 ) -> Result<(), ExportError> {
     validate_relative(relative_root)?;
+    if relative_root.split('/').count() > MAX_DEPTH {
+        return Err(ExportError::Capacity);
+    }
     let root = package.root.join(relative_root);
     let metadata = match fs::symlink_metadata(&root) {
         Ok(metadata) => metadata,
@@ -180,17 +206,28 @@ fn collect_tree(
     if !metadata.is_dir() {
         return Err(ExportError::UnsupportedSource { path: root });
     }
+    if !root_counted {
+        *observed += 1;
+        if *observed > MAX_ENTRIES {
+            return Err(ExportError::Capacity);
+        }
+    }
 
-    let mut entries = fs::read_dir(&root)
-        .map_err(|source| ExportError::Io {
+    let reader = fs::read_dir(&root).map_err(|source| ExportError::Io {
+        path: root.clone(),
+        source,
+    })?;
+    let mut entries = Vec::new();
+    for entry in reader {
+        *observed += 1;
+        if *observed > MAX_ENTRIES {
+            return Err(ExportError::Capacity);
+        }
+        entries.push(entry.map_err(|source| ExportError::Io {
             path: root.clone(),
             source,
-        })?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|source| ExportError::Io {
-            path: root.clone(),
-            source,
-        })?;
+        })?);
+    }
     entries.sort_by_key(|entry| entry.file_name());
     for entry in entries {
         let path = entry.path();
@@ -199,7 +236,10 @@ fn collect_tree(
             .map_err(|_| ExportError::UnsafeSource {
                 path: path.to_string_lossy().into_owned(),
             })?
-            .to_string_lossy()
+            .to_str()
+            .ok_or_else(|| ExportError::UnsafeSource {
+                path: "non-UTF-8 export path".into(),
+            })?
             .replace('\\', "/");
         let metadata = fs::symlink_metadata(&path).map_err(|source| ExportError::Io {
             path: path.clone(),
@@ -209,9 +249,12 @@ fn collect_tree(
             return Err(ExportError::SymlinkSource { path });
         }
         if metadata.is_dir() {
-            collect_tree(package, &child, files)?;
+            collect_tree(package, &child, files, observed, true)?;
         } else if metadata.is_file() {
             files.insert(child);
+            if files.len() > MAX_ENTRIES {
+                return Err(ExportError::Capacity);
+            }
         } else {
             return Err(ExportError::UnsupportedSource { path });
         }
@@ -219,65 +262,39 @@ fn collect_tree(
     Ok(())
 }
 
-fn hash_files(package: &LoadedSkillPackage, files: &[String]) -> Result<String, ExportError> {
+fn hash_files(root: &Path, files: &[String]) -> Result<String, ExportError> {
     let mut hasher = Sha256::new();
     for relative in files {
-        let path = package.root.join(relative);
-        ensure_source_ancestors(&package.root, relative)?;
-        let contents = fs::read(&path).map_err(|source| ExportError::Io {
+        let path = root.join(relative);
+        ensure_source_ancestors(root, relative)?;
+        let mut file = fs::File::open(&path).map_err(|source| ExportError::Io {
             path: path.clone(),
             source,
         })?;
+        let bytes = file
+            .metadata()
+            .map_err(|source| ExportError::Io {
+                path: path.clone(),
+                source,
+            })?
+            .len();
         hasher.update(relative.as_bytes());
         hasher.update([0]);
-        hasher.update((contents.len() as u64).to_be_bytes());
-        hasher.update(contents);
+        hasher.update(bytes.to_be_bytes());
+        crate::snapshot::read_observed(&mut file, bytes, |chunk| {
+            hasher.update(chunk);
+            Ok(())
+        })
+        .map_err(|source| ExportError::Io {
+            path: path.clone(),
+            source,
+        })?;
     }
     Ok(hasher
         .finalize()
         .iter()
         .map(|byte| format!("{byte:02x}"))
         .collect::<String>())
-}
-
-fn copy_file(
-    package: &LoadedSkillPackage,
-    relative: &str,
-    staging_root: &Path,
-) -> Result<(), ExportError> {
-    let source = package.root.join(relative);
-    ensure_source_ancestors(&package.root, relative)?;
-    let metadata = fs::symlink_metadata(&source).map_err(|source_error| ExportError::Io {
-        path: source.clone(),
-        source: source_error,
-    })?;
-    if metadata.file_type().is_symlink() {
-        return Err(ExportError::SymlinkSource { path: source });
-    }
-    if !metadata.is_file() {
-        return Err(ExportError::UnsupportedSource { path: source });
-    }
-
-    let destination = staging_root.join(relative);
-    let parent = destination.parent().unwrap_or(staging_root);
-    fs::create_dir_all(parent).map_err(|source| ExportError::Io {
-        path: parent.to_owned(),
-        source,
-    })?;
-    if fs::symlink_metadata(&destination).is_ok() {
-        return Err(ExportError::OutputExists { path: destination });
-    }
-    fs::copy(&source, &destination).map_err(|source_error| ExportError::Io {
-        path: destination.clone(),
-        source: source_error,
-    })?;
-    fs::set_permissions(&destination, metadata.permissions()).map_err(|source| {
-        ExportError::Io {
-            path: destination,
-            source,
-        }
-    })?;
-    Ok(())
 }
 
 pub(crate) fn validate_output(
@@ -336,7 +353,7 @@ pub(crate) fn ensure_output_absent(output: &Path) -> Result<(), ExportError> {
     }
 }
 
-fn ensure_source_ancestors(root: &Path, relative: &str) -> Result<(), ExportError> {
+pub(crate) fn ensure_source_ancestors(root: &Path, relative: &str) -> Result<(), ExportError> {
     let mut current = root.to_owned();
     for component in Path::new(relative).components() {
         let Component::Normal(name) = component else {

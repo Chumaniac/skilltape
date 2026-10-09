@@ -2,6 +2,18 @@
 
 All notable changes to SkillTape are documented here.
 
+## [0.2.2 source candidate] - 2026-10-09
+
+- Bound selected export traversal/copy and package metadata reads; hash the
+  completed staging files and reject detected source changes before publication.
+- Share native no-replace publication across export targets. Windows directory
+  publication gains a native filesystem implementation; Replay/Verify stay closed.
+- Add optional `export --receipt` association with bounded, unambiguous successful
+  metadata and the actual exported package digest. This is not authenticated
+  execution evidence, and normal lint-only export remains available.
+- Add regression coverage, source examples and a full expansion roadmap.
+  Existing published v0.2.1 and all earlier successful assets remain unchanged.
+
 ## [0.2.1] - 2026-10-09
 
 ### Fixed

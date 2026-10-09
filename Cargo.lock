@@ -1966,7 +1966,7 @@ checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
 
 [[package]]
 name = "skilltape-capture"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "libc",
  "notify",
@@ -1983,7 +1983,7 @@ dependencies = [
 
 [[package]]
 name = "skilltape-cli"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "assert_cmd",
  "clap",
@@ -2010,7 +2010,7 @@ dependencies = [
 
 [[package]]
 name = "skilltape-compiler"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -2024,7 +2024,7 @@ dependencies = [
 
 [[package]]
 name = "skilltape-console-api"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "axum",
  "clap",
@@ -2042,9 +2042,10 @@ dependencies = [
 
 [[package]]
 name = "skilltape-core"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "jsonschema",
+ "libc",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -2055,12 +2056,14 @@ dependencies = [
 
 [[package]]
 name = "skilltape-export"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
+ "libc",
  "serde",
  "serde_json",
  "sha2",
  "skilltape-core",
+ "skilltape-runner",
  "skilltape-schema",
  "tempfile",
  "thiserror 2.0.21",
@@ -2068,7 +2071,7 @@ dependencies = [
 
 [[package]]
 name = "skilltape-policy"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -2077,7 +2080,7 @@ dependencies = [
 
 [[package]]
 name = "skilltape-runner"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "libc",
  "serde_json",
@@ -2093,7 +2096,7 @@ dependencies = [
 
 [[package]]
 name = "skilltape-schema"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "jsonschema",
  "serde",
@@ -2104,7 +2107,7 @@ dependencies = [
 
 [[package]]
 name = "skilltape-tape"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "fs2",
  "jsonschema",
@@ -2116,7 +2119,7 @@ dependencies = [
 
 [[package]]
 name = "skilltape-verify"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "jsonschema",
  "serde",

@@ -6,6 +6,34 @@ See the [documentation index](README.md), [installation guide](guides/installati
 and [release workflow](../.github/workflows/release.yml) for the surrounding
 release documentation.
 
+## Source candidate 0.2.2 — 2026-10-09
+
+The current source adds bounded staged-byte export, shared no-replace
+publication and optional successful Receipt association. These capabilities
+are absent from the existing v0.2.1 release assets; no new release is claimed.
+
+- Full locked Rust workspace tests, formatting and warning-free Clippy passed
+  on macOS; package (4), workflow (14), documentation (10) and installer
+  fixture checks passed. Console build and all 5 existing browser tests passed
+  on installed Google Chrome with mocked API responses.
+- A separate native macOS synthetic Capture → Compile → Lint → Verify →
+  Receipt-linked Export passed. Independently hashing the actual export bytes
+  reproduced both the manifest fingerprint and the successful Receipt hash.
+  Existing successful stages were retained and reused.
+- New regressions cover capacity, stable copying, no-overwrite publication,
+  bounded metadata and invalid/mismatched Receipt association. Independent
+  read-only code review found no blocking issue; this is not expert security
+  approval or real Agent acceptance.
+- The added Windows job compiles and tests export/publication only. Its actual
+  hosted result must be checked for the current commit before claiming Windows
+  runtime evidence. Replay/Verify remains unsupported on that platform.
+- Main CI, a separately authorized tag, four-platform release assets and
+  installed-release journeys remain distinct gates. No signing or trusted
+  execution identity is supplied by the optional Receipt association.
+- The repository language scan found no natural-language matches. The raw
+  Markdown audit retains 8 known historical fenced-code example targets;
+  all rendered prose links and new document links resolve.
+
 ## Current merged-main evidence
 
 - The implementation and release workflow are merged on `main` at commit
