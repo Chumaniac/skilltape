@@ -17,6 +17,9 @@ All notable changes to SkillTape are documented here.
 
 ### Fixed
 
+- Replay staging and Verify hashing enforce the same bounded input inventories
+  and length-limited reads. Detected file growth, truncation, entry changes, and
+  unsafe leaf replacements fail closed; stable inputs retain their existing digest.
 - Output-directory publication now uses exclusive native rename on Linux/macOS,
   closing an empty-destination race; overlap checks resolve existing ancestors.
 - Console timeline navigation now exposes all Tape and event pages, preserves
