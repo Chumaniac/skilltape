@@ -17,6 +17,8 @@ All notable changes to SkillTape are documented here.
 
 ### Fixed
 
+- Each bounded input open now checks canonical containment in its selected
+  inventory root; snapshots reuse the metadata obtained during root validation.
 - Replay staging and Verify hashing enforce the same bounded input inventories
   and length-limited reads. Detected file growth, truncation, entry changes, and
   unsafe leaf replacements fail closed; stable inputs retain their existing digest.

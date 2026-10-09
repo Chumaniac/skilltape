@@ -240,7 +240,7 @@ pub(crate) fn validate_relative_path(path: &str) -> Result<(), WorkspaceError> {
     Ok(())
 }
 
-fn ensure_input_root(input_root: &Path) -> Result<(), WorkspaceError> {
+fn ensure_input_root(input_root: &Path) -> Result<fs::Metadata, WorkspaceError> {
     let metadata =
         symlink_metadata(input_root)?.ok_or_else(|| WorkspaceError::InvalidInputRoot {
             path: input_root.to_path_buf(),
@@ -250,12 +250,13 @@ fn ensure_input_root(input_root: &Path) -> Result<(), WorkspaceError> {
             path: input_root.to_path_buf(),
         });
     }
-    ensure_no_symlink_ancestors(input_root)
+    ensure_no_symlink_ancestors(input_root)?;
+    Ok(metadata)
 }
 
 /// Count metadata without reading input bytes or collecting an unbounded directory list.
 pub(crate) fn validate_input_capacity(input_root: &Path) -> Result<(), WorkspaceError> {
-    let root = canonical_input_root(input_root)?;
+    let (root, _) = canonical_input_root(input_root)?;
     let mut entries = 0;
     let mut total_bytes = 0;
     inspect_input_directory(
@@ -276,11 +277,8 @@ pub(crate) struct InputSnapshot {
 
 /// Retain at most the shared entry ceiling, for deterministic bounded input I/O.
 pub(crate) fn input_snapshot(input_root: &Path) -> Result<InputSnapshot, WorkspaceError> {
-    let root = canonical_input_root(input_root)?;
-    let metadata = fs::metadata(&root).map_err(|source| WorkspaceError::Io {
-        path: root.clone(),
-        source,
-    })?;
+    // Reuse the metadata captured by root validation; do not reopen it unchecked.
+    let (root, metadata) = canonical_input_root(input_root)?;
     let mut entries = Vec::new();
     inspect_input_directory(&root, &root, 0, &mut 0, &mut 0, &mut |path, metadata| {
         entries.push((path.to_path_buf(), metadata.clone()));
@@ -294,7 +292,7 @@ pub(crate) fn input_snapshot(input_root: &Path) -> Result<InputSnapshot, Workspa
     })
 }
 
-fn canonical_input_root(input_root: &Path) -> Result<PathBuf, WorkspaceError> {
+fn canonical_input_root(input_root: &Path) -> Result<(PathBuf, fs::Metadata), WorkspaceError> {
     let expected = lexical_workspace_path(input_root)?;
     let resolved = expected
         .canonicalize()
@@ -307,11 +305,11 @@ fn canonical_input_root(input_root: &Path) -> Result<PathBuf, WorkspaceError> {
             path: input_root.to_path_buf(),
         });
     }
-    ensure_input_root(&resolved)?;
-    Ok(resolved)
+    let metadata = ensure_input_root(&resolved)?;
+    Ok((resolved, metadata))
 }
 
-fn lexical_workspace_path(input_root: &Path) -> Result<PathBuf, WorkspaceError> {
+pub(crate) fn lexical_workspace_path(input_root: &Path) -> Result<PathBuf, WorkspaceError> {
     if input_root
         .components()
         .any(|part| matches!(part, Component::ParentDir))

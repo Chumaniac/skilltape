@@ -1,7 +1,8 @@
 //! Input-only bounded hashing and staging. Generic package/output copies keep their own policy.
 
 use crate::workspace::{
-    ensure_no_symlink_ancestors, input_snapshot, InputSnapshot, WorkspaceError,
+    ensure_no_symlink_ancestors, input_snapshot, lexical_workspace_path, InputSnapshot,
+    WorkspaceError,
 };
 use sha2::{Digest, Sha256};
 use std::fs::{self, File, Metadata, OpenOptions};
@@ -44,8 +45,18 @@ fn same_metadata(left: &Metadata, right: &Metadata) -> io::Result<bool> {
     Ok(true)
 }
 
-fn open_input(path: &Path, expected: &Metadata) -> Result<File, WorkspaceError> {
-    ensure_no_symlink_ancestors(path)?;
+fn open_input(root: &Path, path: &Path, expected: &Metadata) -> Result<File, WorkspaceError> {
+    let expected_path = lexical_workspace_path(path)?;
+    let resolved = expected_path
+        .canonicalize()
+        .map_err(|error| failure(path, error))?;
+    // Validate ownership at the read boundary, not only while enumerating paths.
+    if resolved != expected_path || resolved == root || !resolved.starts_with(root) {
+        return Err(WorkspaceError::UnsafePath {
+            path: path.to_string_lossy().into_owned(),
+        });
+    }
+    ensure_no_symlink_ancestors(&resolved)?;
     let mut options = OpenOptions::new();
     options.read(true);
     #[cfg(unix)]
@@ -59,7 +70,9 @@ fn open_input(path: &Path, expected: &Metadata) -> Result<File, WorkspaceError> 
         use std::os::windows::fs::OpenOptionsExt;
         options.custom_flags(0x00200000); // FILE_FLAG_OPEN_REPARSE_POINT
     }
-    let file = options.open(path).map_err(|error| failure(path, error))?;
+    let file = options
+        .open(&resolved)
+        .map_err(|error| failure(path, error))?;
     let metadata = file.metadata().map_err(|error| failure(path, error))?;
     #[cfg(windows)]
     {
@@ -147,7 +160,7 @@ pub(crate) fn digest_input_tree(root: &Path) -> Result<String, WorkspaceError> {
     files.sort_by(|left, right| left.0.cmp(&right.0));
     let mut digest = Sha256::new();
     for (relative, path, metadata) in files {
-        let mut file = open_input(path, metadata)?;
+        let mut file = open_input(&snapshot.root, path, metadata)?;
         digest.update(relative.as_bytes());
         digest.update([0]);
         digest.update(metadata.len().to_be_bytes());
@@ -175,7 +188,7 @@ pub(crate) fn copy_input_tree(root: &Path, destination: &Path) -> Result<(), Wor
         if metadata.is_dir() {
             fs::create_dir(&target).map_err(|error| failure(&target, error))?;
         } else {
-            let mut source = open_input(path, metadata)?;
+            let mut source = open_input(&snapshot.root, path, metadata)?;
             let mut output = OpenOptions::new()
                 .write(true)
                 .create_new(true)
@@ -237,7 +250,7 @@ mod tests {
         let path = root.path().join("data");
         fs::write(&path, vec![b'x'; 8192]).expect("data");
         let snapshot = input_snapshot(root.path()).expect("inventory");
-        let mut input = open_input(&path, &snapshot.entries[0].1).expect("input");
+        let mut input = open_input(&snapshot.root, &path, &snapshot.entries[0].1).expect("input");
         let mut copied = Vec::new();
         let result = read_observed(&mut input, 8192, |bytes| {
             copied.extend_from_slice(bytes);
@@ -252,6 +265,30 @@ mod tests {
         );
         assert_eq!(copied.len(), 8192);
         assert!(check_snapshot(&snapshot).is_err());
+    }
+
+    #[test]
+    fn opening_an_input_requires_the_selected_inventory_root() {
+        let root = tempdir().expect("root");
+        fs::write(root.path().join("data"), b"inside").expect("input");
+        let snapshot = input_snapshot(root.path()).expect("snapshot");
+        let outside = tempdir().expect("outside");
+        let outside_file = outside.path().join("data");
+        fs::write(&outside_file, b"outside").expect("outside fixture");
+        let metadata = fs::metadata(&outside_file).expect("outside metadata");
+        assert!(open_input(&snapshot.root, &outside_file, &metadata).is_err());
+        let traversal = snapshot
+            .root
+            .join("..")
+            .join(outside.path().file_name().expect("outside directory"))
+            .join("data");
+        assert!(open_input(&snapshot.root, &traversal, &metadata).is_err());
+        assert!(open_input(
+            &snapshot.root,
+            &snapshot.entries[0].0,
+            &snapshot.entries[0].1
+        )
+        .is_ok());
     }
 
     #[test]
@@ -291,7 +328,12 @@ mod tests {
         fs::remove_file(root.path().join("new")).expect("remove added");
         fs::write(root.path().join("replacement"), b"new").expect("replacement");
         fs::rename(root.path().join("replacement"), root.path().join("data")).expect("replace");
-        assert!(open_input(&snapshot.entries[0].0, &snapshot.entries[0].1).is_err());
+        assert!(open_input(
+            &snapshot.root,
+            &snapshot.entries[0].0,
+            &snapshot.entries[0].1
+        )
+        .is_err());
     }
 
     #[cfg(unix)]
@@ -308,10 +350,10 @@ mod tests {
         let outside = tempdir().expect("outside");
         fs::write(outside.path().join("data"), b"old").expect("outside fixture");
         symlink(outside.path().join("data"), &path).expect("symlink");
-        assert!(open_input(&path, expected).is_err());
+        assert!(open_input(&snapshot.root, &path, expected).is_err());
         fs::remove_file(&path).expect("remove symlink");
         let encoded = CString::new(path.as_os_str().as_bytes()).expect("FIFO path");
         assert_eq!(unsafe { libc::mkfifo(encoded.as_ptr(), 0o600) }, 0);
-        assert!(open_input(&path, expected).is_err());
+        assert!(open_input(&snapshot.root, &path, expected).is_err());
     }
 }
