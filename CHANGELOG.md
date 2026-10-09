@@ -12,9 +12,9 @@ All notable changes to SkillTape are documented here.
 - Check production Windows binaries in ordinary CI before creating a release.
 - Harden the full-SHA-pinned Rust action's toolchain/target/component inputs.
 
-This is a source candidate until its independent four-platform release and
-published Windows installer checks pass. The immutable v0.2.0 tag below remains
-the record of the earlier failed Windows publication attempt.
+Public release run `37893425823` succeeded for all four platform builds,
+provenance/SBOM/checksums and the published Windows installer. The immutable
+v0.2.0 tag below remains the earlier failed Windows publication record.
 
 ## [0.2.0] - 2026-10-09
 
