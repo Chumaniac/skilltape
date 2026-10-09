@@ -1,0 +1,36 @@
+{
+  "schema": "skilltape.dev/permissions/v1",
+  "filesystem": {
+    "read": [
+      "inputs/orders.csv",
+      "inputs/shipments.csv",
+      "scripts/produce_tenants.pl",
+      "scripts/run_tenants.sh",
+      "outputs/expected.csv",
+      "outputs/allocations.csv",
+      "outputs/summary.json"
+    ],
+    "write": [
+      "outputs/expected.csv",
+      "outputs/allocations.csv",
+      "outputs/summary.json"
+    ]
+  },
+  "process": {
+    "executables": [
+      "/bin/bash",
+      "/usr/bin/perl5.34",
+      "/usr/bin/perl5.30",
+      "/usr/bin/perl"
+    ],
+    "max_processes": 1,
+    "default_timeout_ms": 3000
+  },
+  "network": {
+    "enabled": false,
+    "allow_hosts": []
+  },
+  "secrets": {
+    "read_environment": false
+  }
+}

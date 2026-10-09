@@ -8,6 +8,14 @@ release documentation.
 
 ## Source candidate 0.2.2 — 2026-10-09
 
+Continuation on2026-10-10 adds catalog data/scripts rather than a new binary
+version. The native macOS synthetic tenant producer passed three focused tests;
+separate preserved good/wrong deliveries were independently consumed by
+SkillSync source0.1.6. Both execution Receipts succeeded and bound actual files;
+the composite consumer accepted the good set and rejected two wrong allocations.
+A single local-ID control accepted both balanced totals. Full source CI is
+checked for the continuation commit separately; no new release assets are claimed.
+
 The current source adds bounded staged-byte export, shared no-replace
 publication and optional successful Receipt association. These capabilities
 are absent from the existing v0.2.1 release assets; no new release is claimed.
