@@ -60,6 +60,15 @@ example and an independent inventory check. Preserve old tags and assets.
 
 ## Domain expansion
 
+### Continuation cycle — 2026-10-10
+
+The restricted tenant-delivery example now connects an actual bounded local
+producer to an independently checked physical delivery. Its expectations and
+grouped outputs scope reused local IDs by organization; the SkillSync composite
+contract detects balanced allocation defects. This extends the catalog without
+changing source binary version0.2.2 or the existing public0.2.1 release assets.
+Keep source truth, author identity, policy approval and live platforms separate.
+
 | Domain | Concrete workflow | Useful result | Limit |
 | --- | --- | --- | --- |
 | Code review | Capture a local formatter/test/material collection command | Repeatable review inputs and export identity | No semantic security approval. |

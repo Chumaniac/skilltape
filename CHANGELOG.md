@@ -1,5 +1,16 @@
 # Changelog
 
+## Source catalog continuation — 2026-10-10
+
+- Add a locked, restricted multi-organization delivery example using native Bash
+  and Perl. Combined1MiB/1,000-row input limits, ASCII identities, safe integers,
+  nested tuple grouping and exclusive outputs keep the demo bounded.
+- Preserve expectations and actual allocations for independent SkillSync0.1.6
+  composite checks. Both correct and balanced-wrong inputs execute successfully;
+  the consumer separates runtime success from requirement failures.
+- Add positive, invalid-input, capacity, fixed-diagnostic and no-overwrite checks.
+  Source binary0.2.2 and public0.2.1 assets remain unchanged; no release is claimed.
+
 All notable changes to SkillTape are documented here.
 
 ## [0.2.2 source candidate] - 2026-10-09

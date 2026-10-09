@@ -1,0 +1,4 @@
+tenant_id,order_id,amount_cents
+ORG_A,ORDER_1,400
+ORG_B,ORDER_1,2000
+ORG_A,ORDER_1,600

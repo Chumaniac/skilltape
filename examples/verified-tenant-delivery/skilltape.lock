@@ -1,0 +1,34 @@
+{
+  "schema": "skilltape.dev/lock/v1",
+  "engine": {
+    "version": "0.1.0"
+  },
+  "tools": [
+    {
+      "program": "/bin/bash",
+      "version": "system"
+    },
+    {
+      "program": "/usr/bin/perl5.34",
+      "version": "system"
+    },
+    {
+      "program": "/usr/bin/perl5.30",
+      "version": "system"
+    },
+    {
+      "program": "/usr/bin/perl",
+      "version": "system"
+    }
+  ],
+  "scripts": [
+    {
+      "path": "scripts/produce_tenants.pl",
+      "sha256": "96e3b798334bed09020edff174e03d7c10a406c0a7e24ae6f6cf955a064d4c28"
+    },
+    {
+      "path": "scripts/run_tenants.sh",
+      "sha256": "5b11c03bd3d2f16ecae36c00fb9ca67a6c8b5f2fc27486bdaa3a1880d12467c9"
+    }
+  ]
+}

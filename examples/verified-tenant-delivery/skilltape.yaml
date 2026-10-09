@@ -1,0 +1,45 @@
+{
+  "schema": "skilltape.dev/skill/v1",
+  "name": "verified-tenant-delivery",
+  "version": "0.1.0",
+  "description": "Preserve bounded synthetic organization-local orders and grouped shipments for independent composite-key reconciliation.",
+  "engine": {
+    "min_version": "0.1.0"
+  },
+  "entrypoint": {
+    "workflow": "workflow.yaml",
+    "permissions": "permissions.json",
+    "lockfile": "skilltape.lock"
+  },
+  "inputs": [
+    {
+      "id": "materials",
+      "type": "directory",
+      "required": true,
+      "description": "Synthetic orders.csv and shipments.csv; each local order ID is scoped by organization."
+    }
+  ],
+  "outputs": [
+    {
+      "id": "expected",
+      "type": "file",
+      "path": "outputs/expected.csv"
+    },
+    {
+      "id": "allocations",
+      "type": "file",
+      "path": "outputs/allocations.csv"
+    },
+    {
+      "id": "summary",
+      "type": "file",
+      "path": "outputs/summary.json"
+    }
+  ],
+  "targets": [
+    "generic-agent-skill",
+    "claude-code",
+    "codex",
+    "cursor"
+  ]
+}

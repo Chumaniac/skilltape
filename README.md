@@ -1,5 +1,11 @@
 # SkillTape
 
+The source catalog now includes a [multi-organization delivery](examples/verified-tenant-delivery/README.md)
+with actual bounded local production and independent composite-key checks.
+It keeps same local order IDs separate and demonstrates a successful execution
+whose balanced allocation still fails the consumer contract. Source binary0.2.2
+and the existing public0.2.1 release remain distinct; no live account is used.
+
 > **Beta** — Turn a real local workflow into a reviewable Agent Skill you can replay and verify before you share it.
 
 SkillTape captures a command you already run, turns it into a reviewable Skill,

@@ -1,0 +1,34 @@
+{
+  "schema": "skilltape.dev/workflow/v1",
+  "steps": [
+    {
+      "id": "produce",
+      "action": "exec",
+      "program": "/bin/bash",
+      "args": [
+        "scripts/run_tenants.sh",
+        "--orders",
+        "inputs/orders.csv",
+        "--shipments",
+        "inputs/shipments.csv",
+        "--output-dir",
+        "outputs"
+      ],
+      "timeout_ms": 3000,
+      "outputs": [
+        {
+          "path": "outputs/expected.csv",
+          "type": "file"
+        },
+        {
+          "path": "outputs/allocations.csv",
+          "type": "file"
+        },
+        {
+          "path": "outputs/summary.json",
+          "type": "file"
+        }
+      ]
+    }
+  ]
+}

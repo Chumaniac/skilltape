@@ -115,6 +115,24 @@ real semantic review or a platform sandbox integration.
 
 ## Next adaptation slices
 
+### Multi-organization physical delivery — 2026-10-10
+
+The [tenant delivery catalog example](../../examples/verified-tenant-delivery/README.md)
+runs a locked native Perl producer through the existing restricted executor.
+It retains separate expectations, grouped split shipments and a summary;
+SkillSync source0.1.6 independently reconciles ordered tenant/order tuples.
+Two organizations can reuse a local order ID without their requirements being
+merged. A balanced wrong input can produce a successful execution Receipt while
+the independent data contract rejects two allocations. Execution evidence and
+business requirement evidence therefore remain separate.
+
+The producer uses native Bash, three declared output files, exclusive creation,
+no network/environment access, and combined1MiB/1,000-row input limits. It accepts
+only its documented simple ASCII identity format and nonnegative safe integers.
+This is actual local synthetic process/delivery evidence, not a live customer,
+identity, payment, Agent or provider integration. Existing successful artifacts
+must be retained; use new inputs and new destinations for independent faults.
+
 1. Add domain-specific assertions for bounded, versioned input formats.
 2. Bind verification and execution to one immutable prepared input snapshot,
    while preserving the existing Receipt and output publication contracts.
