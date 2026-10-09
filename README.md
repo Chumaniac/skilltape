@@ -13,7 +13,7 @@ configuration file.
 
 ## Release candidate and verified public version
 
-Source 0.2.0 is prepared with persistent verified deliveries, bounded input reads,
+Source 0.2.1 is prepared with persistent verified deliveries, bounded input reads,
 explicit path containment and noninteractive capture concurrency fixes. Its new
 release requires successful four-platform builds, provenance/checksums and installer
 smoke tests. The historical v0.1.0 download and demo below remain valid until that
