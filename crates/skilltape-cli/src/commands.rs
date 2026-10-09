@@ -92,6 +92,8 @@ enum Command {
         input: Option<PathBuf>,
         #[arg(long)]
         receipt: Option<PathBuf>,
+        #[arg(long, conflicts_with = "receipt")]
+        delivery_dir: Option<PathBuf>,
         #[arg(long)]
         json: bool,
     },
@@ -173,11 +175,13 @@ pub fn run() -> ExitCode {
             skill_path,
             input,
             receipt,
+            delivery_dir,
             json,
         } => run_command::verify(run_command::VerifyConfig {
             skill_path,
             input,
             receipt,
+            delivery_dir,
             json,
         }),
         Command::Export {

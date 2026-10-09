@@ -173,6 +173,78 @@ test('timeline displays redaction state and payload details', async ({ page }) =
   await expect(page.getByText('fixture-workspace')).toBeVisible()
 })
 
+test('timeline pages through tapes and events without accumulating earlier pages', async ({ page }, testInfo) => {
+  await mockApi(page)
+  let failNextPage = true
+  await page.route('**/api/v1/workspaces/default/tapes*', async (route) => {
+    const offset = Number(new URL(route.request().url()).searchParams.get('offset') ?? 0)
+    const tapes = Array.from({ length: 51 }, (_, index) => ({
+      id: 'tape-' + index,
+      schema: 'skilltape.dev/tape/v1',
+      started_at_ms: 0,
+      finished_at_ms: 0,
+      platform: 'test',
+      workspace_root: 'workspace',
+      event_count: 101,
+    }))
+    await route.fulfill({ json: {
+      schema: 'skilltape.dev/console/v1', items: tapes.slice(offset, offset + 50),
+      offset, limit: 50, total: tapes.length, next_offset: offset === 0 ? 50 : null,
+    } })
+  })
+  await page.route('**/api/v1/tapes/tape-*/events*', async (route) => {
+    const url = new URL(route.request().url())
+    const offset = Number(url.searchParams.get('offset') ?? 0)
+    if (offset === 100 && failNextPage) {
+      failNextPage = false
+      await route.fulfill({ status: 503, json: { error: { message: 'Synthetic page unavailable.' } } })
+      return
+    }
+    const events = Array.from({ length: 101 }, (_, sequence) => ({
+      sequence, occurred_at_ms: 0, kind: 'terminal_command', source: 'shell',
+      payload: { note: 'synthetic event ' + sequence }, redaction: 'redacted',
+    }))
+    await route.fulfill({ json: {
+      schema: 'skilltape.dev/console/v1', tape_id: url.pathname.split('/')[4],
+      events: events.slice(offset, offset + 100), offset, limit: 100, total: events.length,
+      next_offset: offset === 0 ? 100 : null,
+    } })
+  })
+
+  await page.goto('/#timeline')
+  await expect(page.locator('.event-row')).toHaveCount(100)
+  await expect(page.getByRole('button', { name: 'Previous events' })).toBeDisabled()
+  await expect(page.getByText('Finished', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Next events' }).click()
+  await expect(page.getByRole('alert')).toContainText('Synthetic page unavailable.')
+  await page.getByRole('button', { name: 'Retry request' }).click()
+  await expect(page.locator('.event-row')).toHaveCount(1)
+  await expect(page.getByText('#0100', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Next events' })).toBeDisabled()
+  await page.getByRole('button', { name: 'Previous events' }).click()
+  await expect(page.locator('.event-row')).toHaveCount(100)
+  await expect(page.getByText('#0000', { exact: true })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Next tapes' }).click()
+  await expect(page.getByRole('combobox', { name: 'Select capture tape' })).toHaveValue('tape-50')
+  await expect(page.locator('select option')).toHaveCount(1)
+  await expect(page.locator('.event-row')).toHaveCount(100)
+  await page.getByRole('button', { name: 'Next events' }).click()
+  await expect(page.getByText('#0100', { exact: true })).toBeVisible()
+  await page.reload()
+  await expect(page.getByRole('combobox', { name: 'Select capture tape' })).toHaveValue('tape-50')
+  await expect(page.getByText('#0100', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Previous tapes' }).click()
+  await expect(page.getByRole('combobox', { name: 'Select capture tape' })).toHaveValue('tape-0')
+  await page.getByRole('combobox', { name: 'Select capture tape' }).selectOption('tape-1')
+  await expect(page.getByText('#0000', { exact: true })).toBeVisible()
+  await expect(page.locator('.event-row')).toHaveCount(100)
+  await page.screenshot({ path: testInfo.outputPath('pagination-desktop.png') })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(page.getByRole('button', { name: 'Next tapes' })).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('pagination-mobile.png') })
+})
+
 test('navigation opens compile and permission review pages', async ({ page }) => {
   await mockApi(page)
   await page.goto('/#compile?skill=demo')

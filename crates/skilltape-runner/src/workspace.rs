@@ -8,10 +8,18 @@ use skilltape_schema::Step;
 use tempfile::{Builder, TempDir};
 use thiserror::Error;
 
+// Shared metadata and actual input I/O ceilings; package scripts and outputs use separate paths.
+const INPUT_MAX_ENTRIES: u64 = 10_000;
+const INPUT_MAX_DEPTH: u64 = 64;
+const INPUT_MAX_FILE_BYTES: u64 = 16 * 1024 * 1024;
+const INPUT_MAX_TOTAL_BYTES: u64 = 64 * 1024 * 1024;
+
 #[derive(Debug, Error)]
 pub(crate) enum WorkspaceError {
     #[error("input root is not a regular directory: {path}")]
     InvalidInputRoot { path: PathBuf },
+    #[error("input capacity exceeded: {dimension} limit is {limit}")]
+    InputCapacity { dimension: &'static str, limit: u64 },
     #[error("workspace path is unsafe: {path}")]
     UnsafePath { path: String },
     #[error("symlinks are not allowed in a replay workspace: {path}")]
@@ -53,7 +61,7 @@ impl ReplayWorkspace {
         })?;
         let root = tempdir.path().to_path_buf();
 
-        copy_entry(input_root, &root.join("inputs"))?;
+        crate::input_io::copy_input_tree(input_root, &root.join("inputs"))?;
         copy_referenced_scripts(package, &root)?;
 
         Ok(Self {
@@ -129,9 +137,11 @@ impl ReplayWorkspace {
                 path: output_root.to_path_buf(),
             });
         }
-        fs::rename(staging.path(), output_root).map_err(|source| WorkspaceError::Io {
-            path: output_root.to_path_buf(),
-            source,
+        crate::publish_directory_noreplace(staging.path(), output_root).map_err(|source| {
+            WorkspaceError::Io {
+                path: output_root.to_path_buf(),
+                source,
+            }
         })?;
 
         Ok(())
@@ -230,7 +240,7 @@ pub(crate) fn validate_relative_path(path: &str) -> Result<(), WorkspaceError> {
     Ok(())
 }
 
-fn ensure_input_root(input_root: &Path) -> Result<(), WorkspaceError> {
+fn ensure_input_root(input_root: &Path) -> Result<fs::Metadata, WorkspaceError> {
     let metadata =
         symlink_metadata(input_root)?.ok_or_else(|| WorkspaceError::InvalidInputRoot {
             path: input_root.to_path_buf(),
@@ -240,7 +250,164 @@ fn ensure_input_root(input_root: &Path) -> Result<(), WorkspaceError> {
             path: input_root.to_path_buf(),
         });
     }
-    ensure_no_symlink_ancestors(input_root)
+    ensure_no_symlink_ancestors(input_root)?;
+    Ok(metadata)
+}
+
+/// Count metadata without reading input bytes or collecting an unbounded directory list.
+pub(crate) fn validate_input_capacity(input_root: &Path) -> Result<(), WorkspaceError> {
+    let (root, _) = canonical_input_root(input_root)?;
+    let mut entries = 0;
+    let mut total_bytes = 0;
+    inspect_input_directory(
+        &root,
+        &root,
+        0,
+        &mut entries,
+        &mut total_bytes,
+        &mut |_, _| Ok(()),
+    )
+}
+
+pub(crate) struct InputSnapshot {
+    pub root: PathBuf,
+    pub metadata: fs::Metadata,
+    pub entries: Vec<(PathBuf, fs::Metadata)>,
+}
+
+/// Retain at most the shared entry ceiling, for deterministic bounded input I/O.
+pub(crate) fn input_snapshot(input_root: &Path) -> Result<InputSnapshot, WorkspaceError> {
+    // Reuse the metadata captured by root validation; do not reopen it unchecked.
+    let (root, metadata) = canonical_input_root(input_root)?;
+    let mut entries = Vec::new();
+    inspect_input_directory(&root, &root, 0, &mut 0, &mut 0, &mut |path, metadata| {
+        entries.push((path.to_path_buf(), metadata.clone()));
+        Ok(())
+    })?;
+    entries.sort_by(|left, right| left.0.cmp(&right.0));
+    Ok(InputSnapshot {
+        root,
+        metadata,
+        entries,
+    })
+}
+
+fn canonical_input_root(input_root: &Path) -> Result<(PathBuf, fs::Metadata), WorkspaceError> {
+    let expected = lexical_workspace_path(input_root)?;
+    let resolved = expected
+        .canonicalize()
+        .map_err(|source| WorkspaceError::Io {
+            path: input_root.to_path_buf(),
+            source,
+        })?;
+    if resolved != expected || !resolved.starts_with(&expected) {
+        return Err(WorkspaceError::InvalidInputRoot {
+            path: input_root.to_path_buf(),
+        });
+    }
+    let metadata = ensure_input_root(&resolved)?;
+    Ok((resolved, metadata))
+}
+
+pub(crate) fn lexical_workspace_path(input_root: &Path) -> Result<PathBuf, WorkspaceError> {
+    if input_root
+        .components()
+        .any(|part| matches!(part, Component::ParentDir))
+    {
+        return Err(WorkspaceError::UnsafePath {
+            path: input_root.to_string_lossy().into_owned(),
+        });
+    }
+    let absolute = std::path::absolute(input_root).map_err(|source| WorkspaceError::Io {
+        path: input_root.to_path_buf(),
+        source,
+    })?;
+    let mut expected = PathBuf::new();
+    for part in absolute.components() {
+        expected.push(part);
+        // Preserve only the already-approved macOS /tmp, /var and /etc aliases.
+        if is_allowed_system_alias(&expected) {
+            expected = expected
+                .canonicalize()
+                .map_err(|source| WorkspaceError::Io {
+                    path: input_root.to_path_buf(),
+                    source,
+                })?;
+        }
+    }
+    Ok(expected)
+}
+
+fn inspect_input_directory(
+    root: &Path,
+    current: &Path,
+    depth: u64,
+    entries: &mut u64,
+    total_bytes: &mut u64,
+    visit: &mut impl FnMut(&Path, &fs::Metadata) -> Result<(), WorkspaceError>,
+) -> Result<(), WorkspaceError> {
+    let resolved = current
+        .canonicalize()
+        .map_err(|source| WorkspaceError::Io {
+            path: current.to_path_buf(),
+            source,
+        })?;
+    if resolved != current || !resolved.starts_with(root) {
+        return Err(WorkspaceError::UnsafePath {
+            path: current.to_string_lossy().into_owned(),
+        });
+    }
+    ensure_no_symlink_ancestors(current)?;
+    let directory = fs::read_dir(&resolved).map_err(|source| WorkspaceError::Io {
+        path: current.to_path_buf(),
+        source,
+    })?;
+    for entry in directory {
+        let path = entry
+            .map_err(|source| WorkspaceError::Io {
+                path: current.to_path_buf(),
+                source,
+            })?
+            .path();
+        *entries += 1;
+        check_input_limit(*entries, INPUT_MAX_ENTRIES, "entries")?;
+        check_input_limit(depth + 1, INPUT_MAX_DEPTH, "depth")?;
+        ensure_no_symlink_ancestors(&path)?;
+        let metadata = symlink_metadata(&path)?.ok_or_else(|| WorkspaceError::Io {
+            path: path.clone(),
+            source: io::Error::new(io::ErrorKind::NotFound, "input entry disappeared"),
+        })?;
+        if metadata.is_symlink() {
+            return Err(WorkspaceError::Symlink { path });
+        }
+        if metadata.is_dir() {
+            visit(&path, &metadata)?;
+            inspect_input_directory(root, &path, depth + 1, entries, total_bytes, visit)?;
+        } else if metadata.is_file() {
+            check_input_limit(metadata.len(), INPUT_MAX_FILE_BYTES, "file_bytes")?;
+            // Both addends have already been capped; the sum cannot overflow u64.
+            *total_bytes += metadata.len();
+            check_input_limit(*total_bytes, INPUT_MAX_TOTAL_BYTES, "total_bytes")?;
+            visit(&path, &metadata)?;
+        } else {
+            return Err(WorkspaceError::Io {
+                path,
+                source: io::Error::new(io::ErrorKind::InvalidInput, "unsupported input entry"),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn check_input_limit(
+    value: u64,
+    limit: u64,
+    dimension: &'static str,
+) -> Result<(), WorkspaceError> {
+    if value > limit {
+        return Err(WorkspaceError::InputCapacity { dimension, limit });
+    }
+    Ok(())
 }
 
 fn copy_referenced_scripts(
@@ -399,7 +566,35 @@ fn is_allowed_system_alias(_path: &Path) -> bool {
 }
 
 fn symlink_metadata(path: &Path) -> Result<Option<fs::Metadata>, WorkspaceError> {
-    match fs::symlink_metadata(path) {
+    let expected = lexical_workspace_path(path)?;
+    let resolved = match expected.canonicalize() {
+        Ok(resolved) => resolved,
+        Err(source) if source.kind() == io::ErrorKind::NotFound => {
+            // A dangling link is an existing unsafe entry, not an absent target.
+            return match fs::read_link(&expected) {
+                Ok(_) => Err(WorkspaceError::Symlink {
+                    path: path.to_path_buf(),
+                }),
+                Err(source) if source.kind() == io::ErrorKind::NotFound => Ok(None),
+                Err(source) => Err(WorkspaceError::Io {
+                    path: path.to_path_buf(),
+                    source,
+                }),
+            };
+        }
+        Err(source) => {
+            return Err(WorkspaceError::Io {
+                path: path.to_path_buf(),
+                source,
+            })
+        }
+    };
+    if resolved != expected || !resolved.starts_with(&expected) {
+        return Err(WorkspaceError::Symlink {
+            path: path.to_path_buf(),
+        });
+    }
+    match fs::symlink_metadata(&resolved) {
         Ok(metadata) => Ok(Some(metadata)),
         Err(source) if source.kind() == io::ErrorKind::NotFound => Ok(None),
         Err(source) => Err(WorkspaceError::Io {

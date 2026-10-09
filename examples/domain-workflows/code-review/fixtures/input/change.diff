@@ -1,0 +1,6 @@
+diff --git a/count.js b/count.js
+--- a/count.js
++++ b/count.js
+@@ -1 +1 @@
+-return count + 1;
++return count + 2;

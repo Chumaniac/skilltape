@@ -1,0 +1,21 @@
+{
+  "schema": "skilltape.dev/workflow/v1",
+  "steps": [
+    {
+      "id": "copy-0",
+      "action": "file",
+      "operation": "copy",
+      "from": "inputs/metrics.csv",
+      "to": "outputs/data/metrics.csv"
+    },
+    {
+      "id": "check-0",
+      "action": "assert",
+      "assertion": {
+        "type": "file_hash",
+        "path": "outputs/data/metrics.csv",
+        "hash": "6aba797bc10e195a929a7cbd58f1df9ac542827a4b8046bc40074a1506e52b4d"
+      }
+    }
+  ]
+}

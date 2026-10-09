@@ -54,6 +54,16 @@ Compile, Lint, and Export remain usable while Replay and Verify fail closed.
 Windows supports Capture, Compile, Lint, and Export; Replay and Verify
 intentionally fail closed until an equivalent restricted executor is integrated.
 
+The source Console supports previous/next navigation through Tapes and events,
+keeping only the current page in memory. See the [Console guide](docs/guides/configuration.md#local-console-overrides)
+for startup details. This improvement is not included in the published v0.1.0 assets.
+
+The current source also bounds Replay/Verify inputs to 10,000 entries, depth 64,
+16 MiB per file, and 64 MiB in total. Hashing and staging reject detected changes
+instead of reading a growing file without a limit. See the
+[input integrity boundaries](docs/guides/domain-workflows.md) for platform and
+concurrent-change limits. This source improvement is not in the published v0.1.0 assets.
+
 ## Use SkillTape when
 
 - You have a local command or workflow worth making repeatable and reviewable.
@@ -68,6 +78,9 @@ intentionally fail closed until an equivalent restricted executor is integrated.
 
 ## Learn more
 
+- [Verified local delivery](docs/guides/verified-delivery.md) — source-only persistent artifacts, Receipt/file hashes, and an independently checked order-summary example.
+- [Project overview](https://chumanic.com/projects/skilltape/) — Chinese introduction and current platform boundaries.
+- [Domain workflow examples](docs/guides/domain-workflows.md) — source examples for code-review evidence, knowledge references, data-export integrity, and incident-review materials; no external execution or platform connection.
 - [Quickstart](docs/guides/quickstart.md) — the same first verified result with troubleshooting.
 - [Installation](docs/guides/installation.md) — platform, update, source-build, and release details.
 - [Configuration](docs/guides/configuration.md) — optional release, installation, and Console settings.

@@ -845,6 +845,42 @@ async fn rejects_symlinked_input_root() {
     ));
 }
 
+#[tokio::test]
+async fn input_capacity_is_rejected_before_events_or_output() {
+    let root = tempdir().expect("root");
+    let input = root.path().join("input");
+    fs::create_dir(&input).expect("input");
+    fs::File::create(input.join("oversized.diff"))
+        .expect("sparse fixture")
+        .set_len(16 * 1024 * 1024 + 1)
+        .expect("fixture size");
+    let fixture = package(vec![], permissions(&[], &[], &[]));
+    let adapter = FakeAdapter::new(FakeBehavior::SpawnFailure);
+    let output = root.path().join("output");
+    let (sender, mut receiver) = mpsc::channel(4);
+    let result = run_skill_with_adapter(
+        RunRequest {
+            package: fixture.package,
+            input_root: input,
+            output_root: output.clone(),
+            limits: limits(),
+        },
+        PolicyEngine::default(),
+        sender,
+        CancellationToken::new(),
+        &adapter,
+    )
+    .await;
+    let error = result.expect_err("oversized inputs must fail preflight");
+    assert!(error.to_string().contains("input capacity exceeded"));
+    assert_eq!(adapter.calls(), 0);
+    assert!(
+        receiver.try_recv().is_err(),
+        "preflight emits no run events"
+    );
+    assert!(!output.exists());
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn real_printf_uses_isolated_process_environment() {

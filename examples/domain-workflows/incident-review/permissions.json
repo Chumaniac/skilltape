@@ -1,0 +1,27 @@
+{
+  "schema": "skilltape.dev/permissions/v1",
+  "filesystem": {
+    "read": [
+      "inputs/incident.md",
+      "inputs/runbook.md",
+      "outputs/incident/incident.md",
+      "outputs/incident/runbook.md"
+    ],
+    "write": [
+      "outputs/incident/incident.md",
+      "outputs/incident/runbook.md"
+    ]
+  },
+  "process": {
+    "executables": [],
+    "max_processes": 1,
+    "default_timeout_ms": 1000
+  },
+  "network": {
+    "enabled": false,
+    "allow_hosts": []
+  },
+  "secrets": {
+    "read_environment": false
+  }
+}

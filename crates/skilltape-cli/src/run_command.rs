@@ -25,6 +25,9 @@ const POLICY_ERROR_EXIT_CODE: u8 = 3;
 const RUNTIME_ERROR_EXIT_CODE: u8 = 4;
 const CANCELLED_EXIT_CODE: u8 = 5;
 
+#[path = "delivery.rs"]
+mod delivery;
+
 #[derive(Debug)]
 pub(crate) struct ReplayConfig {
     pub skill_path: PathBuf,
@@ -37,6 +40,7 @@ pub(crate) struct VerifyConfig {
     pub skill_path: PathBuf,
     pub input: Option<PathBuf>,
     pub receipt: Option<PathBuf>,
+    pub delivery_dir: Option<PathBuf>,
     pub json: bool,
 }
 
@@ -66,6 +70,8 @@ enum RunCommandError {
     Serialization(#[from] serde_json::Error),
     #[error("replay task failed: {0}")]
     Task(String),
+    #[error("delivery failed: {0}")]
+    Delivery(#[from] delivery::DeliveryError),
 }
 
 struct RunRoots {
@@ -190,13 +196,21 @@ fn execute_replay(config: ReplayConfig) -> Result<RunSummary, RunCommandError> {
 
 fn execute_verify(config: VerifyConfig) -> Result<Receipt, RunCommandError> {
     let package = SkillPackage::load(config.skill_path)?;
-    let roots = prepare_roots(config.input)?;
+    let mut roots = prepare_roots(config.input)?;
+    let delivery = config
+        .delivery_dir
+        .as_deref()
+        .map(|path| delivery::Delivery::prepare(path, &package.root, &roots.input))
+        .transpose()?;
+    if let Some(delivery) = &delivery {
+        roots.output = delivery.artifact_root();
+    }
     let limits = limits_for(&package);
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .map_err(|error| RunCommandError::Task(error.to_string()))?;
-    runtime
+    let receipt = runtime
         .block_on(verify_run(VerifyRequest {
             package,
             input_root: roots.input,
@@ -204,7 +218,13 @@ fn execute_verify(config: VerifyConfig) -> Result<Receipt, RunCommandError> {
             limits,
             assertions: Vec::new(),
         }))
-        .map_err(RunCommandError::from)
+        .map_err(RunCommandError::from)?;
+    if receipt.status == ReceiptStatus::Succeeded {
+        if let Some(delivery) = delivery {
+            delivery.finish(&receipt)?;
+        }
+    }
+    Ok(receipt)
 }
 
 async fn run_package(
@@ -391,6 +411,13 @@ fn error_exit_code(error: &RunCommandError) -> ExitCode {
         | RunCommandError::UnsafeReceipt(_)
         | RunCommandError::ReceiptExists(_)
         | RunCommandError::ReceiptIo { .. } => INPUT_ERROR_EXIT_CODE,
+        RunCommandError::Delivery(error) => {
+            if error.is_input() {
+                INPUT_ERROR_EXIT_CODE
+            } else {
+                RUNTIME_ERROR_EXIT_CODE
+            }
+        }
         RunCommandError::Verify(error) => verify_error_code(error),
         RunCommandError::Runner(error) => runner_error_code(error),
         RunCommandError::Temp(_) | RunCommandError::Serialization(_) | RunCommandError::Task(_) => {
@@ -415,6 +442,7 @@ fn verify_error_code(error: &VerifyError) -> u8 {
 fn runner_error_code(error: &RunError) -> u8 {
     match error {
         RunError::InvalidInputRoot { .. }
+        | RunError::InputCapacity { .. }
         | RunError::InvalidLimits { .. }
         | RunError::UnsafeOutputRoot { .. } => INPUT_ERROR_EXIT_CODE,
         RunError::Workspace { .. }

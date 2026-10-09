@@ -2,6 +2,7 @@
 
 use std::collections::BTreeSet;
 use std::fs;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -13,7 +14,9 @@ use thiserror::Error;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
+mod input_io;
 mod process;
+mod publication;
 #[cfg(target_os = "windows")]
 mod windows;
 mod workspace;
@@ -22,6 +25,7 @@ pub use process::{
     ProcessAdapter, ProcessError, ProcessFuture, ProcessOutput, ProcessRequest, ProcessStatus,
     TokioProcessAdapter,
 };
+pub use publication::publish_directory_noreplace;
 
 use workspace::{copy_path, make_directory, move_path, ReplayWorkspace, WorkspaceError};
 
@@ -142,6 +146,8 @@ pub struct RunSummary {
 pub enum RunError {
     #[error("input root is invalid: {path}")]
     InvalidInputRoot { path: PathBuf },
+    #[error("input capacity exceeded: {dimension} limit is {limit}")]
+    InputCapacity { dimension: &'static str, limit: u64 },
     #[error("resource limits are invalid: {message}")]
     InvalidLimits { message: String },
     #[error("output root overlaps an input or package path: {path}")]
@@ -152,6 +158,33 @@ pub enum RunError {
     Materialization { message: String },
     #[error("run event channel closed")]
     EventChannelClosed,
+}
+
+/// Reject oversized or unsafe input trees before content hashing or workspace copying.
+///
+/// The metadata snapshot permits at most 10,000 descendant entries, depth 64,
+/// 16 MiB per regular file and 64 MiB in total. It does not freeze the source,
+/// enforce disk quotas, or validate domain semantics. Input hashing and staging
+/// separately bound actual reads and recheck the inventory after completion.
+pub fn preflight_input_capacity(input_root: &Path) -> Result<(), RunError> {
+    workspace::validate_input_capacity(input_root).map_err(workspace_setup_error)
+}
+
+/// Hash a bounded input snapshot using the existing path/length/content digest format.
+pub fn digest_input_tree(input_root: &Path) -> Result<String, RunError> {
+    input_io::digest_input_tree(input_root).map_err(workspace_setup_error)
+}
+
+fn workspace_setup_error(error: WorkspaceError) -> RunError {
+    match error {
+        WorkspaceError::InvalidInputRoot { path } => RunError::InvalidInputRoot { path },
+        WorkspaceError::InputCapacity { dimension, limit } => {
+            RunError::InputCapacity { dimension, limit }
+        }
+        error => RunError::Workspace {
+            message: error.to_string(),
+        },
+    }
 }
 
 /// Run a package with the real async process adapter.
@@ -183,17 +216,9 @@ where
         &request.output_root,
     )?;
 
-    let workspace = match ReplayWorkspace::prepare(&request.package, &request.input_root) {
-        Ok(workspace) => workspace,
-        Err(WorkspaceError::InvalidInputRoot { path }) => {
-            return Err(RunError::InvalidInputRoot { path });
-        }
-        Err(error) => {
-            return Err(RunError::Workspace {
-                message: error.to_string(),
-            })
-        }
-    };
+    preflight_input_capacity(&request.input_root)?;
+    let workspace = ReplayWorkspace::prepare(&request.package, &request.input_root)
+        .map_err(workspace_setup_error)?;
 
     let mut summary = RunSummary {
         status: RunStatus::Succeeded,
@@ -559,8 +584,21 @@ fn execute_assert(
                     .hash
                     .as_deref()
                     .ok_or_else(|| "file_hash assertion requires a hash".to_owned())?;
-                let contents = fs::read(&path).map_err(|error| error.to_string())?;
-                let actual = Sha256::digest(contents)
+                let mut file = fs::File::open(&path).map_err(|error| error.to_string())?;
+                let mut hasher = Sha256::new();
+                let mut buffer = [0_u8; 8192];
+                loop {
+                    let bytes_read = match file.read(&mut buffer) {
+                        Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                        result => result.map_err(|error| error.to_string())?,
+                    };
+                    if bytes_read == 0 {
+                        break;
+                    }
+                    hasher.update(&buffer[..bytes_read]);
+                }
+                let actual = hasher
+                    .finalize()
                     .iter()
                     .map(|byte| format!("{byte:02x}"))
                     .collect::<String>();
@@ -758,7 +796,8 @@ fn validate_limits(
     Ok(())
 }
 
-fn validate_output_root(
+/// Reject an output directory overlapping a package or input tree.
+pub fn validate_output_root(
     package_root: &Path,
     input_root: &Path,
     output_root: &Path,
@@ -775,12 +814,29 @@ fn validate_output_root(
 }
 
 fn comparable_path(path: &Path) -> PathBuf {
-    if path.is_absolute() {
+    let absolute = if path.is_absolute() {
         path.to_path_buf()
     } else {
         std::env::current_dir()
             .map(|current| current.join(path))
             .unwrap_or_else(|_| path.to_path_buf())
+    };
+    let mut ancestor = absolute.as_path();
+    let mut pending = Vec::new();
+    loop {
+        if let Ok(mut canonical) = ancestor.canonicalize() {
+            for part in pending.iter().rev() {
+                canonical.push(part);
+            }
+            return canonical;
+        }
+        match (ancestor.file_name(), ancestor.parent()) {
+            (Some(part), Some(parent)) => {
+                pending.push(part.to_owned());
+                ancestor = parent;
+            }
+            _ => return absolute,
+        }
     }
 }
 

@@ -47,15 +47,15 @@ export function getWorkspaces(signal?: AbortSignal) {
   return get<Collection<WorkspaceSummary>>('/workspaces', signal)
 }
 
-export function getTapes(workspaceId: string, signal?: AbortSignal) {
+export function getTapes(workspaceId: string, signal?: AbortSignal, offset = 0) {
   return get<Collection<TapeSummary>>(
-    '/workspaces/' + encodeURIComponent(workspaceId) + '/tapes?limit=50',
+    '/workspaces/' + encodeURIComponent(workspaceId) + '/tapes?limit=50&offset=' + offset,
     signal,
   )
 }
 
-export function getTapeEvents(tapeId: string, signal?: AbortSignal) {
-  return get<TapeEvents>('/tapes/' + encodeURIComponent(tapeId) + '/events?limit=100', signal)
+export function getTapeEvents(tapeId: string, signal?: AbortSignal, offset = 0) {
+  return get<TapeEvents>('/tapes/' + encodeURIComponent(tapeId) + '/events?limit=100&offset=' + offset, signal)
 }
 
 export function getSkillDiff(skillId: string, signal?: AbortSignal) {
