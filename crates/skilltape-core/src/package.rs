@@ -1,5 +1,6 @@
 use std::collections::BTreeSet;
 use std::fs;
+use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 
 use skilltape_schema::{
@@ -53,6 +54,8 @@ pub enum PackageError {
     UnsafePackagePath { file: String },
     #[error("required package path is not a complete file: {file}")]
     IncompleteRequiredFile { file: String },
+    #[error("package metadata exceeds its capacity or changed while reading: {file}")]
+    MetadataCapacity { file: String },
 }
 
 impl SkillPackage {
@@ -449,7 +452,81 @@ fn read_json(root: &Path, file: &str) -> Result<serde_json::Value, PackageError>
 }
 
 fn read_to_string(root: &Path, file: &str) -> Result<String, PackageError> {
-    fs::read_to_string(root.join(file)).map_err(|source| PackageError::InvalidFile {
+    const MAX_METADATA_BYTES: u64 = 16 * 1024 * 1024;
+    let path = root.join(file);
+    let invalid = || PackageError::MetadataCapacity {
+        file: file.to_owned(),
+    };
+    let io_error = |source: std::io::Error| PackageError::InvalidFile {
+        file: file.to_owned(),
+        source: Box::new(source),
+    };
+    let before = fs::symlink_metadata(&path).map_err(io_error)?;
+    if !before.is_file() || before.file_type().is_symlink() || before.len() > MAX_METADATA_BYTES {
+        return Err(invalid());
+    }
+    let mut options = fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        options.custom_flags(0x00200000);
+    }
+    let mut input = options.open(&path).map_err(io_error)?;
+    let observed = input.metadata().map_err(io_error)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        if before.dev() != observed.dev() || before.ino() != observed.ino() {
+            return Err(invalid());
+        }
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        if observed.file_attributes() & 0x400 != 0 {
+            return Err(invalid());
+        }
+    }
+    if !observed.is_file()
+        || observed.len() != before.len()
+        || observed.modified().map_err(io_error)? != before.modified().map_err(io_error)?
+    {
+        return Err(invalid());
+    }
+    let mut bytes = Vec::new();
+    (&mut input)
+        .take(before.len() + 1)
+        .read_to_end(&mut bytes)
+        .map_err(io_error)?;
+    let finished = input.metadata().map_err(io_error)?;
+    let after = fs::symlink_metadata(&path).map_err(io_error)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        if after.dev() != before.dev()
+            || after.ino() != before.ino()
+            || after.ctime() != before.ctime()
+            || after.ctime_nsec() != before.ctime_nsec()
+        {
+            return Err(invalid());
+        }
+    }
+    if bytes.len() as u64 != before.len()
+        || after.file_type().is_symlink()
+        || after.len() != before.len()
+        || after.modified().map_err(io_error)? != before.modified().map_err(io_error)?
+        || finished.len() != before.len()
+        || finished.modified().map_err(io_error)? != before.modified().map_err(io_error)?
+    {
+        return Err(invalid());
+    }
+    String::from_utf8(bytes).map_err(|source| PackageError::InvalidFile {
         file: file.to_owned(),
         source: Box::new(source),
     })

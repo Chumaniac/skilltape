@@ -9,6 +9,18 @@ struct TestPackage {
     root: PathBuf,
 }
 
+#[test]
+fn metadata_capacity_is_checked_before_parsing_valid_large_documents() {
+    use std::io::Write;
+    let package = TestPackage::valid();
+    let mut file = fs::OpenOptions::new()
+        .append(true)
+        .open(package.root.join("workflow.yaml"))
+        .unwrap();
+    file.write_all(&vec![b' '; 16 * 1024 * 1024]).unwrap();
+    assert!(SkillPackage::load(&package.root).is_err());
+}
+
 impl TestPackage {
     fn valid() -> Self {
         let temp = TempDir::new().expect("temporary package parent");

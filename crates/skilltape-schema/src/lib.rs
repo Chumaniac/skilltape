@@ -14,6 +14,7 @@ pub enum SchemaId {
     WorkflowV1,
     PermissionsV1,
     LockV1,
+    ReceiptV1,
 }
 
 impl SchemaId {
@@ -23,6 +24,7 @@ impl SchemaId {
             Self::WorkflowV1 => "skilltape.dev/workflow/v1",
             Self::PermissionsV1 => "skilltape.dev/permissions/v1",
             Self::LockV1 => "skilltape.dev/lock/v1",
+            Self::ReceiptV1 => "skilltape.dev/receipt/v1",
         }
     }
 }

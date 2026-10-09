@@ -67,6 +67,125 @@ fn generic_export_json_is_a_stable_manifest_and_publishes_files() {
 }
 
 #[test]
+fn receipt_linked_export_matches_successful_metadata_without_claiming_authentication() {
+    let temp = TempDir::new().expect("temporary receipt fixture");
+    let package = package_with_targets(temp.path(), &["generic-agent-skill"]);
+    let first = export_command(&package, "generic", &temp.path().join("baseline"), true)
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let manifest: Value = serde_json::from_slice(&first).unwrap();
+    let workflow: Value =
+        serde_yaml::from_slice(&fs::read(package.join("workflow.yaml")).unwrap()).unwrap();
+    let steps: Vec<Value> = workflow["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|step| {
+            json!({
+                "step_id": step["id"], "status": "succeeded", "exit_code": 0,
+                "stdout_sha256": "0".repeat(64), "stdout_bytes": 0, "stdout_truncated": false,
+                "stderr_sha256": "0".repeat(64), "stderr_bytes": 0, "stderr_truncated": false
+            })
+        })
+        .collect();
+    let receipt = temp.path().join("synthetic-receipt.json");
+    fs::write(&receipt, serde_json::to_vec(&json!({"schema":"skilltape.dev/receipt/v1", "run_id":"a".repeat(64),
+        "skill_hash":manifest["package_hash"], "status":"succeeded", "steps":steps, "assertions":[], "policy_decisions":[]})).unwrap()).unwrap();
+    let output = temp.path().join("linked");
+    let result = Command::cargo_bin("skilltape")
+        .unwrap()
+        .arg("export")
+        .arg(&package)
+        .args(["--target", "generic", "--output"])
+        .arg(&output)
+        .arg("--receipt")
+        .arg(&receipt)
+        .arg("--json")
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let linked: Value = serde_json::from_slice(&result).unwrap();
+    assert_eq!(linked["receipt"]["provenance"], "not-authenticated");
+    assert_eq!(linked["receipt"]["skill_hash"], manifest["package_hash"]);
+    assert!(output.join("SKILL.md").is_file());
+
+    let original: Value = serde_json::from_slice(&fs::read(&receipt).unwrap()).unwrap();
+    for mode in [
+        "failed",
+        "mismatch",
+        "bad-step",
+        "failed-assertion",
+        "denied-policy",
+        "duplicate",
+    ] {
+        let mut value = original.clone();
+        match mode {
+            "failed" => value["status"] = json!("run_failed"),
+            "mismatch" => value["skill_hash"] = json!("b".repeat(64)),
+            "bad-step" => {
+                value["steps"] = json!([{ "step_id":"undeclared", "status":"failed", "exit_code":1,
+                "stdout_sha256":"0".repeat(64), "stdout_bytes":0, "stdout_truncated":false,
+                "stderr_sha256":"0".repeat(64), "stderr_bytes":0, "stderr_truncated":false }])
+            }
+            "failed-assertion" => {
+                value["assertions"] = json!([{ "kind":"file_exists", "target":"expected.txt", "passed":false, "reason":"synthetic failure" }])
+            }
+            "denied-policy" => {
+                value["policy_decisions"] = json!([{ "step_id":"synthetic", "phase":"before", "allowed":false, "code":"fixture", "reason":"synthetic denial", "risk":"low" }])
+            }
+            _ => {}
+        }
+        let bytes = if mode == "duplicate" {
+            serde_json::to_string(&value)
+                .unwrap()
+                .replace(
+                    "\"status\":\"succeeded\"",
+                    "\"status\":\"run_failed\",\"status\":\"succeeded\"",
+                )
+                .into_bytes()
+        } else {
+            serde_json::to_vec(&value).unwrap()
+        };
+        fs::write(&receipt, bytes).unwrap();
+        let rejected = temp.path().join(mode);
+        Command::cargo_bin("skilltape")
+            .unwrap()
+            .arg("export")
+            .arg(&package)
+            .args(["--target", "generic", "--output"])
+            .arg(&rejected)
+            .arg("--receipt")
+            .arg(&receipt)
+            .assert()
+            .code(3)
+            .stdout(predicates::str::is_empty());
+        assert!(!rejected.exists());
+    }
+    fs::write(&receipt, serde_json::to_vec(&original).unwrap()).unwrap();
+    for target in ["codex", "cursor", "claude-code"] {
+        let rejected = temp.path().join(format!("not-declared-{target}"));
+        // A target guard remains independent of successful Receipt metadata.
+        if target == "claude-code" {
+            Command::cargo_bin("skilltape")
+                .unwrap()
+                .arg("export")
+                .arg(&package)
+                .args(["--target", target, "--output"])
+                .arg(&rejected)
+                .arg("--receipt")
+                .arg(&receipt)
+                .assert()
+                .code(3);
+            assert!(!rejected.exists());
+        }
+    }
+}
+
+#[test]
 fn claude_code_export_uses_the_platform_layout() {
     let temp = TempDir::new().expect("temp directory");
     let package = package_with_targets(temp.path(), &["claude-code"]);

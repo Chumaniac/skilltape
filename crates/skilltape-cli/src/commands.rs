@@ -104,6 +104,8 @@ enum Command {
         #[arg(long)]
         output: PathBuf,
         #[arg(long)]
+        receipt: Option<PathBuf>,
+        #[arg(long)]
         json: bool,
     },
 }
@@ -188,11 +190,13 @@ pub fn run() -> ExitCode {
             skill_path,
             target,
             output,
+            receipt,
             json,
         } => export_command::run(export_command::ExportConfig {
             skill_path,
             target,
             output,
+            receipt,
             json,
         }),
     }
