@@ -10,6 +10,9 @@ All notable changes to SkillTape are documented here.
   features below; public publication is verified by the new immutable tag workflow.
 - Refresh locked Rust and Console dependencies and pinned workflow actions after
   compatibility and existing Console/sandbox checks.
+- Lock Rustls to 0.23.45 and source-map-js to 1.2.2, the repaired versions for
+  the existing GitHub dependency advisories; dependency alerts are checked
+  again after the verified main update.
 - Source Verify can publish a new `--delivery-dir` containing actual artifacts,
   the unchanged v1 Receipt and a checksummed manifest. Completed files survive
   assembly/publication failure in private staging. An order-summary example runs
