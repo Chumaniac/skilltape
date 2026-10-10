@@ -2028,6 +2028,7 @@ version = "0.2.3"
 dependencies = [
  "axum",
  "clap",
+ "errno",
  "libc",
  "serde",
  "serde_json",

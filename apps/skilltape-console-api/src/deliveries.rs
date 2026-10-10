@@ -47,6 +47,93 @@ pub struct DeliveryReview {
     pub findings_truncated: bool,
 }
 
+// Only filesystem discovery can construct work items. Request strings select
+// existing entries in memory and never become paths inside blocking work.
+pub(crate) struct DeliveryCatalog {
+    #[cfg(unix)]
+    inner: native::Catalog,
+    #[cfg(not(unix))]
+    unavailable: std::convert::Infallible,
+}
+pub(crate) struct DeliveryPageWork {
+    #[cfg(unix)]
+    inner: native::PageWork,
+    #[cfg(not(unix))]
+    unavailable: std::convert::Infallible,
+}
+pub(crate) struct DeliveryReviewWork {
+    #[cfg(unix)]
+    inner: native::ReviewWork,
+    #[cfg(not(unix))]
+    unavailable: std::convert::Infallible,
+}
+impl DeliveryCatalog {
+    pub(crate) fn total(&self) -> usize {
+        #[cfg(unix)]
+        {
+            self.inner.total()
+        }
+        #[cfg(not(unix))]
+        {
+            match self.unavailable {}
+        }
+    }
+    pub(crate) fn page(
+        self,
+        offset: usize,
+        limit: usize,
+    ) -> Result<DeliveryPageWork, ReadModelError> {
+        crate::read_model::normalize_page(Some(offset), Some(limit))?;
+        #[cfg(unix)]
+        {
+            Ok(DeliveryPageWork {
+                inner: self.inner.page(offset, limit),
+            })
+        }
+        #[cfg(not(unix))]
+        {
+            match self.unavailable {}
+        }
+    }
+    pub(crate) fn select(self, id: &str) -> Result<DeliveryReviewWork, ReadModelError> {
+        validate_delivery_id(id)?;
+        #[cfg(unix)]
+        {
+            Ok(DeliveryReviewWork {
+                inner: self.inner.select(id)?,
+            })
+        }
+        #[cfg(not(unix))]
+        {
+            match self.unavailable {}
+        }
+    }
+}
+impl DeliveryPageWork {
+    pub(crate) fn read(self) -> Result<Vec<DeliverySummary>, ReadModelError> {
+        #[cfg(unix)]
+        {
+            native::summaries(self.inner)
+        }
+        #[cfg(not(unix))]
+        {
+            match self.unavailable {}
+        }
+    }
+}
+impl DeliveryReviewWork {
+    pub(crate) fn read(self) -> Result<DeliveryReview, ReadModelError> {
+        #[cfg(unix)]
+        {
+            native::review(self.inner)
+        }
+        #[cfg(not(unix))]
+        {
+            match self.unavailable {}
+        }
+    }
+}
+
 #[cfg(unix)]
 impl DeliveryReview {
     fn new(id: &str) -> Self {
@@ -82,6 +169,18 @@ impl DeliveryReview {
 }
 
 impl ConsoleReadModel {
+    pub(crate) fn delivery_catalog(&self) -> Result<DeliveryCatalog, ReadModelError> {
+        #[cfg(unix)]
+        {
+            Ok(DeliveryCatalog {
+                inner: native::discover(self.root())?,
+            })
+        }
+        #[cfg(not(unix))]
+        {
+            Err(ReadModelError::UnsupportedPlatform)
+        }
+    }
     pub fn deliveries(
         &self,
         workspace: &str,
@@ -92,26 +191,22 @@ impl ConsoleReadModel {
             return Err(ReadModelError::NotFound);
         }
         crate::read_model::normalize_page(Some(offset), Some(limit))?;
-        #[cfg(unix)]
-        {
-            native::list(self.root(), offset, limit)
-        }
-        #[cfg(not(unix))]
-        {
-            let _ = (offset, limit);
-            Err(ReadModelError::UnsupportedPlatform)
-        }
+        let catalog = self.delivery_catalog()?;
+        let total = catalog.total();
+        let items = catalog.page(offset, limit)?.read()?;
+        let next = offset.saturating_add(items.len());
+        Ok(Collection {
+            schema: CONSOLE_SCHEMA_V1,
+            items,
+            offset,
+            limit,
+            total,
+            next_offset: (next < total).then_some(next),
+        })
     }
     pub fn delivery(&self, id: &str) -> Result<DeliveryReview, ReadModelError> {
         validate_delivery_id(id)?;
-        #[cfg(unix)]
-        {
-            native::review(self.root(), id)
-        }
-        #[cfg(not(unix))]
-        {
-            Err(ReadModelError::UnsupportedPlatform)
-        }
+        self.delivery_catalog()?.select(id)?.read()
     }
 }
 
@@ -136,13 +231,13 @@ mod native {
     use sha2::{Digest, Sha256};
     use skilltape_schema::{validate_json, SchemaId};
     use std::collections::BTreeSet;
-    use std::ffi::CString;
+    use std::ffi::{CStr, CString, OsStr, OsString};
     use std::fs::{self, File, Metadata, OpenOptions};
     use std::io::{self, Read};
     use std::os::fd::{AsRawFd, FromRawFd};
-    use std::os::unix::ffi::OsStrExt;
+    use std::os::unix::ffi::{OsStrExt, OsStringExt};
     use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
-    use std::path::{Component, Path};
+    use std::path::{Component, Path, PathBuf};
 
     const METADATA_BYTES: u64 = 1024 * 1024;
     const FILE_BYTES: u64 = 16 * 1024 * 1024;
@@ -173,6 +268,55 @@ mod native {
         receipt_hash: String,
     }
     type Identity = (u64, u64, u32, u64, i64, i64, i64, i64);
+
+    struct Anchor {
+        path: PathBuf,
+        file: File,
+    }
+    struct Candidate {
+        id: String,
+        directory: (u64, u64),
+    }
+    pub(super) struct Catalog {
+        anchor: Anchor,
+        candidates: Vec<Candidate>,
+    }
+    pub(super) struct PageWork {
+        anchor: Anchor,
+        candidates: Vec<Candidate>,
+    }
+    pub(super) struct ReviewWork {
+        anchor: Anchor,
+        candidate: Candidate,
+    }
+    impl Catalog {
+        pub(super) fn total(&self) -> usize {
+            self.candidates.len()
+        }
+        pub(super) fn page(self, offset: usize, limit: usize) -> PageWork {
+            let mut candidates = Vec::new();
+            for (index, candidate) in self.candidates.into_iter().enumerate() {
+                if index >= offset && candidates.len() < limit {
+                    candidates.push(candidate);
+                }
+            }
+            PageWork {
+                anchor: self.anchor,
+                candidates,
+            }
+        }
+        pub(super) fn select(self, id: &str) -> Result<ReviewWork, ReadModelError> {
+            for candidate in self.candidates {
+                if candidate.id == id {
+                    return Ok(ReviewWork {
+                        anchor: self.anchor,
+                        candidate,
+                    });
+                }
+            }
+            Err(ReadModelError::NotFound)
+        }
+    }
 
     fn identity(info: &Metadata) -> Identity {
         (
@@ -212,6 +356,26 @@ mod native {
             .open(path)
             .map_err(|_| ReadModelError::UnsafePath)
     }
+    fn open_component(owner: &File, name: &OsStr) -> Result<File, ReadModelError> {
+        let name = CString::new(name.as_bytes()).map_err(|_| ReadModelError::UnsafePath)?;
+        let flags = libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK;
+        // The descriptor owns the actual entry; links and special files are rejected.
+        let fd = unsafe { libc::openat(owner.as_raw_fd(), name.as_ptr(), flags) };
+        if fd < 0 {
+            let error = io::Error::last_os_error();
+            return Err(if error.kind() == io::ErrorKind::NotFound {
+                ReadModelError::NotFound
+            } else {
+                ReadModelError::UnsafePath
+            });
+        }
+        let file = unsafe { File::from_raw_fd(fd) };
+        let info = file.metadata().map_err(ReadModelError::Io)?;
+        if !info.is_file() && !info.is_dir() {
+            return Err(ReadModelError::UnsafePath);
+        }
+        Ok(file)
+    }
     fn open_member(owner: &File, relative: &Path, want_dir: bool) -> Result<File, ReadModelError> {
         let parts = relative.components().collect::<Vec<_>>();
         if parts.is_empty()
@@ -224,31 +388,67 @@ mod native {
         }
         let mut parent = owner.try_clone().map_err(ReadModelError::Io)?;
         for (index, part) in parts.iter().enumerate() {
-            let name = CString::new(part.as_os_str().as_bytes())
-                .map_err(|_| ReadModelError::UnsafePath)?;
             let is_dir = index + 1 < parts.len() || want_dir;
-            let flags = libc::O_RDONLY
-                | libc::O_NOFOLLOW
-                | libc::O_CLOEXEC
-                | libc::O_NONBLOCK
-                | if is_dir { libc::O_DIRECTORY } else { 0 };
-            // The returned descriptor is newly owned and cannot follow a component link.
-            let fd = unsafe { libc::openat(parent.as_raw_fd(), name.as_ptr(), flags) };
-            if fd < 0 {
-                let error = io::Error::last_os_error();
-                return Err(if error.kind() == io::ErrorKind::NotFound {
-                    ReadModelError::NotFound
-                } else {
-                    ReadModelError::UnsafePath
-                });
-            }
-            parent = unsafe { File::from_raw_fd(fd) };
+            parent = open_component(&parent, part.as_os_str())?;
             let metadata = parent.metadata().map_err(ReadModelError::Io)?;
             if (is_dir && !metadata.is_dir()) || (!is_dir && !metadata.is_file()) {
                 return Err(ReadModelError::UnsafePath);
             }
         }
         Ok(parent)
+    }
+    fn entries(owner: &File, limit: usize) -> Result<Vec<OsString>, ReadModelError> {
+        // Reopen the fixed "." member to get an independent directory offset.
+        // dup() would share offsets and could make a later recheck appear empty.
+        let fd = unsafe {
+            libc::openat(
+                owner.as_raw_fd(),
+                c".".as_ptr(),
+                libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+            )
+        };
+        if fd < 0 {
+            return Err(ReadModelError::Io(io::Error::last_os_error()));
+        }
+        let pointer = unsafe { libc::fdopendir(fd) };
+        if pointer.is_null() {
+            let error = io::Error::last_os_error();
+            unsafe {
+                libc::close(fd);
+            }
+            return Err(ReadModelError::Io(error));
+        }
+        struct Stream(*mut libc::DIR);
+        impl Drop for Stream {
+            fn drop(&mut self) {
+                unsafe {
+                    libc::closedir(self.0);
+                }
+            }
+        }
+        let stream = Stream(pointer);
+        let mut names = Vec::new();
+        loop {
+            errno::set_errno(errno::Errno(0));
+            let entry = unsafe { libc::readdir(stream.0) };
+            if entry.is_null() {
+                let error = errno::errno().0;
+                return if error == 0 {
+                    Ok(names)
+                } else {
+                    Err(ReadModelError::Io(io::Error::from_raw_os_error(error)))
+                };
+            }
+            // POSIX readdir owns this NUL-terminated name until the next call.
+            let name = unsafe { CStr::from_ptr((*entry).d_name.as_ptr()) }.to_bytes();
+            if name == b"." || name == b".." {
+                continue;
+            }
+            if names.len() >= limit {
+                return Err(invalid());
+            }
+            names.push(OsString::from_vec(name.to_owned()));
+        }
     }
     fn stable_root(path: &Path, anchored: &File) -> Result<(), ReadModelError> {
         let linked = fs::symlink_metadata(path).map_err(|_| invalid())?;
@@ -430,19 +630,11 @@ mod native {
             manifest,
         })
     }
-    pub(super) fn list(
-        path: &Path,
-        offset: usize,
-        limit: usize,
-    ) -> Result<Collection<DeliverySummary>, ReadModelError> {
+    pub(super) fn discover(path: &Path) -> Result<Catalog, ReadModelError> {
         let anchored = root(path)?;
         let mut candidates = Vec::new();
-        for (seen, entry) in fs::read_dir(path).map_err(ReadModelError::Io)?.enumerate() {
-            if seen >= 1000 {
-                return Err(invalid());
-            }
-            let entry = entry.map_err(ReadModelError::Io)?;
-            let Some(id) = entry.file_name().to_str().map(str::to_owned) else {
+        for entry in entries(&anchored, 1000)? {
+            let Some(id) = entry.to_str().map(str::to_owned) else {
                 continue;
             };
             if validate_delivery_id(&id).is_err() {
@@ -455,17 +647,34 @@ mod native {
                 .iter()
                 .any(|name| open_member(&child, Path::new(name), false).is_ok());
             if marker {
-                candidates.push(id);
+                candidates.push(Candidate {
+                    id,
+                    directory: directory(&child.metadata().map_err(ReadModelError::Io)?),
+                });
             }
         }
-        candidates.sort();
-        let total = candidates.len();
+        candidates.sort_by(|left, right| left.id.cmp(&right.id));
+        stable_root(path, &anchored)?;
+        Ok(Catalog {
+            anchor: Anchor {
+                path: path.to_owned(),
+                file: anchored,
+            },
+            candidates,
+        })
+    }
+    pub(super) fn summaries(work: PageWork) -> Result<Vec<DeliverySummary>, ReadModelError> {
+        let PageWork { anchor, candidates } = work;
+        stable_root(&anchor.path, &anchor.file)?;
         let mut items = Vec::new();
-        for id in candidates.into_iter().skip(offset).take(limit) {
-            let child = open_member(&anchored, Path::new(&id), true)?;
+        for candidate in candidates {
+            let child = open_member(&anchor.file, Path::new(&candidate.id), true)?;
+            if directory(&child.metadata().map_err(ReadModelError::Io)?) != candidate.directory {
+                return Err(invalid());
+            }
             let metadata = bound(&child).ok();
             items.push(DeliverySummary {
-                id,
+                id: candidate.id,
                 metadata_valid: metadata.is_some(),
                 reported_status: metadata.as_ref().map(|b| b.status.clone()),
                 run_id: metadata.as_ref().map(|b| b.manifest.run_id.clone()),
@@ -475,54 +684,42 @@ mod native {
                     .map(|b| b.manifest.files.iter().map(|f| f.bytes).sum()),
             });
         }
-        stable_root(path, &anchored)?;
-        let next = offset.saturating_add(items.len());
-        Ok(Collection {
-            schema: CONSOLE_SCHEMA_V1,
-            items,
-            offset,
-            limit,
-            total,
-            next_offset: (next < total).then_some(next),
-        })
+        stable_root(&anchor.path, &anchor.file)?;
+        Ok(items)
     }
-    fn inventory(path: &Path) -> Result<BTreeSet<String>, ReadModelError> {
-        let mut result = BTreeSet::new();
-        let mut queue = vec![(path.to_owned(), 0)];
-        let mut count = 0;
-        while let Some((directory, depth)) = queue.pop() {
+    fn inventory(owner: &File) -> Result<BTreeSet<String>, ReadModelError> {
+        fn walk(
+            owner: &File,
+            prefix: &Path,
+            depth: usize,
+            count: &mut usize,
+            result: &mut BTreeSet<String>,
+        ) -> Result<(), ReadModelError> {
             if depth > 64 {
                 return Err(invalid());
             }
-            for entry in fs::read_dir(&directory).map_err(ReadModelError::Io)? {
-                count += 1;
-                if count > ENTRIES {
-                    return Err(invalid());
-                }
-                let entry = entry.map_err(ReadModelError::Io)?;
-                let info = fs::symlink_metadata(entry.path()).map_err(ReadModelError::Io)?;
-                if info.file_type().is_symlink() {
+            let names = entries(owner, ENTRIES - *count)?;
+            // Charge discovery before recursion, including not-yet-visited siblings.
+            *count += names.len();
+            for entry in names {
+                let relative = prefix.join(&entry);
+                let name = relative.to_str().ok_or_else(invalid)?;
+                if !allowed(name) {
                     return Err(ReadModelError::UnsafePath);
                 }
+                let child = open_component(owner, &entry)?;
+                let info = child.metadata().map_err(ReadModelError::Io)?;
                 if info.is_dir() {
-                    queue.push((entry.path(), depth + 1));
-                } else if info.is_file() {
-                    let name = entry
-                        .path()
-                        .strip_prefix(path)
-                        .map_err(|_| invalid())?
-                        .to_str()
-                        .ok_or_else(invalid)?
-                        .to_owned();
-                    if !allowed(&name) {
-                        return Err(ReadModelError::UnsafePath);
-                    }
-                    result.insert(name);
+                    // Depth-first ownership retains at most one directory per level.
+                    walk(&child, &relative, depth + 1, count, result)?;
                 } else {
-                    return Err(ReadModelError::UnsafePath);
+                    result.insert(name.to_owned());
                 }
             }
+            Ok(())
         }
+        let mut result = BTreeSet::new();
+        walk(owner, Path::new(""), 0, &mut 0, &mut result)?;
         Ok(result)
     }
     fn digest(
@@ -558,25 +755,21 @@ mod native {
         }
         Ok((hex(&hash.finalize()), identity(&before)))
     }
-    pub(super) fn review(path: &Path, id: &str) -> Result<DeliveryReview, ReadModelError> {
-        let anchored = root(path)?;
-        let owner = open_member(&anchored, Path::new(id), true)?;
-        let selected_path = path.join(id);
-        let mut report = DeliveryReview::new(id);
+    pub(super) fn review(work: ReviewWork) -> Result<DeliveryReview, ReadModelError> {
+        let ReviewWork { anchor, candidate } = work;
+        stable_root(&anchor.path, &anchor.file)?;
+        let owner = open_member(&anchor.file, Path::new(&candidate.id), true)?;
+        if directory(&owner.metadata().map_err(ReadModelError::Io)?) != candidate.directory {
+            return Err(invalid());
+        }
+        let mut report = DeliveryReview::new(&candidate.id);
         let mut run = || -> Result<(), ReadModelError> {
-            let mut entries = BTreeSet::new();
-            for entry in fs::read_dir(&selected_path).map_err(ReadModelError::Io)? {
-                entries.insert(entry.map_err(ReadModelError::Io)?.file_name());
-                if entries.len() > 3 {
-                    report.issue("delivery.layout", None);
-                    return Ok(());
-                }
-            }
+            let names = entries(&owner, 3)?.into_iter().collect::<BTreeSet<_>>();
             let expected = ["artifacts", "delivery.json", "receipt.json"]
                 .into_iter()
                 .map(std::ffi::OsString::from)
                 .collect::<BTreeSet<_>>();
-            if entries != expected {
+            if names != expected {
                 report.issue("delivery.layout", None);
                 return Ok(());
             }
@@ -587,7 +780,7 @@ mod native {
             report.declared_files = Some(bound.manifest.files.len());
             report.declared_bytes = Some(bound.manifest.files.iter().map(|file| file.bytes).sum());
             let payload = open_member(&owner, Path::new("artifacts"), true)?;
-            let names = inventory(&selected_path.join("artifacts"))?;
+            let names = inventory(&payload)?;
             if names
                 != bound
                     .manifest
@@ -630,7 +823,7 @@ mod native {
             let linked_payload = open_member(&owner, Path::new("artifacts"), true)?;
             if directory(&linked_payload.metadata().map_err(ReadModelError::Io)?)
                 != directory(&payload.metadata().map_err(ReadModelError::Io)?)
-                || inventory(&selected_path.join("artifacts"))? != names
+                || inventory(&linked_payload)? != names
             {
                 report.issue("delivery.artifact-set-changed", None);
             }
@@ -639,13 +832,13 @@ mod native {
             {
                 report.issue("delivery.metadata-changed", None);
             }
-            let linked = open_member(&anchored, Path::new(id), true)?;
+            let linked = open_member(&anchor.file, Path::new(&candidate.id), true)?;
             if directory(&linked.metadata().map_err(ReadModelError::Io)?)
                 != directory(&owner.metadata().map_err(ReadModelError::Io)?)
             {
                 return Err(invalid());
             }
-            stable_root(path, &anchored)?;
+            stable_root(&anchor.path, &anchor.file)?;
             if report.findings.is_empty() {
                 report.status = "passed";
             }
@@ -656,5 +849,26 @@ mod native {
             report.issue("delivery.invalid-or-unsafe-snapshot", None);
         }
         Ok(report)
+    }
+}
+
+#[cfg(all(test, unix))]
+mod catalog_tests {
+    use super::*;
+    #[test]
+    fn selected_directory_must_still_match_its_discovered_identity() {
+        let root = tempfile::TempDir::new().unwrap();
+        let saved = root.path().join("saved");
+        std::fs::create_dir(&saved).unwrap();
+        std::fs::write(saved.join("receipt.json"), b"{}").unwrap();
+        let model = ConsoleReadModel::new(root.path()).unwrap();
+        let selected = model.delivery_catalog().unwrap().select("saved").unwrap();
+        std::fs::rename(&saved, root.path().join("preserved")).unwrap();
+        std::fs::create_dir(&saved).unwrap();
+        std::fs::write(saved.join("receipt.json"), b"{}").unwrap();
+        assert!(matches!(
+            selected.read(),
+            Err(ReadModelError::InvalidDocument)
+        ));
     }
 }

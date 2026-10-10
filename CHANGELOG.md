@@ -14,6 +14,10 @@
   Windows existing read-only views and fail-closed Replay/Verify remain intact.
 - Show the current Console source version from package metadata. This update is
   source-only; the public0.2.1 binaries and historical assets remain unchanged.
+- Restrict detail selection to the same bounded discovered catalog as the queue.
+  Enumerate layout and artifact directories through anchored handles, retain
+  directory identity and keep inspection capacity occupied until cancelled work
+  actually finishes.
 
 ## Source catalog continuation — 2026-10-10
 

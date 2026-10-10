@@ -108,6 +108,25 @@ async fn physically_checks_files_without_claiming_execution_or_requirements() {
 }
 
 #[tokio::test]
+async fn detail_only_selects_actual_discovered_delivery_directories() {
+    let root = TempDir::new().unwrap();
+    fs::create_dir(root.path().join("ordinary-folder")).unwrap();
+    let (status, _) = request(root.path(), "/api/v1/deliveries/ordinary-folder").await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn detail_obeys_the_same_discovery_capacity_as_the_queue() {
+    let root = TempDir::new().unwrap();
+    bundle(root.path(), "saved");
+    for index in 0..1000 {
+        fs::write(root.path().join(format!("entry-{index}")), b"").unwrap();
+    }
+    let (status, _) = request(root.path(), "/api/v1/deliveries/saved").await;
+    assert_ne!(status, StatusCode::OK);
+}
+
+#[tokio::test]
 async fn rejects_mutation_missing_members_and_undeclared_private_files() {
     let root = TempDir::new().unwrap();
     bundle(root.path(), "saved");

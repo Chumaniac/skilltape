@@ -37,6 +37,13 @@ credential/environment filenames before payload reads. Show at most100 file
 details and64 findings with true truncation flags. No file contents, terminal
 outputs, raw policy reasons or absolute roots reach the delivery DTO.
 
+List and detail requests use the same bounded discovery catalog. HTTP input
+selects actual catalog entries in memory; it does not construct filesystem
+paths. Selected directories retain their discovered identity. Layout and
+artifact inventories use anchored directory streams with no link following;
+depth-first inspection bounds live directory handles by depth, not entry count. The
+existing locked errno helper distinguishes directory exhaustion from read errors.
+
 Receipt sections are limited to4,096 entries before schema diagnostics are
 evaluated. Directory IDs are non-hidden, at most128 characters/255 UTF-8 bytes;
 member paths use the existing1,024 UTF-16-unit/4,096 UTF-8-byte bound. Root ancestors
@@ -44,7 +51,9 @@ and the local operator remain trusted; these checks do not authenticate a
 filesystem owner or make the service suitable for shared/untrusted hosting.
 
 At most two blocking inspections run concurrently; excess work returns a busy
-response instead of accumulating. Frontend request cancellation and selection
+response instead of accumulating. A work slot is retained across discovery and
+inspection and until actual blocking work finishes after request cancellation.
+Frontend request cancellation and selection
 changes release old display state; manual refresh does not create polling,
 timers or unbounded history. A completed inspection is a local snapshot, not
 ongoing monitoring or authentication of an author.

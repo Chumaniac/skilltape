@@ -1,6 +1,6 @@
-# Release Readiness — 0.1.0
+# Release Readiness
 
-Date: 2026-08-07
+Date: 2026-10-10. Historical release evidence retains its original scope.
 
 See the [documentation index](README.md), [installation guide](guides/installation.md),
 and [release workflow](../.github/workflows/release.yml) for the surrounding
@@ -52,7 +52,13 @@ in the current source delivery evidence. Full Rust/Console, packaging/installer
 and current CI checks remain required before main; source is not a new release.
 See the [saved delivery contract](reference/saved-deliveries.md).
 
-## Current merged-main evidence
+The local candidate passes311 locked workspace tests,21 native API regression
+cases, format/Clippy and actual desktop/mobile Console journeys. Discovery and
+physical inspection retain one bounded work slot across both stages; metadata,
+layout and inventory use actual catalog entries and directory handles. Current
+exact-head hosted checks must still pass; local evidence is not a release.
+
+## Historical 0.1.0 merged-main evidence
 
 - The implementation and release workflow are merged on `main` at commit
   `beb0bba1870e20e03e5bc80a2d9234c04fc1c6f6`.

@@ -17,7 +17,7 @@ use tokio_stream::iter;
 
 use crate::read_model::{
     normalize_page, Collection, ConsoleReadModel, ReadModelError, SkillDiff, StoredDocument,
-    TapeEvents,
+    TapeEvents, CONSOLE_SCHEMA_V1,
 };
 
 #[derive(Clone, Debug)]
@@ -151,21 +151,45 @@ fn inspection_permit(state: &AppState) -> Result<tokio::sync::OwnedSemaphorePerm
         })
 }
 
+async fn inspect<T, F>(
+    permit: tokio::sync::OwnedSemaphorePermit,
+    work: F,
+) -> Result<(T, tokio::sync::OwnedSemaphorePermit), ApiError>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, ReadModelError> + Send + 'static,
+{
+    // The job and its result own the slot until the actual work has finished,
+    // even if its HTTP caller cancels before either blocking stage returns.
+    let (result, permit) = tokio::task::spawn_blocking(move || (work(), permit))
+        .await
+        .map_err(|_| ApiError::Internal)?;
+    Ok((result?, permit))
+}
+
 async fn list_deliveries(
     State(state): State<AppState>,
     Path(workspace): Path<String>,
     Query(query): Query<PageQuery>,
 ) -> Result<Json<Collection<crate::deliveries::DeliverySummary>>, ApiError> {
     let (offset, limit) = page(&query)?;
+    if workspace != crate::read_model::WORKSPACE_ID {
+        return Err(ReadModelError::NotFound.into());
+    }
     let permit = inspection_permit(&state)?;
-    let result = tokio::task::spawn_blocking(move || {
-        // Keep the permit in the actual work, including when its caller cancels.
-        let _permit = permit;
-        state.model.deliveries(&workspace, offset, limit)
-    })
-    .await
-    .map_err(|_| ApiError::Internal)??;
-    Ok(Json(result))
+    let (catalog, permit) = inspect(permit, move || state.model.delivery_catalog()).await?;
+    let total = catalog.total();
+    let selected = catalog.page(offset, limit)?;
+    let (items, _permit) = inspect(permit, move || selected.read()).await?;
+    let next = offset.saturating_add(items.len());
+    Ok(Json(Collection {
+        schema: CONSOLE_SCHEMA_V1,
+        items,
+        offset,
+        limit,
+        total,
+        next_offset: (next < total).then_some(next),
+    }))
 }
 
 async fn delivery_review(
@@ -174,13 +198,10 @@ async fn delivery_review(
 ) -> Result<Json<crate::deliveries::DeliveryReview>, ApiError> {
     crate::deliveries::validate_delivery_id(&id)?;
     let permit = inspection_permit(&state)?;
-    let result = tokio::task::spawn_blocking(move || {
-        let _permit = permit;
-        state.model.delivery(&id)
-    })
-    .await
-    .map_err(|_| ApiError::Internal)??;
-    Ok(Json(result))
+    let (catalog, permit) = inspect(permit, move || state.model.delivery_catalog()).await?;
+    let selected = catalog.select(&id)?;
+    let (report, _permit) = inspect(permit, move || selected.read()).await?;
+    Ok(Json(report))
 }
 
 async fn list_workspaces(
@@ -385,5 +406,43 @@ mod inspection_tests {
         drop(first);
         assert!(inspection_permit(&state).is_ok());
         drop(second);
+    }
+
+    #[tokio::test]
+    async fn cancellation_keeps_the_slot_until_blocking_work_finishes() {
+        let root = tempfile::TempDir::new().unwrap();
+        let state = AppState {
+            model: ConsoleReadModel::new(root.path()).unwrap(),
+            static_root: None,
+            inspections: Arc::new(tokio::sync::Semaphore::new(2)),
+        };
+        let first = inspection_permit(&state).unwrap();
+        let permit = inspection_permit(&state).unwrap();
+        let (started, begun) = tokio::sync::oneshot::channel();
+        let (finish, finished) = std::sync::mpsc::channel();
+        let task = tokio::spawn(async move {
+            inspect(permit, move || {
+                started.send(()).unwrap();
+                finished
+                    .recv_timeout(std::time::Duration::from_secs(5))
+                    .unwrap();
+                Ok::<_, ReadModelError>(())
+            })
+            .await
+        });
+        begun.await.unwrap();
+        task.abort();
+        assert!(task.await.unwrap_err().is_cancelled());
+        assert_eq!(state.inspections.available_permits(), 0);
+        finish.send(()).unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            while state.inspections.available_permits() != 1 {
+                tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+        drop(first);
+        assert_eq!(state.inspections.available_permits(), 2);
     }
 }
