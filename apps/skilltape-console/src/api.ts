@@ -1,5 +1,7 @@
 import type {
   Collection,
+  DeliveryReview,
+  DeliverySummary,
   SkillDiff,
   StoredDocument,
   TapeEvent,
@@ -68,6 +70,27 @@ export function getRun(runId: string, signal?: AbortSignal) {
 
 export function getReceipt(receiptId: string, signal?: AbortSignal) {
   return get<StoredDocument>('/receipts/' + encodeURIComponent(receiptId), signal)
+}
+
+export async function getDeliveries(offset = 0, signal?: AbortSignal) {
+  const payload = await get<Collection<DeliverySummary>>('/workspaces/default/deliveries?limit=50&offset=' + offset, signal)
+  if (!payload || !Array.isArray(payload.items) || payload.items.length > 50 ||
+    !Number.isSafeInteger(payload.total) || payload.total < 0 || payload.total > 1000 ||
+    !payload.items.every(item => item && typeof item.id === 'string' && typeof item.metadata_valid === 'boolean')) {
+    throw new ApiError('The saved-delivery response is invalid or unsupported. Use the current source API.', 502, 'invalid_response')
+  }
+  return payload
+}
+
+export async function getDelivery(id: string, signal?: AbortSignal) {
+  const payload = await get<DeliveryReview>('/deliveries/' + encodeURIComponent(id), signal)
+  if (!payload || payload.schema !== 'skilltape.dev/delivery-review/v1' || payload.id !== id ||
+    !['passed', 'failed'].includes(payload.status) || payload.requirement_validation !== 'not-run' ||
+    payload.provenance !== 'not-authenticated' || !Array.isArray(payload.files) || payload.files.length > 100 ||
+    !Array.isArray(payload.findings) || payload.findings.length > 64) {
+    throw new ApiError('The saved-delivery inspection is invalid or unsupported. No file acceptance is established.', 502, 'invalid_response')
+  }
+  return payload
 }
 
 export function formatEventPayload(event: TapeEvent): string {

@@ -1,5 +1,6 @@
 use std::convert::Infallible;
 use std::path::{Component, PathBuf};
+use std::sync::Arc;
 
 use axum::body::Body;
 use axum::extract::{Path, Query, State};
@@ -16,7 +17,7 @@ use tokio_stream::iter;
 
 use crate::read_model::{
     normalize_page, Collection, ConsoleReadModel, ReadModelError, SkillDiff, StoredDocument,
-    TapeEvents,
+    TapeEvents, CONSOLE_SCHEMA_V1,
 };
 
 #[derive(Clone, Debug)]
@@ -29,6 +30,10 @@ pub enum ApiError {
     Forbidden,
     InvalidDocument,
     Internal,
+    Unavailable {
+        code: &'static str,
+        message: &'static str,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, Default)]
@@ -59,6 +64,10 @@ impl From<ReadModelError> for ApiError {
             ReadModelError::UnsafePath => Self::Forbidden,
             ReadModelError::NotFound => Self::NotFound,
             ReadModelError::InvalidDocument => Self::InvalidDocument,
+            ReadModelError::UnsupportedPlatform => Self::Unavailable {
+                code: "unsupported_delivery_platform",
+                message: "File integrity inspection is unavailable on this platform.",
+            },
             ReadModelError::InvalidRoot | ReadModelError::Io(_) => Self::Internal,
         }
     }
@@ -88,6 +97,7 @@ impl IntoResponse for ApiError {
                 "internal_error",
                 "console API could not read the workspace",
             ),
+            Self::Unavailable { code, message } => (StatusCode::SERVICE_UNAVAILABLE, code, message),
         };
         (
             status,
@@ -109,12 +119,15 @@ pub fn router(model: ConsoleReadModel) -> Router {
 struct AppState {
     model: ConsoleReadModel,
     static_root: Option<PathBuf>,
+    inspections: Arc<tokio::sync::Semaphore>,
 }
 
 pub fn router_with_static(model: ConsoleReadModel, static_root: Option<PathBuf>) -> Router {
     Router::new()
         .route("/api/v1/workspaces", get(list_workspaces))
         .route("/api/v1/workspaces/{id}/tapes", get(list_tapes))
+        .route("/api/v1/workspaces/{id}/deliveries", get(list_deliveries))
+        .route("/api/v1/deliveries/{id}", get(delivery_review))
         .route("/api/v1/tapes/{id}/events", get(tape_events))
         .route("/api/v1/skills/{id}/diff", get(skill_diff))
         .route("/api/v1/runs/{id}", get(run_document))
@@ -122,7 +135,73 @@ pub fn router_with_static(model: ConsoleReadModel, static_root: Option<PathBuf>)
         .route("/api/v1/runs/{id}/events", get(run_events))
         .route("/", get(index))
         .route("/{*path}", get(static_asset))
-        .with_state(AppState { model, static_root })
+        .with_state(AppState {
+            model,
+            static_root,
+            inspections: Arc::new(tokio::sync::Semaphore::new(2)),
+        })
+}
+
+fn inspection_permit(state: &AppState) -> Result<tokio::sync::OwnedSemaphorePermit, ApiError> {
+    Arc::clone(&state.inspections)
+        .try_acquire_owned()
+        .map_err(|_| ApiError::Unavailable {
+            code: "inspection_busy",
+            message: "Two inspections are active. Retry after they finish.",
+        })
+}
+
+async fn inspect<T, F>(
+    permit: tokio::sync::OwnedSemaphorePermit,
+    work: F,
+) -> Result<(T, tokio::sync::OwnedSemaphorePermit), ApiError>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, ReadModelError> + Send + 'static,
+{
+    // The job and its result own the slot until the actual work has finished,
+    // even if its HTTP caller cancels before either blocking stage returns.
+    let (result, permit) = tokio::task::spawn_blocking(move || (work(), permit))
+        .await
+        .map_err(|_| ApiError::Internal)?;
+    Ok((result?, permit))
+}
+
+async fn list_deliveries(
+    State(state): State<AppState>,
+    Path(workspace): Path<String>,
+    Query(query): Query<PageQuery>,
+) -> Result<Json<Collection<crate::deliveries::DeliverySummary>>, ApiError> {
+    let (offset, limit) = page(&query)?;
+    if workspace != crate::read_model::WORKSPACE_ID {
+        return Err(ReadModelError::NotFound.into());
+    }
+    let permit = inspection_permit(&state)?;
+    let (catalog, permit) = inspect(permit, move || state.model.delivery_catalog()).await?;
+    let total = catalog.total();
+    let selected = catalog.page(offset, limit)?;
+    let (items, _permit) = inspect(permit, move || selected.read()).await?;
+    let next = offset.saturating_add(items.len());
+    Ok(Json(Collection {
+        schema: CONSOLE_SCHEMA_V1,
+        items,
+        offset,
+        limit,
+        total,
+        next_offset: (next < total).then_some(next),
+    }))
+}
+
+async fn delivery_review(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<crate::deliveries::DeliveryReview>, ApiError> {
+    crate::deliveries::validate_delivery_id(&id)?;
+    let permit = inspection_permit(&state)?;
+    let (catalog, permit) = inspect(permit, move || state.model.delivery_catalog()).await?;
+    let selected = catalog.select(&id)?;
+    let (report, _permit) = inspect(permit, move || selected.read()).await?;
+    Ok(Json(report))
 }
 
 async fn list_workspaces(
@@ -301,4 +380,69 @@ fn parse_last_event_id(headers: &HeaderMap) -> Result<Option<u64>, ApiError> {
             code: "invalid_last_event_id",
             message: "Last-Event-ID must be an unsigned integer",
         })
+}
+
+#[cfg(test)]
+mod inspection_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn busy_inspections_do_not_build_a_queue() {
+        let root = tempfile::TempDir::new().unwrap();
+        let state = AppState {
+            model: ConsoleReadModel::new(root.path()).unwrap(),
+            static_root: None,
+            inspections: Arc::new(tokio::sync::Semaphore::new(2)),
+        };
+        let first = inspection_permit(&state).unwrap();
+        let second = inspection_permit(&state).unwrap();
+        assert!(matches!(
+            inspection_permit(&state),
+            Err(ApiError::Unavailable {
+                code: "inspection_busy",
+                ..
+            })
+        ));
+        drop(first);
+        assert!(inspection_permit(&state).is_ok());
+        drop(second);
+    }
+
+    #[tokio::test]
+    async fn cancellation_keeps_the_slot_until_blocking_work_finishes() {
+        let root = tempfile::TempDir::new().unwrap();
+        let state = AppState {
+            model: ConsoleReadModel::new(root.path()).unwrap(),
+            static_root: None,
+            inspections: Arc::new(tokio::sync::Semaphore::new(2)),
+        };
+        let first = inspection_permit(&state).unwrap();
+        let permit = inspection_permit(&state).unwrap();
+        let (started, begun) = tokio::sync::oneshot::channel();
+        let (finish, finished) = std::sync::mpsc::channel();
+        let task = tokio::spawn(async move {
+            inspect(permit, move || {
+                started.send(()).unwrap();
+                finished
+                    .recv_timeout(std::time::Duration::from_secs(5))
+                    .unwrap();
+                Ok::<_, ReadModelError>(())
+            })
+            .await
+        });
+        begun.await.unwrap();
+        task.abort();
+        assert!(task.await.unwrap_err().is_cancelled());
+        assert_eq!(state.inspections.available_permits(), 0);
+        finish.send(()).unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            while state.inspections.available_permits() != 1 {
+                tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+        drop(first);
+        assert_eq!(state.inspections.available_permits(), 2);
+    }
 }

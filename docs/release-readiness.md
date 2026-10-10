@@ -1,6 +1,6 @@
-# Release Readiness — 0.1.0
+# Release Readiness
 
-Date: 2026-08-07
+Date: 2026-10-10. Historical release evidence retains its original scope.
 
 See the [documentation index](README.md), [installation guide](guides/installation.md),
 and [release workflow](../.github/workflows/release.yml) for the surrounding
@@ -42,7 +42,23 @@ are absent from the existing v0.2.1 release assets; no new release is claimed.
   Markdown audit retains 8 known historical fenced-code example targets;
   all rendered prose links and new document links resolve.
 
-## Current merged-main evidence
+## Source candidate 0.2.3 — 2026-10-10
+
+The new workbench consumes actual retained CLI delivery folders independently
+of the legacy mocked run/Receipt registry. It reports physical file observations,
+saved execution metadata and separate requirement/authentication boundaries.
+Native API regression checks and the extended local browser suite are recorded
+in the current source delivery evidence. Full Rust/Console, packaging/installer
+and current CI checks remain required before main; source is not a new release.
+See the [saved delivery contract](reference/saved-deliveries.md).
+
+The local candidate passes311 locked workspace tests,21 native API regression
+cases, format/Clippy and actual desktop/mobile Console journeys. Discovery and
+physical inspection retain one bounded work slot across both stages; metadata,
+layout and inventory use actual catalog entries and directory handles. Current
+exact-head hosted checks must still pass; local evidence is not a release.
+
+## Historical 0.1.0 merged-main evidence
 
 - The implementation and release workflow are merged on `main` at commit
   `beb0bba1870e20e03e5bc80a2d9234c04fc1c6f6`.

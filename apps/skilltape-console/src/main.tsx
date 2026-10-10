@@ -7,9 +7,11 @@ import { ExportTargetsPage } from './pages/ExportTargets'
 import { PermissionReviewPage } from './pages/PermissionReview'
 import { ReceiptViewPage } from './pages/ReceiptView'
 import { TimelinePage } from './pages/Timeline'
+import { DeliveriesPage } from './pages/Deliveries'
+import metadata from '../package.json'
 import './styles.css'
 
-type PageKey = 'timeline' | 'compile' | 'permissions' | 'receipt' | 'export'
+type PageKey = 'timeline' | 'compile' | 'permissions' | 'receipt' | 'export' | 'deliveries'
 
 interface RouteState {
   page: PageKey
@@ -18,6 +20,8 @@ interface RouteState {
   tapeId?: string
   tapeOffset: number
   eventOffset: number
+  deliveryId?: string
+  deliveryOffset: number
 }
 
 function readOffset(value: string | null): number {
@@ -29,7 +33,7 @@ function readRoute(): RouteState {
   const hash = window.location.hash.replace(/^#/, '') || 'timeline'
   const [pageValue, query] = hash.split('?')
   const page: PageKey =
-    pageValue === 'compile' || pageValue === 'permissions' || pageValue === 'receipt' || pageValue === 'export'
+    pageValue === 'compile' || pageValue === 'permissions' || pageValue === 'receipt' || pageValue === 'export' || pageValue === 'deliveries'
       ? pageValue
       : 'timeline'
   const params = new URLSearchParams(query)
@@ -40,6 +44,8 @@ function readRoute(): RouteState {
     tapeId: params.get('tape') ?? undefined,
     tapeOffset: readOffset(params.get('tapesOffset')),
     eventOffset: readOffset(params.get('eventsOffset')),
+    deliveryId: params.get('delivery') ?? undefined,
+    deliveryOffset: readOffset(params.get('deliveryOffset')),
   }
 }
 
@@ -69,6 +75,7 @@ function App() {
         <div className="sidebar-rule" />
         <nav aria-label="Console sections">
           <p className="nav-label">Inspect</p>
+          <NavLink href="#deliveries" active={route.page === 'deliveries'} label="Delivery workbench" icon="▤" />
           <NavLink href="#timeline" active={route.page === 'timeline'} label="Capture timeline" icon="◌" />
           <NavLink href="#compile?skill=demo" active={route.page === 'compile'} label="Compile review" icon="⌁" />
           <NavLink href="#permissions?skill=demo" active={route.page === 'permissions'} label="Permissions" icon="⊙" />
@@ -102,6 +109,7 @@ function App() {
         </header>
 
         <main id="main-content" className="main-content">
+          {route.page === 'deliveries' ? <DeliveriesPage deliveryId={route.deliveryId} offset={route.deliveryOffset} /> : null}
           {route.page === 'timeline' ? <TimelinePage tapeId={route.tapeId} tapeOffset={route.tapeOffset} eventOffset={route.eventOffset} /> : null}
           {route.page === 'compile' ? <CompileReviewPage skillId={route.skillId} /> : null}
           {route.page === 'permissions' ? <PermissionReviewPage skillId={route.skillId} /> : null}
@@ -110,7 +118,7 @@ function App() {
         </main>
 
         <footer className="app-footer">
-          <span>SkillTape Console <span translate="no">v0.1</span></span>
+          <span>SkillTape Console <span translate="no">v{metadata.version}</span></span>
           <span>Read-only evidence surface</span>
         </footer>
       </div>
@@ -138,6 +146,7 @@ function NavLink({
 }
 
 function pageLabel(page: PageKey): string {
+  if (page === 'deliveries') return 'Delivery workbench'
   if (page === 'compile') return 'Compile review'
   if (page === 'permissions') return 'Permission review'
   if (page === 'receipt') return 'Verify Receipt'
