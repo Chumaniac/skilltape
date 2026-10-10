@@ -3,7 +3,7 @@
 The source catalog now includes a [multi-organization delivery](examples/verified-tenant-delivery/README.md)
 with actual bounded local production and independent composite-key checks.
 It keeps same local order IDs separate and demonstrates a successful execution
-whose balanced allocation still fails the consumer contract. Source binary0.2.2
+whose balanced allocation still fails the consumer contract. Source binary0.2.3
 and the existing public0.2.1 release remain distinct; no live account is used.
 
 > **Beta** — Turn a real local workflow into a reviewable Agent Skill you can replay and verify before you share it.
@@ -33,6 +33,14 @@ predate the new delivery and Console features. Download current builds from
 the v0.2.1 release above. No historical tag or successful demo is replaced.
 
 ## Current source candidate
+
+Source0.2.3 adds a [saved delivery workbench](docs/reference/saved-deliveries.md).
+Point Console at the parent of actual `verify --delivery-dir` outputs, select a
+folder, inspect its physical file hashes and recheck after a change. Reported
+execution, file integrity and independent business requirements remain separate.
+No demo ID, legacy run registry or manual Receipt copy is required for this path.
+The new physical inspection currently uses POSIX native file handles; Windows
+keeps existing Console views without claiming this new inspection capability.
 
 Source 0.2.2 adds bounded stable exports, shared no-replace publication and
 optional `export --receipt` association with successful metadata and matching
@@ -93,6 +101,12 @@ intentionally fail closed until an equivalent restricted executor is integrated.
 The source Console supports previous/next navigation through Tapes and events,
 keeping only the current page in memory. See the [Console guide](docs/guides/configuration.md#local-console-overrides)
 for startup details. This improvement is not included in the published v0.1.0 assets.
+
+For retained deliveries, run `skilltape console --workspace /path/to/saved-parent`
+and choose **Delivery workbench**. This source0.2.3 interface discovers actual
+bundles directly and provides bounded file checks and review actions. It never
+executes a workflow, edits files or declares business requirements accepted.
+The existing public0.2.1 binaries remain independently available.
 
 The current source also bounds Replay/Verify inputs to 10,000 entries, depth 64,
 16 MiB per file, and 64 MiB in total. Hashing and staging reject detected changes

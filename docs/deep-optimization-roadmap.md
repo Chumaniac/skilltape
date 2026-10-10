@@ -60,6 +60,15 @@ example and an independent inventory check. Preserve old tags and assets.
 
 ## Domain expansion
 
+### Visible business continuation — 2026-10-10
+
+Source0.2.3 connects the read-only Console to actual retained CLI delivery folders.
+An operator can page through saved bundles, choose one, check file hashes and
+review concrete integrity findings, without manually fabricating a run registry.
+Reported success and intact files remain independent of the business contract;
+the companion SkillSync source0.1.7 report provides record-level review positions.
+This is a visible local workflow rather than a claim of live platform adoption.
+
 ### Continuation cycle — 2026-10-10
 
 The restricted tenant-delivery example now connects an actual bounded local

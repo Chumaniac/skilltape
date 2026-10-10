@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.3 source candidate] - 2026-10-10
+
+- Add a visible saved-delivery Console workbench backed by actual CLI bundle
+  discovery, selectable bounded pages, manual file rechecks and actionable
+  integrity findings. Preserve existing Timeline/compile/Receipt views.
+- Separate reported execution, physical file matching and unrun independent
+  business checks. No demo IDs, Receipt copying, commands or payload contents
+  are required or introduced in the delivery path.
+- Add native no-follow metadata/file reads and stable hashes, exact file sets,
+  capacity bounds, two concurrent blocking checks and cancelled-request cleanup.
+  Reject non-loopback service binding. Native inspection currently requires POSIX;
+  Windows existing read-only views and fail-closed Replay/Verify remain intact.
+- Show the current Console source version from package metadata. This update is
+  source-only; the public0.2.1 binaries and historical assets remain unchanged.
+
 ## Source catalog continuation — 2026-10-10
 
 - Add a locked, restricted multi-organization delivery example using native Bash

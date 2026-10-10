@@ -42,6 +42,16 @@ are absent from the existing v0.2.1 release assets; no new release is claimed.
   Markdown audit retains 8 known historical fenced-code example targets;
   all rendered prose links and new document links resolve.
 
+## Source candidate 0.2.3 — 2026-10-10
+
+The new workbench consumes actual retained CLI delivery folders independently
+of the legacy mocked run/Receipt registry. It reports physical file observations,
+saved execution metadata and separate requirement/authentication boundaries.
+Native API regression checks and the extended local browser suite are recorded
+in the current source delivery evidence. Full Rust/Console, packaging/installer
+and current CI checks remain required before main; source is not a new release.
+See the [saved delivery contract](reference/saved-deliveries.md).
+
 ## Current merged-main evidence
 
 - The implementation and release workflow are merged on `main` at commit

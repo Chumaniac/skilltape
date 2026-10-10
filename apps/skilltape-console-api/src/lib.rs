@@ -1,5 +1,6 @@
 //! Read-only local API for the SkillTape Console.
 
+mod deliveries;
 mod read_model;
 pub mod routes;
 
@@ -14,6 +15,8 @@ use tokio::net::TcpListener;
 
 #[derive(Debug, Error)]
 pub enum ServeError {
+    #[error("Console API must bind to a loopback address")]
+    NonLoopback,
     #[error("console API model failed to initialize")]
     Model(#[from] ReadModelError),
     #[error("console API bind failed")]
@@ -34,10 +37,7 @@ pub async fn serve_with_static(
     static_root: Option<&Path>,
 ) -> Result<(), ServeError> {
     if !bind.ip().is_loopback() {
-        eprintln!(
-            "warning: SkillTape Console API is bound outside loopback at {}; keep the workspace private",
-            bind
-        );
+        return Err(ServeError::NonLoopback);
     }
     let model = ConsoleReadModel::new(root)?;
     let static_root = static_root.map(validate_static_root).transpose()?;

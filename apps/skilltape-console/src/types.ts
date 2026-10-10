@@ -145,3 +145,31 @@ export interface Receipt {
   assertions: AssertionResult[]
   policy_decisions: PolicyDecision[]
 }
+
+export interface DeliverySummary {
+  id: string
+  metadata_valid: boolean
+  reported_status: string | null
+  run_id: string | null
+  declared_files: number | null
+  declared_bytes: number | null
+}
+
+export interface DeliveryReview {
+  schema: string
+  id: string
+  status: 'passed' | 'failed'
+  reported_status: string | null
+  run_id: string | null
+  receipt_binding: 'verified' | 'failed'
+  requirement_validation: 'not-run'
+  provenance: 'not-authenticated'
+  declared_files: number | null
+  declared_bytes: number | null
+  checked_files: number
+  checked_bytes: number
+  files: FileSummary[]
+  files_truncated: boolean
+  findings: Array<{ code: string; path: string | null }>
+  findings_truncated: boolean
+}

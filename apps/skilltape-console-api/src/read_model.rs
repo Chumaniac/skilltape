@@ -43,6 +43,8 @@ pub enum ReadModelError {
     NotFound,
     #[error("stored document is invalid")]
     InvalidDocument,
+    #[error("delivery inspection is unavailable on this platform")]
+    UnsupportedPlatform,
     #[error("stored resource could not be read")]
     Io(#[from] io::Error),
 }
