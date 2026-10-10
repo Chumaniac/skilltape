@@ -1221,6 +1221,7 @@ tbody code {
 .delivery-workbench :focus-visible { outline: 3px solid var(--cyan); outline-offset: 3px; }
 @media (max-width: 760px) {
   .delivery-workbench .delivery-evidence-grid { grid-template-columns: 1fr; padding: 16px; }
+  .delivery-workbench .delivery-table { min-width: 640px; }
   .delivery-workbench .delivery-table th, .delivery-workbench .delivery-table td { padding: 12px; min-width: 100px; }
   .delivery-workbench .delivery-filter, .delivery-workbench .delivery-pagination { padding: 16px; }
   .delivery-workbench .delivery-identity, .delivery-workbench .delivery-findings { padding: 0 16px 16px; }
