@@ -24,6 +24,22 @@ copy is required. Existing Capture, compile and legacy Receipt views remain.
 
 ## Security and resources
 
+### Compare a replacement before sharing
+
+Choose **Baseline delivery** and **Replacement delivery** on the same queue
+page, then **Compare file changes**. Console reuses the existing read-only
+inspection API for both folders. A complete comparison requires both physical
+checks and Receipt hash bindings to match, no findings, and a complete list of
+at most100 files per bundle. Failed, malformed or truncated evidence reports
+comparison unavailable; omitted files are never treated as unchanged.
+
+Compare exact relative paths, observed sizes and SHA-256 hashes. Show added,
+removed, changed and unchanged counts, and at most100 changed rows with an
+explicit truncation notice. These are two separate local snapshots, not an
+atomic observation, execution replay, authenticated baseline or business
+approval. No file content is displayed. Changing either selection, refreshing
+the queue or leaving the page cancels requests and discards old results.
+
 Inspection is read-only, with no command, write, credential or provider route.
 The server refuses non-loopback binding. Native no-follow directory/file handles
 anchor the selected root and each member; metadata/files are rechecked before

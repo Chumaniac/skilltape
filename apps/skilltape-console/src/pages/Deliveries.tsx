@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { formatNumber, getDeliveries, getDelivery } from '../api'
 import type { Collection, DeliveryReview, DeliverySummary } from '../types'
 import { CodeBlock, EmptyState, Metric, PageError, PageLoading, StatusBadge, titleCase } from '../ui'
+import { DeliveryComparison } from './DeliveryComparison'
 
 interface Props { deliveryId?: string; offset: number }
 
@@ -70,6 +71,7 @@ export function DeliveriesPage({ deliveryId, offset }: Props) {
           <button className="button button-secondary" type="button" disabled={collection.next_offset === null} onClick={() => { if (collection.next_offset !== null) page(collection.next_offset) }}>Next deliveries</button>
         </div></div>
       </article> : null}
+    {collection && !listLoading && !listError && collection.items.length > 1 ? <DeliveryComparison key={offset + ':' + listRevision} items={collection.items} /> : null}
     {deliveryId ? <article className="panel delivery-selected" aria-live="polite">
       <div className="panel-heading"><div><p className="eyebrow">Selected retained bundle</p><h2><code>{deliveryId}</code></h2></div>
         <button className="button" type="button" disabled={detailLoading} onClick={() => setDetailRevision(value => value + 1)}>Recheck selected delivery</button></div>
