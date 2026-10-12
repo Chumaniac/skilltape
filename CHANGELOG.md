@@ -1,5 +1,15 @@
 # Changelog
 
+## Source continuation — 2026-10-12
+
+- Compare preserved baseline and replacement deliveries in the Console using
+  actual read-only inspections and observed path, size and SHA-256 differences.
+- Require complete successful evidence; reject failed, truncated, duplicate or
+  malformed file summaries instead of declaring omitted files unchanged.
+- Bound each input to100 files and the displayed changes to100 rows; discard
+  results and cancel requests on selection, queue refresh or navigation.
+- Keep source0.2.3 and public0.2.1 separate; no release or business approval.
+
 ## [0.2.3 source candidate] - 2026-10-10
 
 - Add a visible saved-delivery Console workbench backed by actual CLI bundle

@@ -39,6 +39,10 @@ Point Console at the parent of actual `verify --delivery-dir` outputs, select a
 folder, inspect its physical file hashes and recheck after a change. Reported
 execution, file integrity and independent business requirements remain separate.
 No demo ID, legacy run registry or manual Receipt copy is required for this path.
+The source workbench can also recheck and compare two saved bundles before
+sharing a replacement, showing added, removed and changed file hashes. Incomplete
+or failed inspections stay explicitly unavailable for comparison; this does not
+check business requirements or authenticate the baseline.
 The new physical inspection currently uses POSIX native file handles; Windows
 keeps existing Console views without claiming this new inspection capability.
 

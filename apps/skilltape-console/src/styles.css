@@ -1218,8 +1218,14 @@ tbody code {
 .delivery-workbench .delivery-next-step { padding: 22px; }
 .delivery-workbench .delivery-next-step h2 { font-size: 20px; margin: 8px 0 12px; }
 .delivery-workbench .delivery-next-step .code-wrap { margin: 16px 0; }
+.delivery-workbench .delivery-comparison { padding: 22px; }
+.delivery-workbench .delivery-comparison-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 16px; margin: 18px 0; }
+.delivery-workbench .delivery-comparison-controls label { display: flex; flex-direction: column; gap: 8px; min-width: 0; max-width: 100%; color: var(--muted); font-size: 13px; }
+.delivery-workbench .delivery-comparison-controls select { max-width: 100%; width: 260px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-soft); color: var(--text); font: inherit; }
+.delivery-workbench .delivery-comparison p { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
 .delivery-workbench :focus-visible { outline: 3px solid var(--cyan); outline-offset: 3px; }
 @media (max-width: 760px) {
+  .delivery-workbench .delivery-comparison { padding: 16px; }
   .delivery-workbench .delivery-evidence-grid { grid-template-columns: 1fr; padding: 16px; }
   .delivery-workbench .delivery-table { min-width: 640px; }
   .delivery-workbench .delivery-table th, .delivery-workbench .delivery-table td { padding: 12px; min-width: 100px; }
