@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getDelivery } from '../api'
+import { formatNumber, getDelivery } from '../api'
 import { compareDeliveries } from '../delivery-comparison'
 import type { DeliverySummary } from '../types'
 import { PageError, PageLoading, StatusBadge } from '../ui'
@@ -51,10 +51,11 @@ export function DeliveryComparison({ items }: { items: DeliverySummary[] }) {
       <StatusBadge tone="neutral">File comparison complete</StatusBadge>
       <p>{result.counts.added} added · {result.counts.removed} removed · {result.counts.changed} changed · {result.counts.unchanged} unchanged</p>
       <div className="delivery-table-wrap" tabIndex={0} aria-label="Saved delivery file changes"><table className="delivery-table">
-        <thead><tr><th>File</th><th>Change</th><th>Baseline SHA-256</th><th>Replacement SHA-256</th></tr></thead>
+        <thead><tr><th>File</th><th>Change</th><th>Baseline bytes</th><th>Replacement bytes</th><th>Baseline SHA-256</th><th>Replacement SHA-256</th></tr></thead>
         <tbody>{result.changes.map(row => <tr key={row.path}><td><code>{row.path}</code></td><td>{row.kind}</td>
+          <td>{row.before ? formatNumber(row.before.bytes) : 'Absent'}</td><td>{row.after ? formatNumber(row.after.bytes) : 'Absent'}</td>
           <td><code>{row.before?.sha256 ?? 'Absent'}</code></td><td><code>{row.after?.sha256 ?? 'Absent'}</code></td></tr>)}
-          {!result.changes.length ? <tr><td colSpan={4}>No file content or size changes observed.</td></tr> : null}</tbody>
+          {!result.changes.length ? <tr><td colSpan={6}>No file content or size changes observed.</td></tr> : null}</tbody>
       </table></div>
       {result.truncated ? <p>Counts cover both bundles; only the first 100 changed rows are shown.</p> : null}
     </> : <><StatusBadge tone="warn">Comparison unavailable</StatusBadge><p>Physical evidence is incomplete or failed. Recheck the original bundles before comparing.</p></> : null}
