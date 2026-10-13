@@ -70,6 +70,61 @@ fn lock_tape(root: &std::path::Path) -> File {
 }
 
 #[test]
+fn bounded_reads_accept_exact_limits_and_reject_oversized_streams() {
+    let (_temp, root, store) = create_store();
+    store.append(&event(0)).unwrap();
+    let bytes = fs::metadata(root.join("events.jsonl")).unwrap().len();
+    assert_eq!(
+        store
+            .read_events_bounded(bytes, 1)
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(matches!(
+        store.read_events_bounded(bytes - 1, 1),
+        Err(TapeStoreError::ReadBudgetExceeded)
+    ));
+    assert!(matches!(
+        store.read_events_bounded(bytes, 0),
+        Err(TapeStoreError::ReadBudgetExceeded)
+    ));
+    let original = fs::read_to_string(root.join("events.jsonl")).unwrap();
+    fs::write(root.join("events.jsonl"), original.trim_end()).unwrap();
+    assert_eq!(
+        store
+            .read_events_bounded(bytes - 1, 1)
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn bounded_reader_enforces_bytes_when_a_line_grows_after_open() {
+    let (_temp, root, store) = create_store();
+    store.append(&event(0)).unwrap();
+    let original = fs::read_to_string(root.join("events.jsonl")).unwrap();
+    let mut reader = store
+        .read_events_bounded(original.len() as u64 + 4, 1)
+        .unwrap();
+    fs::write(
+        root.join("events.jsonl"),
+        format!("{}        \n", original.trim_end()),
+    )
+    .unwrap();
+    assert!(matches!(
+        reader.next(),
+        Some(Err(TapeStoreError::ReadBudgetExceeded))
+    ));
+    assert!(reader.next().is_none());
+}
+
+#[test]
 fn creates_empty_tape_and_reopens_it_without_overwriting() {
     let (_temp_dir, root, store) = create_store();
 

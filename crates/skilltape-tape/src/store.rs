@@ -1,5 +1,5 @@
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, Read, Write};
 use std::path::{Component, Path, PathBuf};
 
 use fs2::FileExt;
@@ -50,6 +50,8 @@ pub enum TapeStoreError {
     },
     #[error("tape is already finished")]
     AlreadyFinished,
+    #[error("tape exceeds the configured event read budget")]
+    ReadBudgetExceeded,
 }
 
 pub struct TapeStore {
@@ -190,10 +192,34 @@ impl TapeStore {
     pub fn read_events(
         &self,
     ) -> Result<impl Iterator<Item = Result<TapeEvent, TapeStoreError>>, TapeStoreError> {
+        self.event_iter(None, None)
+    }
+
+    /// Stream a Tape within explicit byte and event budgets, including file growth.
+    pub fn read_events_bounded(
+        &self,
+        max_bytes: u64,
+        max_events: u64,
+    ) -> Result<impl Iterator<Item = Result<TapeEvent, TapeStoreError>>, TapeStoreError> {
+        self.event_iter(Some(max_bytes), Some(max_events))
+    }
+
+    fn event_iter(
+        &self,
+        max_bytes: Option<u64>,
+        max_events: Option<u64>,
+    ) -> Result<EventIter, TapeStoreError> {
         let file = File::open(self.root.join(EVENTS))?;
+        if max_bytes.is_some_and(|limit| file.metadata().map_or(true, |m| m.len() > limit)) {
+            return Err(TapeStoreError::ReadBudgetExceeded);
+        }
         let manifest = self.read_manifest()?;
+        if max_events.is_some_and(|limit| manifest.event_count > limit) {
+            return Err(TapeStoreError::ReadBudgetExceeded);
+        }
         Ok(EventIter {
-            lines: BufReader::new(file).lines(),
+            reader: BufReader::new(file),
+            remaining_bytes: max_bytes,
             next_sequence: 0,
             line: 0,
             manifest_count: manifest.event_count,
@@ -213,8 +239,9 @@ impl TapeStore {
     }
 }
 
-struct EventIter<R = io::Lines<BufReader<File>>> {
-    lines: R,
+struct EventIter {
+    reader: BufReader<File>,
+    remaining_bytes: Option<u64>,
     next_sequence: u64,
     line: usize,
     manifest_count: u64,
@@ -227,24 +254,40 @@ impl Iterator for EventIter {
         if self.done {
             return None;
         }
-        let line = match self.lines.next() {
-            None if self.next_sequence < self.manifest_count => {
+        let mut line = String::new();
+        let read = match self.remaining_bytes {
+            Some(remaining) => self
+                .reader
+                .by_ref()
+                .take(remaining.saturating_add(1))
+                .read_line(&mut line),
+            None => self.reader.read_line(&mut line),
+        };
+        let bytes = match read {
+            Ok(bytes) => bytes as u64,
+            Err(error) => return Some(Err(error.into())),
+        };
+        if let Some(remaining) = self.remaining_bytes {
+            if bytes > remaining {
+                self.done = true;
+                return Some(Err(TapeStoreError::ReadBudgetExceeded));
+            }
+            self.remaining_bytes = Some(remaining - bytes);
+        }
+        match bytes {
+            0 if self.next_sequence < self.manifest_count => {
                 self.done = true;
                 return Some(Err(TapeStoreError::EventCountShortfall {
                     manifest_count: self.manifest_count,
                     event_count: self.next_sequence,
                 }));
             }
-            None => {
+            0 => {
                 self.done = true;
                 return None;
             }
-            Some(line) => line,
-        };
-        let line = match line {
-            Ok(line) => line,
-            Err(e) => return Some(Err(e.into())),
-        };
+            _ => {}
+        }
         self.line += 1;
         let event: TapeEvent = match serde_json::from_str(&line) {
             Ok(e) => e,
