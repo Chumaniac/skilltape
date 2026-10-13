@@ -17,6 +17,7 @@ const STORAGE_DIR: &str = ".skilltape";
 const DEFAULT_PAGE_SIZE: usize = 50;
 const MAX_PAGE_SIZE: usize = 100;
 const MAX_EVENT_BYTES: u64 = 16 * 1024 * 1024;
+const MAX_TAPE_EVENTS: u64 = 100_000;
 const REQUIRED_PACKAGE_FILES: [&str; 6] = [
     "skilltape.yaml",
     "workflow.yaml",
@@ -212,14 +213,24 @@ impl ConsoleReadModel {
         let tape_path = self.storage_child("tapes")?.join(tape_id);
         self.ensure_safe_path(&tape_path)?;
         reject_symlink_tree(&tape_path)?;
+        if fs::metadata(tape_path.join("manifest.json"))?.len() > 64 * 1024 {
+            return Err(ReadModelError::InvalidDocument);
+        }
         let store = TapeStore::open(&tape_path).map_err(map_tape_error)?;
-        let events = store
-            .read_events()
+        let limit = limit.clamp(1, MAX_PAGE_SIZE);
+        let mut page = Vec::new();
+        let mut total = 0;
+        // Validate the complete bounded stream, retaining only the requested page.
+        for event in store
+            .read_events_bounded(MAX_EVENT_BYTES, MAX_TAPE_EVENTS)
             .map_err(map_tape_error)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(map_tape_error)?;
-        let total = events.len();
-        let page: Vec<TapeEvent> = events.into_iter().skip(offset).take(limit).collect();
+        {
+            let event = event.map_err(map_tape_error)?;
+            if total >= offset && page.len() < limit {
+                page.push(event);
+            }
+            total += 1;
+        }
         let next = offset.saturating_add(page.len());
         let next_offset = (next < total).then_some(next);
         Ok(TapeEvents {

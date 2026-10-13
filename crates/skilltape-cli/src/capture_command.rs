@@ -10,6 +10,7 @@ use skilltape_capture::{
     capture_terminal, merge_capture_timeline, watch_workspace, CaptureOptions, FilesystemChange,
     FilesystemChangeKind, TimelineFilesystemChange,
 };
+use skilltape_runner::publish_directory_noreplace;
 use skilltape_tape::{
     EventSource, RedactionState, TapeEvent, TapeEventKind, TapeManifest, TapeStore, TAPE_SCHEMA_V1,
 };
@@ -19,6 +20,9 @@ use tokio_util::sync::CancellationToken;
 
 const CAPTURE_ERROR_EXIT_CODE: u8 = 1;
 const CAPTURE_CANCELLED_EXIT_CODE: u8 = 130;
+// Keep the in-memory merge finite; larger captures need an external merge design.
+const MAX_CAPTURE_EVENTS: usize = 10_000;
+const MAX_CAPTURE_EVENT_BYTES: usize = 16 * 1024 * 1024;
 
 #[cfg(unix)]
 static INTERRUPTED: AtomicBool = AtomicBool::new(false);
@@ -95,6 +99,8 @@ enum CaptureCommandError {
     Filesystem(#[from] skilltape_capture::FilesystemCaptureError),
     #[error("capture task failed: {0}")]
     Task(String),
+    #[error("capture event budget exceeded; split the command into smaller captures")]
+    EventBudgetExceeded,
 }
 
 #[derive(Serialize)]
@@ -216,8 +222,8 @@ async fn capture(config: CaptureConfig) -> Result<CaptureJsonSummary, CaptureCom
         .await
         .map_err(|_| CaptureCommandError::Task("filesystem watcher did not start".to_owned()))?;
 
-    let collector = tokio::spawn(collect_changes(change_rx));
     let cancel = CancellationToken::new();
+    let collector = tokio::spawn(collect_changes(change_rx, cancel.clone()));
     let capture_future = capture_terminal(
         CaptureOptions {
             command: command.clone(),
@@ -250,9 +256,16 @@ async fn capture(config: CaptureConfig) -> Result<CaptureJsonSummary, CaptureCom
     let watcher_result = watcher_task
         .await
         .map_err(|error| CaptureCommandError::Task(error.to_string()))?;
-    let filesystem_events = collector
+    let filesystem_events = match collector
         .await
-        .map_err(|error| CaptureCommandError::Task(error.to_string()))?;
+        .map_err(|error| CaptureCommandError::Task(error.to_string()))?
+    {
+        Ok(events) => events,
+        Err(error) => {
+            let _ = std::fs::remove_dir_all(&staging_root);
+            return Err(error);
+        }
+    };
     if let Err(error) = watcher_result {
         if !capture_cancelled {
             let _ = std::fs::remove_dir_all(&staging_root);
@@ -277,55 +290,38 @@ async fn capture(config: CaptureConfig) -> Result<CaptureJsonSummary, CaptureCom
     };
 
     let staging_store = TapeStore::open(&staging_root)?;
-    let tape_events = staging_store
-        .read_events()?
-        .collect::<Result<Vec<_>, _>>()?;
-    let merged = merge_capture_timeline(
-        filesystem_events
-            .iter()
-            .cloned()
-            .map(|event| TimelineFilesystemChange {
-                occurred_at_ms: event.occurred_at_ms,
-                change: event.change,
-            }),
-        tape_events,
-        Duration::from_millis(40),
-    );
+    let filesystem_count = filesystem_events.len();
+    let tape_events = match staging_store
+        .read_events_bounded(
+            MAX_CAPTURE_EVENT_BYTES as u64,
+            (MAX_CAPTURE_EVENTS - filesystem_count) as u64,
+        )
+        .and_then(|events| events.collect::<Result<Vec<_>, _>>())
+    {
+        Ok(events) => events,
+        Err(error) => {
+            let _ = std::fs::remove_dir_all(&staging_root);
+            return Err(error.into());
+        }
+    };
+    let merged = merge_capture_timeline(filesystem_events, tape_events, Duration::from_millis(40));
     if use_default_output {
         if let Err(error) = validate_default_output(&output, &workspace) {
             let _ = std::fs::remove_dir_all(&staging_root);
             return Err(error);
         }
     }
-    let final_store = match TapeStore::create(&output, manifest) {
-        Ok(store) => store,
+    let final_manifest = match publish_capture_timeline(
+        &output,
+        manifest,
+        merged.into_iter().flat_map(|batch| batch.events),
+    ) {
+        Ok(manifest) => manifest,
         Err(error) => {
             let _ = std::fs::remove_dir_all(&staging_root);
-            return Err(error.into());
+            return Err(error);
         }
     };
-    for event in merged.into_iter().flat_map(|batch| batch.events) {
-        let event = match event {
-            skilltape_capture::TimelineEvent::Tape(mut event) => {
-                event.sequence = final_store.read_manifest()?.event_count;
-                event
-            }
-            skilltape_capture::TimelineEvent::Filesystem(event) => TapeEvent {
-                sequence: final_store.read_manifest()?.event_count,
-                occurred_at_ms: event.occurred_at_ms,
-                kind: TapeEventKind::FilesystemChanged,
-                source: EventSource::Filesystem,
-                payload: filesystem_payload(&event.change),
-                redaction: RedactionState::Unredacted,
-            },
-        };
-        if let Err(error) = final_store.append(&event) {
-            let _ = std::fs::remove_dir_all(&output);
-            let _ = std::fs::remove_dir_all(&staging_root);
-            return Err(error.into());
-        }
-    }
-    let final_manifest = final_store.finish(now_ms())?;
     let _ = std::fs::remove_dir_all(&staging_root);
 
     Ok(CaptureJsonSummary {
@@ -335,7 +331,7 @@ async fn capture(config: CaptureConfig) -> Result<CaptureJsonSummary, CaptureCom
         workspace: workspace.to_string_lossy().into_owned(),
         id,
         event_count: final_manifest.event_count,
-        filesystem_events: filesystem_events.len(),
+        filesystem_events: filesystem_count,
         command,
         exit_code: capture_summary.exit_code,
         signal: capture_summary.signal,
@@ -344,6 +340,42 @@ async fn capture(config: CaptureConfig) -> Result<CaptureJsonSummary, CaptureCom
         output_bytes: capture_summary.output_bytes,
         output_truncated: capture_summary.output_truncated,
     })
+}
+
+fn publish_capture_timeline(
+    output: &Path,
+    manifest: TapeManifest,
+    events: impl IntoIterator<Item = skilltape_capture::TimelineEvent>,
+) -> Result<TapeManifest, CaptureCommandError> {
+    // Finish beside the destination, then use the existing no-replace publisher.
+    let completed_root = output.with_file_name(format!(".skilltape-completed-{}", manifest.id));
+    let final_store = TapeStore::create(&completed_root, manifest)?;
+    let publication = (|| -> Result<TapeManifest, CaptureCommandError> {
+        for (sequence, event) in events.into_iter().enumerate() {
+            let event = match event {
+                skilltape_capture::TimelineEvent::Tape(mut event) => {
+                    event.sequence = sequence as u64;
+                    event
+                }
+                skilltape_capture::TimelineEvent::Filesystem(event) => TapeEvent {
+                    sequence: sequence as u64,
+                    occurred_at_ms: event.occurred_at_ms,
+                    kind: TapeEventKind::FilesystemChanged,
+                    source: EventSource::Filesystem,
+                    payload: filesystem_payload(&event.change),
+                    redaction: RedactionState::Unredacted,
+                },
+            };
+            final_store.append(&event)?;
+        }
+        let finished = final_store.finish(now_ms())?;
+        publish_directory_noreplace(&completed_root, output)?;
+        Ok(finished)
+    })();
+    if publication.is_err() {
+        let _ = std::fs::remove_dir_all(&completed_root);
+    }
+    publication
 }
 
 async fn wait_for_interrupt() {
@@ -361,15 +393,28 @@ async fn wait_for_interrupt() {
 
 async fn collect_changes(
     mut receiver: mpsc::Receiver<FilesystemChange>,
-) -> Vec<TimelineFilesystemChange> {
+    cancel: CancellationToken,
+) -> Result<Vec<TimelineFilesystemChange>, CaptureCommandError> {
     let mut events = Vec::new();
+    let mut metadata_bytes = 0_usize;
     while let Some(change) = receiver.recv().await {
+        // Charge owned string capacity, not just text length. The event ceiling
+        // separately bounds Vec growth; this is not a process RSS limit.
+        let bytes = std::mem::size_of::<TimelineFilesystemChange>()
+            .saturating_add(change.path.capacity())
+            .saturating_add(change.previous_path.as_ref().map_or(0, String::capacity))
+            .saturating_add(change.content_hash.as_ref().map_or(0, String::capacity));
+        metadata_bytes = metadata_bytes.saturating_add(bytes);
+        if events.len() >= MAX_CAPTURE_EVENTS || metadata_bytes > MAX_CAPTURE_EVENT_BYTES {
+            cancel.cancel();
+            return Err(CaptureCommandError::EventBudgetExceeded);
+        }
         events.push(TimelineFilesystemChange {
             occurred_at_ms: now_ms(),
             change,
         });
     }
-    events
+    Ok(events)
 }
 
 fn validate_name(name: &str) -> Result<(), CaptureCommandError> {
@@ -499,4 +544,119 @@ fn report_error(json_output: bool, message: &str) {
         println!("{}", serde_json::json!({"ok": false, "error": message}));
     }
     eprintln!("{message}");
+}
+
+#[cfg(test)]
+mod budget_tests {
+    use super::*;
+
+    fn manifest() -> TapeManifest {
+        TapeManifest {
+            schema: TAPE_SCHEMA_V1.to_owned(),
+            id: "synthetic-budget".to_owned(),
+            started_at_ms: 1,
+            finished_at_ms: None,
+            platform: "synthetic".to_owned(),
+            workspace_root: "workspace".to_owned(),
+            event_count: 0,
+        }
+    }
+
+    #[test]
+    fn failed_finalization_never_publishes_a_partial_tape() {
+        let temp = tempfile::tempdir().unwrap();
+        let output = temp.path().join("tape");
+        let mut invalid = manifest();
+        invalid.finished_at_ms = Some(2);
+        assert!(publish_capture_timeline(&output, invalid, []).is_err());
+        assert!(!output.exists());
+        assert_eq!(std::fs::read_dir(temp.path()).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn publication_preserves_a_destination_created_by_another_writer() {
+        let temp = tempfile::tempdir().unwrap();
+        let output = temp.path().join("tape");
+        std::fs::create_dir(&output).unwrap();
+        std::fs::write(output.join("preserved"), "synthetic original").unwrap();
+        assert!(publish_capture_timeline(&output, manifest(), []).is_err());
+        assert_eq!(
+            std::fs::read_to_string(output.join("preserved")).unwrap(),
+            "synthetic original"
+        );
+        assert_eq!(std::fs::read_dir(temp.path()).unwrap().count(), 1);
+    }
+
+    fn change(path: String) -> FilesystemChange {
+        FilesystemChange {
+            kind: FilesystemChangeKind::Created,
+            path,
+            previous_path: None,
+            content_hash: None,
+            size: Some(1),
+        }
+    }
+
+    #[tokio::test]
+    async fn filesystem_collection_has_a_finite_event_budget() {
+        let (sender, receiver) = mpsc::channel(8);
+        let producer = tokio::spawn(async move {
+            for index in 0..10_001 {
+                if sender.send(change(format!("file-{index}"))).await.is_err() {
+                    break;
+                }
+            }
+        });
+        let cancel = CancellationToken::new();
+        let result = collect_changes(receiver, cancel.clone()).await;
+        producer.await.unwrap();
+        assert!(matches!(
+            result,
+            Err(CaptureCommandError::EventBudgetExceeded)
+        ));
+        assert!(cancel.is_cancelled());
+    }
+
+    #[tokio::test]
+    async fn filesystem_metadata_has_a_byte_budget() {
+        let (sender, receiver) = mpsc::channel(1);
+        sender
+            .send(change("x".repeat(MAX_CAPTURE_EVENT_BYTES)))
+            .await
+            .unwrap();
+        drop(sender);
+        let cancel = CancellationToken::new();
+        assert!(matches!(
+            collect_changes(receiver, cancel.clone()).await,
+            Err(CaptureCommandError::EventBudgetExceeded)
+        ));
+        assert!(cancel.is_cancelled());
+    }
+
+    #[tokio::test]
+    async fn short_paths_cannot_hide_large_allocations() {
+        let (sender, receiver) = mpsc::channel(1);
+        let mut path = String::with_capacity(MAX_CAPTURE_EVENT_BYTES);
+        path.push('x');
+        sender.send(change(path)).await.unwrap();
+        drop(sender);
+        let cancel = CancellationToken::new();
+        assert!(matches!(
+            collect_changes(receiver, cancel.clone()).await,
+            Err(CaptureCommandError::EventBudgetExceeded)
+        ));
+        assert!(cancel.is_cancelled());
+    }
+
+    #[tokio::test]
+    async fn ordinary_filesystem_changes_are_preserved_without_cancelling() {
+        let (sender, receiver) = mpsc::channel(1);
+        sender.send(change("result.txt".to_owned())).await.unwrap();
+        drop(sender);
+        let cancel = CancellationToken::new();
+        let events = collect_changes(receiver, cancel.clone()).await.unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].change.path, "result.txt");
+        assert!(!cancel.is_cancelled());
+    }
 }

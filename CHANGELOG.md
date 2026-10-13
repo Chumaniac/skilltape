@@ -1,5 +1,15 @@
 # Changelog
 
+## Source maintenance — 2026-10-13
+
+- Stream and validate bounded Tape event reads while retaining only the
+  requested Console page, including errors outside that page.
+- Bound Capture event counts and retained metadata, cancel on exhaustion, and
+  move event payloads into the merge without cloning the filesystem collection.
+- Finish Capture in staging before no-replace publication; failed finalization
+  and destination conflicts preserve existing results.
+- Preserve source 0.2.3 and existing public release assets.
+
 ## Source continuation — 2026-10-12
 
 - Compare preserved baseline and replacement deliveries in the Console using

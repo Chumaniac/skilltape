@@ -133,7 +133,7 @@ fi
 ```
 
 Run this repository-local Markdown link audit from the repository root. It
-checks relative targets, ignores anchors and external URLs, resolves targets
+checks relative targets, ignores fenced examples, anchors and external URLs, resolves targets
 relative to their source file, and fails for a missing target:
 
 ```bash
@@ -151,7 +151,20 @@ for raw_path in files:
     if not raw_path:
         continue
     source = Path(raw_path.decode())
-    text = source.read_text(encoding="utf-8")
+    prose = []
+    fence = None
+    for line in source.read_text(encoding="utf-8").splitlines(keepends=True):
+        marker = re.match(r"^ {0,3}(`{3,}|~{3,})", line)
+        if marker:
+            run = marker.group(1)
+            if fence is None:
+                fence = run
+            elif run[0] == fence[0] and len(run) >= len(fence) and not line[marker.end():].strip():
+                fence = None
+            continue
+        if fence is None:
+            prose.append(line)
+    text = "".join(prose)
     for match in link_pattern.finditer(text):
         target = match.group(1).strip("<>")
         if not target or target.startswith("#"):

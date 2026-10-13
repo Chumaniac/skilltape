@@ -3,6 +3,28 @@
 Your first Skill needs no configuration. SkillTape does not automatically load
 a `.env` file: set these values in the shell that runs the installer or Console.
 
+## Capture and Tape resource limits
+
+The source implementation limits Capture to 10,000 combined filesystem and
+terminal events. Filesystem metadata is charged by occupied event slots and
+owned string capacities, up to 16 MiB; vector capacity and allocator overhead
+are additional and bounded by the event ceiling. The serialized terminal event
+stream has a separate 16 MiB read budget. This is not a process RSS limit.
+
+Exceeding a filesystem budget cancels the captured process and returns an error.
+The final event merge moves its inputs instead of cloning them. It completes in
+a sibling staging directory and uses the existing no-replace publisher, so
+finalization errors preserve an existing destination and do not publish an
+unfinished Tape. Split larger commands into separate captures.
+
+Console event pages retain at most 100 events. Each request still validates the
+complete event stream, with 16 MiB and 100,000-event ceilings and a 64 KiB Tape
+manifest ceiling. Oversized or invalid data returns an error rather than a
+partial successful page. Reads enforce the byte limit if the source grows;
+these checks do not freeze files against another process changing them.
+
+These limits apply to current source; no new binary release is implied.
+
 ## Installer settings
 
 The installer reads `SKILLTAPE_VERSION`, `SKILLTAPE_RELEASE_BASE_URL`,

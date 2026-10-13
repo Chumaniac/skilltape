@@ -131,6 +131,37 @@ async fn tape_events_preserve_redaction_and_support_pagination() {
     assert_eq!(events["next_offset"], Value::Null);
 }
 
+#[test]
+fn tape_pagination_rejects_a_source_over_the_read_budget() {
+    let (_temp, root) = fixture();
+    let path = root.join(".skilltape/tapes/tape-a/events.jsonl");
+    let original = fs::read_to_string(&path).expect("synthetic event");
+    // Legal JSON whitespace makes the stored line oversized without changing the event.
+    fs::write(
+        &path,
+        format!("{}{}\n", original.trim_end(), " ".repeat(16 * 1024 * 1024)),
+    )
+    .expect("oversized synthetic event");
+    let model = ConsoleReadModel::new(&root).expect("read model");
+    assert!(model.tape_events("tape-a", 0, 1).is_err());
+}
+
+#[test]
+fn tape_pagination_still_validates_events_outside_the_returned_page() {
+    let (_temp, root) = fixture();
+    let directory = root.join(".skilltape/tapes/tape-a");
+    let first = fs::read_to_string(directory.join("events.jsonl")).expect("synthetic event");
+    let mut second: Value = serde_json::from_str(&first).expect("event JSON");
+    second["sequence"] = json!(99);
+    fs::write(directory.join("events.jsonl"), format!("{first}{second}\n")).expect("events");
+    let mut manifest: Value =
+        serde_json::from_slice(&fs::read(directory.join("manifest.json")).unwrap()).unwrap();
+    manifest["event_count"] = json!(2);
+    fs::write(directory.join("manifest.json"), manifest.to_string()).expect("manifest");
+    let model = ConsoleReadModel::new(&root).expect("read model");
+    assert!(model.tape_events("tape-a", 0, 1).is_err());
+}
+
 #[tokio::test]
 async fn skill_diff_exposes_hashes_and_lint_without_absolute_paths() {
     let (_temp, root) = fixture();

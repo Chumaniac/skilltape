@@ -106,6 +106,14 @@ The source Console supports previous/next navigation through Tapes and events,
 keeping only the current page in memory. See the [Console guide](docs/guides/configuration.md#local-console-overrides)
 for startup details. This improvement is not included in the published v0.1.0 assets.
 
+Source maintenance on 2026-10-13 also bounds server-side Tape event reads to
+16 MiB and 100,000 events while validating the complete stream. Capture merges
+at most 10,000 events, charges allocated filesystem metadata against a 16 MiB
+budget, and rejects oversized terminal event streams before merging. These are
+retained-data budgets, not a process RSS guarantee. Complete Tapes are published
+without replacing an existing destination; budget or finalization failures do
+not publish a partial Tape. See the [resource limits](docs/guides/configuration.md#capture-and-tape-resource-limits).
+
 For retained deliveries, run `skilltape console --workspace /path/to/saved-parent`
 and choose **Delivery workbench**. This source0.2.3 interface discovers actual
 bundles directly and provides bounded file checks and review actions. It never

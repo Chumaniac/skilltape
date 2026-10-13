@@ -2,6 +2,24 @@
 
 Date: 2026-10-10. Historical release evidence retains its original scope.
 
+## Source maintenance — 2026-10-13
+
+The current maintenance slice bounds Console Tape reads and Capture retention,
+preserves complete-stream validation during pagination, and finishes new Tapes
+before no-replace publication. Regression fixtures cover byte/event limits,
+growth after opening, page-external errors, allocated string capacity,
+cancellation signaling, failed finalization and destination preservation.
+Validation applies to local synthetic data and source checks; it does not
+publish binaries, run customer workflows or establish production acceptance.
+
+Local macOS validation passed: 321 locked Rust tests, formatting, warning-free
+Clippy, Console production build, 14 Console checks in installed Chrome,
+release-package/workflow fixtures, installer fixtures and documentation checks.
+The pinned Playwright browser was absent locally, so the same Console assertions
+ran with a separate installed-Chrome test profile. Remote required checks remain
+the merge gate. The documentation link checker now excludes fenced historical
+examples while continuing to check actual relative navigation links.
+
 See the [documentation index](README.md), [installation guide](guides/installation.md),
 and [release workflow](../.github/workflows/release.yml) for the surrounding
 release documentation.
