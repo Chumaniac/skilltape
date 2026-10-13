@@ -193,11 +193,10 @@ async fn capture(config: CaptureConfig) -> Result<CaptureJsonSummary, CaptureCom
         workspace_root: workspace_name(&workspace),
         event_count: 0,
     };
-    let staging_root = std::env::temp_dir().join(format!(
-        "skilltape-capture-{}-{}",
-        std::process::id(),
-        started_at_ms
-    ));
+    let staging = tempfile::Builder::new()
+        .prefix("skilltape-capture-")
+        .tempdir()?;
+    let staging_root = staging.path().join("tape");
     let staging_store = TapeStore::create(&staging_root, manifest.clone())?;
 
     let (change_tx, change_rx) = mpsc::channel(1024);
@@ -256,19 +255,11 @@ async fn capture(config: CaptureConfig) -> Result<CaptureJsonSummary, CaptureCom
     let watcher_result = watcher_task
         .await
         .map_err(|error| CaptureCommandError::Task(error.to_string()))?;
-    let filesystem_events = match collector
+    let filesystem_events = collector
         .await
-        .map_err(|error| CaptureCommandError::Task(error.to_string()))?
-    {
-        Ok(events) => events,
-        Err(error) => {
-            let _ = std::fs::remove_dir_all(&staging_root);
-            return Err(error);
-        }
-    };
+        .map_err(|error| CaptureCommandError::Task(error.to_string()))??;
     if let Err(error) = watcher_result {
         if !capture_cancelled {
-            let _ = std::fs::remove_dir_all(&staging_root);
             return Err(error.into());
         }
     }
@@ -284,45 +275,27 @@ async fn capture(config: CaptureConfig) -> Result<CaptureJsonSummary, CaptureCom
             terminal_size: Default::default(),
         },
         Err(error) => {
-            let _ = std::fs::remove_dir_all(&staging_root);
             return Err(error.into());
         }
     };
 
     let staging_store = TapeStore::open(&staging_root)?;
     let filesystem_count = filesystem_events.len();
-    let tape_events = match staging_store
+    let tape_events = staging_store
         .read_events_bounded(
             MAX_CAPTURE_EVENT_BYTES as u64,
             (MAX_CAPTURE_EVENTS - filesystem_count) as u64,
         )
-        .and_then(|events| events.collect::<Result<Vec<_>, _>>())
-    {
-        Ok(events) => events,
-        Err(error) => {
-            let _ = std::fs::remove_dir_all(&staging_root);
-            return Err(error.into());
-        }
-    };
+        .and_then(|events| events.collect::<Result<Vec<_>, _>>())?;
     let merged = merge_capture_timeline(filesystem_events, tape_events, Duration::from_millis(40));
     if use_default_output {
-        if let Err(error) = validate_default_output(&output, &workspace) {
-            let _ = std::fs::remove_dir_all(&staging_root);
-            return Err(error);
-        }
+        validate_default_output(&output, &workspace)?;
     }
-    let final_manifest = match publish_capture_timeline(
+    let final_manifest = publish_capture_timeline(
         &output,
         manifest,
         merged.into_iter().flat_map(|batch| batch.events),
-    ) {
-        Ok(manifest) => manifest,
-        Err(error) => {
-            let _ = std::fs::remove_dir_all(&staging_root);
-            return Err(error);
-        }
-    };
-    let _ = std::fs::remove_dir_all(&staging_root);
+    )?;
 
     Ok(CaptureJsonSummary {
         ok: true,
@@ -348,34 +321,35 @@ fn publish_capture_timeline(
     events: impl IntoIterator<Item = skilltape_capture::TimelineEvent>,
 ) -> Result<TapeManifest, CaptureCommandError> {
     // Finish beside the destination, then use the existing no-replace publisher.
-    let completed_root = output.with_file_name(format!(".skilltape-completed-{}", manifest.id));
+    let parent = output
+        .parent()
+        .ok_or_else(|| CaptureCommandError::UnsafeOutput(output.to_owned()))?;
+    std::fs::create_dir_all(parent)?;
+    let completed = tempfile::Builder::new()
+        .prefix(".skilltape-completed-")
+        .tempdir_in(parent)?;
+    let completed_root = completed.path().join("tape");
     let final_store = TapeStore::create(&completed_root, manifest)?;
-    let publication = (|| -> Result<TapeManifest, CaptureCommandError> {
-        for (sequence, event) in events.into_iter().enumerate() {
-            let event = match event {
-                skilltape_capture::TimelineEvent::Tape(mut event) => {
-                    event.sequence = sequence as u64;
-                    event
-                }
-                skilltape_capture::TimelineEvent::Filesystem(event) => TapeEvent {
-                    sequence: sequence as u64,
-                    occurred_at_ms: event.occurred_at_ms,
-                    kind: TapeEventKind::FilesystemChanged,
-                    source: EventSource::Filesystem,
-                    payload: filesystem_payload(&event.change),
-                    redaction: RedactionState::Unredacted,
-                },
-            };
-            final_store.append(&event)?;
-        }
-        let finished = final_store.finish(now_ms())?;
-        publish_directory_noreplace(&completed_root, output)?;
-        Ok(finished)
-    })();
-    if publication.is_err() {
-        let _ = std::fs::remove_dir_all(&completed_root);
+    for (sequence, event) in events.into_iter().enumerate() {
+        let event = match event {
+            skilltape_capture::TimelineEvent::Tape(mut event) => {
+                event.sequence = sequence as u64;
+                event
+            }
+            skilltape_capture::TimelineEvent::Filesystem(event) => TapeEvent {
+                sequence: sequence as u64,
+                occurred_at_ms: event.occurred_at_ms,
+                kind: TapeEventKind::FilesystemChanged,
+                source: EventSource::Filesystem,
+                payload: filesystem_payload(&event.change),
+                redaction: RedactionState::Unredacted,
+            },
+        };
+        final_store.append(&event)?;
     }
-    publication
+    let finished = final_store.finish(now_ms())?;
+    publish_directory_noreplace(&completed_root, output)?;
+    Ok(finished)
 }
 
 async fn wait_for_interrupt() {
