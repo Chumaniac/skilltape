@@ -365,21 +365,21 @@ fn prepare_capture_parent(output: &Path) -> Result<PathBuf, CaptureCommandError>
         .parent()
         .ok_or_else(|| CaptureCommandError::UnsafeOutput(output.to_owned()))?;
     let mut ancestor = parent.to_owned();
-    while !ancestor.exists() {
-        if !ancestor.pop() {
-            return Err(CaptureCommandError::UnsafeOutput(output.to_owned()));
+    let selected_root = loop {
+        match ancestor.canonicalize() {
+            Ok(root) => break root,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound && ancestor.pop() => {}
+            Err(error) => return Err(error.into()),
         }
-    }
+    };
     // The caller selects the output location. Anchor new descendants to its
     // existing canonical directory instead of creating from an unchecked path.
-    let selected_root = ancestor.canonicalize()?;
     let relative = parent
         .strip_prefix(&ancestor)
         .map_err(|_| CaptureCommandError::UnsafeOutput(output.to_owned()))?;
-    if !selected_root.is_dir()
-        || relative
-            .components()
-            .any(|part| !matches!(part, Component::Normal(_)))
+    if relative
+        .components()
+        .any(|part| !matches!(part, Component::Normal(_)))
     {
         return Err(CaptureCommandError::UnsafeOutput(output.to_owned()));
     }
