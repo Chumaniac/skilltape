@@ -12,7 +12,7 @@ cancellation signaling, failed finalization and destination preservation.
 Validation applies to local synthetic data and source checks; it does not
 publish binaries, run customer workflows or establish production acceptance.
 
-Local macOS validation passed: 321 locked Rust tests, formatting, warning-free
+Initial local macOS validation passed: 321 locked Rust tests, formatting, warning-free
 Clippy, Console production build, 14 Console checks in installed Chrome,
 release-package/workflow fixtures, installer fixtures and documentation checks.
 The pinned Playwright browser was absent locally, so the same Console assertions

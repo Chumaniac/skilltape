@@ -321,13 +321,15 @@ fn publish_capture_timeline(
     events: impl IntoIterator<Item = skilltape_capture::TimelineEvent>,
 ) -> Result<TapeManifest, CaptureCommandError> {
     // Finish beside the destination, then use the existing no-replace publisher.
-    let parent = output
-        .parent()
-        .ok_or_else(|| CaptureCommandError::UnsafeOutput(output.to_owned()))?;
-    std::fs::create_dir_all(parent)?;
+    let parent = prepare_capture_parent(output)?;
+    let output = parent.join(
+        output
+            .file_name()
+            .ok_or_else(|| CaptureCommandError::UnsafeOutput(output.to_owned()))?,
+    );
     let completed = tempfile::Builder::new()
         .prefix(".skilltape-completed-")
-        .tempdir_in(parent)?;
+        .tempdir_in(&parent)?;
     let completed_root = completed.path().join("tape");
     let final_store = TapeStore::create(&completed_root, manifest)?;
     for (sequence, event) in events.into_iter().enumerate() {
@@ -348,8 +350,49 @@ fn publish_capture_timeline(
         final_store.append(&event)?;
     }
     let finished = final_store.finish(now_ms())?;
-    publish_directory_noreplace(&completed_root, output)?;
+    publish_directory_noreplace(&completed_root, &output)?;
     Ok(finished)
+}
+
+fn prepare_capture_parent(output: &Path) -> Result<PathBuf, CaptureCommandError> {
+    if output
+        .components()
+        .any(|part| matches!(part, Component::ParentDir))
+    {
+        return Err(CaptureCommandError::UnsafeOutput(output.to_owned()));
+    }
+    let parent = output
+        .parent()
+        .ok_or_else(|| CaptureCommandError::UnsafeOutput(output.to_owned()))?;
+    let mut ancestor = parent.to_owned();
+    while !ancestor.exists() {
+        if !ancestor.pop() {
+            return Err(CaptureCommandError::UnsafeOutput(output.to_owned()));
+        }
+    }
+    // The caller selects the output location. Anchor new descendants to its
+    // existing canonical directory instead of creating from an unchecked path.
+    let selected_root = ancestor.canonicalize()?;
+    let relative = parent
+        .strip_prefix(&ancestor)
+        .map_err(|_| CaptureCommandError::UnsafeOutput(output.to_owned()))?;
+    if !selected_root.is_dir()
+        || relative
+            .components()
+            .any(|part| !matches!(part, Component::Normal(_)))
+    {
+        return Err(CaptureCommandError::UnsafeOutput(output.to_owned()));
+    }
+    let resolved = selected_root.join(relative);
+    if !resolved.starts_with(&selected_root) {
+        return Err(CaptureCommandError::UnsafeOutput(output.to_owned()));
+    }
+    std::fs::create_dir_all(&resolved)?;
+    let canonical = resolved.canonicalize()?;
+    if !canonical.starts_with(&selected_root) {
+        return Err(CaptureCommandError::UnsafeOutput(output.to_owned()));
+    }
+    Ok(canonical)
 }
 
 async fn wait_for_interrupt() {
@@ -559,6 +602,26 @@ mod budget_tests {
             "synthetic original"
         );
         assert_eq!(std::fs::read_dir(temp.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn publication_rejects_parent_traversal_before_creating_directories() {
+        let temp = tempfile::tempdir().unwrap();
+        let output = temp.path().join("selected/../outside/tape");
+        assert!(publish_capture_timeline(&output, manifest(), []).is_err());
+        assert_eq!(std::fs::read_dir(temp.path()).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn publication_supports_new_nested_output_parents() {
+        let temp = tempfile::tempdir().unwrap();
+        let output = temp.path().join("nested/output/tape");
+        publish_capture_timeline(&output, manifest(), []).unwrap();
+        assert!(output.join("manifest.json").is_file());
+        assert_eq!(
+            std::fs::read_dir(output.parent().unwrap()).unwrap().count(),
+            1
+        );
     }
 
     fn change(path: String) -> FilesystemChange {
