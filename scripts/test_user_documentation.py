@@ -31,7 +31,7 @@ RETIRED_README_HEADINGS = (
 )
 
 LINK_RE = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
-INSTALLER_SOURCE_COMMIT = "beb0bba1870e20e03e5bc80a2d9234c04fc1c6f6"
+INSTALLER_SOURCE_COMMIT = "b715967df7d06067a50f8146bcdce87fd9538733"
 UNIX_INSTALLER_SOURCE = (
     "https://raw.githubusercontent.com/Chumaniac/skilltape/"
     f"{INSTALLER_SOURCE_COMMIT}/scripts/install.sh"
@@ -88,7 +88,7 @@ class UserDocumentationContractTests(unittest.TestCase):
         self.assertIn("docs/assets/quickstart-terminal.txt", text)
         self.assertIn("docs/guides/quickstart.md", text)
         self.assertIn(
-            "https://github.com/Chumaniac/skilltape/releases/tag/v0.1.0", text
+            "https://github.com/Chumaniac/skilltape/releases/tag/v0.2.1", text
         )
         destinations = {
             destination.split("#", 1)[0].strip().strip("<>")
@@ -141,7 +141,7 @@ class UserDocumentationContractTests(unittest.TestCase):
             "## macOS and Linux",
             "bwrap",
             "sandbox-exec",
-            "beb0bba1870e20e03e5bc80a2d9234c04fc1c6f6",
+            "b715967df7d06067a50f8146bcdce87fd9538733",
             "installation.md",
             "configuration.md",
             "whoami.exe",
@@ -177,7 +177,7 @@ class UserDocumentationContractTests(unittest.TestCase):
         self.assertEqual(2, text.count(unix_download))
         self.assertEqual(2, text.count('bash "$installer_path"'))
         self.assertIn(
-            'bash "$installer_path" 0.1.0 "$HOME/.local/bin" "aarch64-apple-darwin"',
+            'bash "$installer_path" 0.2.1 "$HOME/.local/bin" "aarch64-apple-darwin"',
             text,
         )
         self.assertIn(
@@ -191,7 +191,7 @@ class UserDocumentationContractTests(unittest.TestCase):
         )
         for value in (
             '"https://github.com/Chumaniac/skilltape/releases/download"',
-            '"0.1.0"',
+            '"0.2.1"',
             '"$env:LOCALAPPDATA\\SkillTape\\bin"',
             '"x86_64-pc-windows-msvc"',
         ):

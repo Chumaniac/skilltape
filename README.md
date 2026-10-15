@@ -15,7 +15,7 @@ configuration file.
 
 ![Terminal output from SkillTape Capture, Compile, Lint, and Verify](docs/assets/quickstart-terminal.svg)
 
-[Watch the 30-second terminal demo](docs/assets/quickstart-terminal.txt) · [Download v0.1.0](https://github.com/Chumaniac/skilltape/releases/tag/v0.1.0)
+[Watch the 30-second terminal demo](docs/assets/quickstart-terminal.txt) · [Download v0.2.1](https://github.com/Chumaniac/skilltape/releases/tag/v0.2.1)
 
 ## Verified public release
 
@@ -27,12 +27,18 @@ passed Linux, Intel Mac, Apple Silicon Mac and Windows builds, required
 provenance/SBOM/checksums and the published Windows installer smoke check.
 All eight archive/SBOM checksums were independently matched to public asset digests.
 
-Windows Replay/Verify still fail closed. The fixed v0.1.0 installation and
-successful terminal demo below remain historical reproducible examples; they
-predate the new delivery and Console features. Download current builds from
-the v0.2.1 release above. No historical tag or successful demo is replaced.
+Windows Replay/Verify still fail closed. The terminal demo records the historical
+v0.1.0 journey; the installation commands below use the published v0.2.1 release.
+Historical tags and demo evidence remain available.
 
 ## Current source candidate
+
+Current source adds repeatable literal Capture arguments (`--arg`) and orderly
+Ctrl+C handling for Replay/Verify on Unix. Cancellation returns exit 5, saves a
+cancelled Receipt when requested, and leaves incomplete deliveries unpublished.
+See [arguments and cancellation](docs/guides/configuration.md#arguments-and-cancellation-current-source).
+These maintenance changes require a source build and are not in v0.2.1.
+
 
 Source0.2.3 adds a [saved delivery workbench](docs/reference/saved-deliveries.md).
 Point Console at the parent of actual `verify --delivery-dir` outputs, select a
@@ -56,22 +62,21 @@ For a current published installation, download the
 [v0.2.1 assets](https://github.com/Chumaniac/skilltape/releases/tag/v0.2.1).
 The immutable installer source is available at release commit
 `b715967df7d06067a50f8146bcdce87fd9538733`; select `SKILLTAPE_VERSION=0.2.1`
-and keep the release base explicit. The historical v0.1.0 sequence below
-remains the independently recorded first-run demonstration.
+and keep the release base explicit. The commands below use this published build.
 
 ## Get a verified Skill in five minutes
 
-Install the fixed public v0.1.0 release without piping a download into a shell.
+Install the fixed public v0.2.1 release without piping a download into a shell.
 The installer below is fetched from commit
-`beb0bba1870e20e03e5bc80a2d9234c04fc1c6f6`, and the release base URL stays
+`b715967df7d06067a50f8146bcdce87fd9538733`, and the release base URL stays
 explicit.
 
 ```bash
-SKILLTAPE_VERSION="0.1.0"
+SKILLTAPE_VERSION="0.2.1"
 SKILLTAPE_RELEASE_BASE_URL="https://github.com/Chumaniac/skilltape/releases/download"
 installer_path="$(mktemp)"
 curl --fail --location --silent --show-error --output "$installer_path" \
-  "https://raw.githubusercontent.com/Chumaniac/skilltape/beb0bba1870e20e03e5bc80a2d9234c04fc1c6f6/scripts/install.sh"
+  "https://raw.githubusercontent.com/Chumaniac/skilltape/b715967df7d06067a50f8146bcdce87fd9538733/scripts/install.sh"
 chmod +x "$installer_path"
 export SKILLTAPE_VERSION SKILLTAPE_RELEASE_BASE_URL
 bash "$installer_path"

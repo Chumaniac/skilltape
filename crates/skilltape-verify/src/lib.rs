@@ -48,6 +48,14 @@ pub enum VerifyError {
 }
 
 pub async fn verify_run(request: VerifyRequest) -> Result<Receipt, VerifyError> {
+    verify_run_with_cancel(request, CancellationToken::new()).await
+}
+
+/// Verify with caller-owned cancellation while preserving cleanup and a cancelled Receipt.
+pub async fn verify_run_with_cancel(
+    request: VerifyRequest,
+    cancel: CancellationToken,
+) -> Result<Receipt, VerifyError> {
     for assertion in &request.assertions {
         assertion
             .validate()
@@ -77,7 +85,7 @@ pub async fn verify_run(request: VerifyRequest) -> Result<Receipt, VerifyError> 
         },
         skilltape_policy::PolicyEngine::default(),
         sender,
-        CancellationToken::new(),
+        cancel,
     ));
     let mut events = Vec::new();
     while let Some(event) = receiver.recv().await {
@@ -94,12 +102,16 @@ pub async fn verify_run(request: VerifyRequest) -> Result<Receipt, VerifyError> 
         })?;
     }
 
-    let assertion_results =
+    let assertion_results = if summary.status == skilltape_runner::RunStatus::Cancelled {
+        // Cancelled runs did not finish output publication; assertions remain unevaluated.
+        Vec::new()
+    } else {
         assertions::evaluate(&request.assertions, &request.output_root, &summary).map_err(
             |error| VerifyError::AssertionInput {
                 message: error.to_string(),
             },
-        )?;
+        )?
+    };
     let receipt = receipt::build(run_id, skill_hash, &summary, assertion_results);
     receipt::validate_receipt(&receipt).map_err(|error| VerifyError::ReceiptSchema {
         message: error.to_string(),

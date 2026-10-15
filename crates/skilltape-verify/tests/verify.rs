@@ -416,3 +416,36 @@ async fn existing_output_root_through_symlink_is_rejected() {
 
     assert!(matches!(result, Err(VerifyError::AssertionInput { .. })));
 }
+
+#[tokio::test]
+async fn cancellation_retains_a_receipt_without_evaluating_missing_outputs() {
+    for empty in [false, true] {
+        let root = tempdir().expect("root");
+        let input = input_root(root.path());
+        let output = root.path().join("output");
+        let fixture = if empty {
+            package(vec![], permissions(&[], &[], &[]))
+        } else {
+            file_copy_package()
+        };
+        let cancel = tokio_util::sync::CancellationToken::new();
+        cancel.cancel();
+        let receipt = skilltape_verify::verify_run_with_cancel(
+            VerifyRequest {
+                package: fixture.package,
+                input_root: input,
+                output_root: output.clone(),
+                limits: limits(),
+                assertions: vec![Assertion::FileExists {
+                    path: "result.txt".into(),
+                }],
+            },
+            cancel,
+        )
+        .await
+        .expect("cancelled receipt");
+        assert_eq!(receipt.status, ReceiptStatus::Cancelled);
+        assert!(receipt.assertions.is_empty());
+        assert!(!output.exists());
+    }
+}

@@ -221,7 +221,11 @@ where
         .map_err(workspace_setup_error)?;
 
     let mut summary = RunSummary {
-        status: RunStatus::Succeeded,
+        status: if cancel.is_cancelled() {
+            RunStatus::Cancelled
+        } else {
+            RunStatus::Succeeded
+        },
         steps: Vec::new(),
         policy_decisions: Vec::new(),
         output_truncated: false,

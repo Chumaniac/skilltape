@@ -1,5 +1,15 @@
 # Changelog
 
+## Source quality — 2026-10-15
+
+- Preserve literal command arguments through repeatable Capture `--arg` options.
+- Connect Unix Replay/Verify interrupts to runner cancellation, retain cancelled
+  results/Receipts with exit 5, and clean temporary execution state before exit.
+- Expose caller-owned verification cancellation without changing `verify_run`.
+  Cancelled runs leave output assertions unevaluated and deliveries unpublished.
+- Align current installation commands with published v0.2.1; preserve historical
+  demo evidence and source 0.2.3 without publishing a new release.
+
 ## Source maintenance — 2026-10-13
 
 - Stream and validate bounded Tape event reads while retaining only the

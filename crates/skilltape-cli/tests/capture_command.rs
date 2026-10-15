@@ -339,3 +339,47 @@ fn capture_rejects_default_output_through_external_symlink() {
 
     assert!(!outside.join("tapes/symlink-escape").exists());
 }
+
+#[test]
+fn capture_preserves_explicit_arguments_without_shell_expansion() {
+    let temp = TempDir::new().expect("temp");
+    let workspace = temp.path().join("workspace");
+    fs::create_dir(&workspace).expect("workspace");
+    let script = executable_script(
+        &workspace,
+        "args.sh",
+        r#"printf '%s\n' "$#" "$1" "$2" "$3" > argv.txt"#,
+    );
+    run_capture(
+        &workspace,
+        &[
+            "capture",
+            "argv-demo",
+            "--command",
+            script.to_str().expect("path"),
+            "--arg",
+            "two words",
+            "--arg=--flag=value",
+            "--arg",
+            "$(touch injected)",
+            "--yes",
+        ],
+    )
+    .success();
+    assert_eq!(
+        fs::read_to_string(workspace.join("argv.txt")).expect("arguments"),
+        "3\ntwo words\n--flag=value\n$(touch injected)\n"
+    );
+    assert!(!workspace.join("injected").exists());
+}
+
+#[test]
+fn capture_arguments_require_an_explicit_command() {
+    let temp = TempDir::new().expect("temp");
+    run_capture(
+        temp.path(),
+        &["capture", "args-only", "--arg", "value", "--yes"],
+    )
+    .code(2);
+    assert!(!temp.path().join(".skilltape").exists());
+}

@@ -1,7 +1,7 @@
 use std::future::Future;
 use std::path::{Component, Path, PathBuf};
 use std::process::ExitCode;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
@@ -24,49 +24,14 @@ const CAPTURE_CANCELLED_EXIT_CODE: u8 = 130;
 const MAX_CAPTURE_EVENTS: usize = 10_000;
 const MAX_CAPTURE_EVENT_BYTES: usize = 16 * 1024 * 1024;
 
-#[cfg(unix)]
-static INTERRUPTED: AtomicBool = AtomicBool::new(false);
 static TAPE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
-
-#[cfg(unix)]
-extern "C" fn handle_interrupt(_: libc::c_int) {
-    INTERRUPTED.store(true, Ordering::Release);
-}
-
-#[cfg(unix)]
-fn install_interrupt_handler() {
-    unsafe {
-        libc::signal(
-            libc::SIGINT,
-            handle_interrupt as *const () as libc::sighandler_t,
-        );
-    }
-}
-
-pub(crate) struct InterruptGuard;
-
-impl InterruptGuard {
-    pub(crate) fn install() -> Self {
-        #[cfg(unix)]
-        install_interrupt_handler();
-        Self
-    }
-}
-
-impl Drop for InterruptGuard {
-    fn drop(&mut self) {
-        #[cfg(unix)]
-        unsafe {
-            libc::signal(libc::SIGINT, libc::SIG_DFL);
-        }
-    }
-}
 
 #[derive(Debug)]
 pub(crate) struct CaptureConfig {
     pub name: String,
     pub workspace: Option<PathBuf>,
     pub command: Option<String>,
+    pub args: Vec<String>,
     pub interactive: bool,
     pub output: Option<PathBuf>,
     pub allow_env: Vec<String>,
@@ -226,7 +191,7 @@ async fn capture(config: CaptureConfig) -> Result<CaptureJsonSummary, CaptureCom
     let capture_future = capture_terminal(
         CaptureOptions {
             command: command.clone(),
-            args: Vec::new(),
+            args: config.args,
             workspace: workspace.clone(),
             env_allowlist: config.allow_env,
             output_limit: config.max_output_bytes,
@@ -236,7 +201,7 @@ async fn capture(config: CaptureConfig) -> Result<CaptureJsonSummary, CaptureCom
         cancel.clone(),
     );
     tokio::pin!(capture_future);
-    let interrupt = wait_for_interrupt();
+    let interrupt = crate::interrupt::wait_for_interrupt();
     tokio::pin!(interrupt);
     let capture_result = tokio::select! {
         result = &mut capture_future => result,
@@ -393,19 +358,6 @@ fn prepare_capture_parent(output: &Path) -> Result<PathBuf, CaptureCommandError>
         return Err(CaptureCommandError::UnsafeOutput(output.to_owned()));
     }
     Ok(canonical)
-}
-
-async fn wait_for_interrupt() {
-    #[cfg(unix)]
-    loop {
-        if INTERRUPTED.swap(false, Ordering::AcqRel) {
-            return;
-        }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
-
-    #[cfg(not(unix))]
-    std::future::pending::<()>().await;
 }
 
 async fn collect_changes(
