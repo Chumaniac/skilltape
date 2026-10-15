@@ -372,3 +372,97 @@ fn init_compile_verify_journey_produces_a_schema_receipt() {
     assert_eq!(receipt["schema"], "skilltape.dev/receipt/v1");
     assert_eq!(receipt["status"], "succeeded");
 }
+
+#[cfg(unix)]
+fn interrupt_running_command(command_name: &str, delivery_mode: bool) {
+    use assert_cmd::cargo::CommandCargoExt;
+    use std::process::{Command as ProcessCommand, Stdio};
+    use std::time::{Duration, Instant};
+    let temp = TempDir::new().expect("temp");
+    let skill = temp.path().join("skill");
+    let scratch = temp.path().join("scratch");
+    fs::create_dir(&scratch).expect("scratch");
+    let mut policy = permissions(&[], &["outputs/**"], &["/bin/sleep"]);
+    policy["process"]["default_timeout_ms"] = json!(10_000);
+    write_package(
+        &skill,
+        json!([{
+            "action": "exec", "id": "waiting", "program": "/bin/sleep",
+            "args": ["4"], "timeout_ms": 10_000
+        }]),
+        policy,
+    );
+    let receipt_path = temp.path().join("receipt.json");
+    let delivery_path = temp.path().join("delivery");
+    let mut command = ProcessCommand::cargo_bin("skilltape").expect("binary");
+    command
+        .args([command_name])
+        .arg(&skill)
+        .arg("--json")
+        .env("TMPDIR", &scratch)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    if command_name == "verify" {
+        if delivery_mode {
+            command.arg("--delivery-dir").arg(&delivery_path);
+        } else {
+            command.arg("--receipt").arg(&receipt_path);
+        }
+    }
+    let mut child = command.spawn().expect("CLI");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let ready = fs::read_dir(&scratch)
+            .expect("scratch entries")
+            .filter_map(Result::ok)
+            .any(|entry| entry.path().join("inputs").is_dir());
+        if ready {
+            break;
+        }
+        if child.try_wait().expect("CLI status").is_some() || Instant::now() > deadline {
+            let _ = child.kill();
+            let output = child.wait_with_output().expect("CLI output");
+            panic!(
+                "command did not start: {} {}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    std::thread::sleep(Duration::from_millis(100));
+    assert_eq!(
+        unsafe { libc::kill(child.id() as libc::pid_t, libc::SIGINT) },
+        0
+    );
+    let output = child.wait_with_output().expect("cancelled CLI");
+    assert_eq!(output.status.code(), Some(5));
+    assert!(output.stderr.is_empty());
+    let document: Value = serde_json::from_slice(&output.stdout).expect("cancelled JSON");
+    assert_eq!(document["status"], "cancelled");
+    if command_name == "verify" && !delivery_mode {
+        let saved: Value = serde_json::from_slice(&fs::read(receipt_path).expect("receipt"))
+            .expect("receipt JSON");
+        assert_eq!(saved, document);
+    }
+    assert_eq!(fs::read_dir(scratch).expect("scratch entries").count(), 0);
+    assert!(!delivery_path.exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn replay_interrupt_emits_cancelled_result_and_cleans_workspace() {
+    interrupt_running_command("replay", false);
+}
+
+#[cfg(unix)]
+#[test]
+fn verify_interrupt_saves_cancelled_receipt_and_cleans_workspace() {
+    interrupt_running_command("verify", false);
+}
+
+#[cfg(unix)]
+#[test]
+fn verify_interrupt_does_not_publish_an_incomplete_delivery() {
+    interrupt_running_command("verify", true);
+}

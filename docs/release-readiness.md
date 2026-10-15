@@ -2,6 +2,30 @@
 
 Date: 2026-10-10. Historical release evidence retains its original scope.
 
+## Source quality — 2026-10-15
+
+Current source passes literal Capture argv without shell parsing and wires Unix
+Replay/Verify interrupts through caller-owned cancellation. Cancelled verification
+returns exit 5, retains a requested cancelled Receipt, skips output assertions,
+and leaves incomplete deliveries unpublished. Regression fixtures cover literal
+spaces/metacharacters, missing command, running-process interrupts, cleanup,
+Receipt persistence, delivery non-publication and pre-cancelled empty workflows.
+The previous binary exited on SIGINT without JSON or a Receipt in a synthetic
+one-second wait; current regression fixtures assert orderly cancellation.
+
+Current installation guides now select verified public v0.2.1 and its immutable
+installer commit. The historical terminal recording and release evidence remain
+unchanged. This slice does not publish a binary or change Windows isolation.
+
+Local macOS validation passed: 329 locked Rust tests, formatting, warning-free
+Clippy, Console production build, 14 Console tests using installed Chrome,
+release-package/workflow/documentation fixtures, installer fixtures and the
+Capture-to-Receipt quickstart. The pinned Playwright browser was absent locally;
+the same browser assertions passed in a separate Chrome test profile. The
+workflow fixture used an existing Python environment with PyYAML. Repository
+language and prose-link checks passed. Hosted required checks remain the merge
+gate; local evidence does not establish release or production acceptance.
+
 ## Source maintenance — 2026-10-13
 
 The current maintenance slice bounds Console Tape reads and Capture retention,

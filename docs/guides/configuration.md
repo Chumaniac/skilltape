@@ -25,6 +25,28 @@ these checks do not freeze files against another process changing them.
 
 These limits apply to current source; no new binary release is implied.
 
+## Arguments and cancellation (current source)
+
+`--command` names one executable. Pass each argument with `--arg`; spaces and
+shell metacharacters are preserved literally. Use `--arg=--flag` for an argument
+that starts with a hyphen. Arguments require an explicit `--command`:
+
+```bash
+skilltape capture greeting --command /bin/echo --arg "hello world" --yes
+```
+
+On Unix, Ctrl+C during Replay/Verify cancels the runner, waits for process-group
+cleanup, and returns exit 5 with a `cancelled` JSON result. Verify saves the same
+cancelled Receipt when `--receipt` is selected. It does not evaluate output
+assertions or publish an incomplete `--delivery-dir`. Existing destinations are
+preserved. Capture keeps its existing cancelled exit 130 and retained Tape.
+
+Cancellation applies to execution; bounded synchronous input preparation must
+finish before the signal is handled. Windows Replay/Verify remains unsupported.
+Library callers can use `verify_run_with_cancel(request, token)`; `verify_run`
+retains its existing signature. A cancelled Receipt has no evaluated assertions.
+These changes are in source and are absent from published v0.2.1 assets.
+
 ## Installer settings
 
 The installer reads `SKILLTAPE_VERSION`, `SKILLTAPE_RELEASE_BASE_URL`,
@@ -36,7 +58,7 @@ platform default.
 Unix shells:
 
 ```bash
-export SKILLTAPE_VERSION="0.1.0"
+export SKILLTAPE_VERSION="0.2.1"
 export SKILLTAPE_RELEASE_BASE_URL="https://github.com/Chumaniac/skilltape/releases/download"
 export SKILLTAPE_INSTALL_DIR="$HOME/.local/bin"
 export SKILLTAPE_TARGET="x86_64-unknown-linux-gnu"
@@ -47,7 +69,7 @@ export SKILLTAPE_CONSOLE_UI_DIST="/absolute/path/to/console"
 PowerShell:
 
 ```powershell
-$env:SKILLTAPE_VERSION = "0.1.0"
+$env:SKILLTAPE_VERSION = "0.2.1"
 $env:SKILLTAPE_RELEASE_BASE_URL = "https://github.com/Chumaniac/skilltape/releases/download"
 $env:SKILLTAPE_INSTALL_DIR = "$env:LOCALAPPDATA\SkillTape\bin"
 $env:SKILLTAPE_TARGET = "x86_64-pc-windows-msvc"

@@ -49,6 +49,9 @@ enum Command {
         workspace: Option<PathBuf>,
         #[arg(long)]
         command: Option<String>,
+        /// Pass one literal argument to --command; repeat for multiple arguments.
+        #[arg(long = "arg", action = clap::ArgAction::Append, requires = "command")]
+        args: Vec<String>,
         #[arg(long)]
         interactive: bool,
         #[arg(long)]
@@ -111,8 +114,11 @@ enum Command {
 }
 
 pub fn run() -> ExitCode {
-    let _interrupt_guard = if std::env::args().nth(1).as_deref() == Some("capture") {
-        Some(capture_command::InterruptGuard::install())
+    let _interrupt_guard = if matches!(
+        std::env::args().nth(1).as_deref(),
+        Some("capture" | "replay" | "verify")
+    ) {
+        Some(crate::interrupt::InterruptGuard::install())
     } else {
         None
     };
@@ -127,6 +133,7 @@ pub fn run() -> ExitCode {
             name,
             workspace,
             command,
+            args,
             interactive,
             output,
             allow_env,
@@ -137,6 +144,7 @@ pub fn run() -> ExitCode {
             name,
             workspace,
             command,
+            args,
             interactive,
             output,
             allow_env,

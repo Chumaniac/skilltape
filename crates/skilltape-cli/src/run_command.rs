@@ -12,7 +12,9 @@ use skilltape_runner::{
     run_skill, PolicyDecisionRecord, PolicyPhase, ResourceLimits, RunError, RunFailure, RunRequest,
     RunStatus, RunSummary, StepStatus,
 };
-use skilltape_verify::{verify_run, Receipt, ReceiptStatus, VerifyError, VerifyRequest};
+use skilltape_verify::{
+    verify_run_with_cancel, Receipt, ReceiptStatus, VerifyError, VerifyRequest,
+};
 use tempfile::{Builder, TempDir};
 use thiserror::Error;
 use tokio::sync::mpsc;
@@ -186,11 +188,16 @@ fn execute_replay(config: ReplayConfig) -> Result<RunSummary, RunCommandError> {
         .enable_all()
         .build()
         .map_err(|error| RunCommandError::Task(error.to_string()))?;
-    runtime.block_on(run_package(
-        package,
-        roots.input.clone(),
-        roots.output.clone(),
-        limits,
+    let cancel = CancellationToken::new();
+    runtime.block_on(crate::interrupt::cancellable(
+        run_package(
+            package,
+            roots.input.clone(),
+            roots.output.clone(),
+            limits,
+            cancel.clone(),
+        ),
+        cancel,
     ))
 }
 
@@ -210,14 +217,21 @@ fn execute_verify(config: VerifyConfig) -> Result<Receipt, RunCommandError> {
         .enable_all()
         .build()
         .map_err(|error| RunCommandError::Task(error.to_string()))?;
+    let cancel = CancellationToken::new();
     let receipt = runtime
-        .block_on(verify_run(VerifyRequest {
-            package,
-            input_root: roots.input,
-            output_root: roots.output,
-            limits,
-            assertions: Vec::new(),
-        }))
+        .block_on(crate::interrupt::cancellable(
+            verify_run_with_cancel(
+                VerifyRequest {
+                    package,
+                    input_root: roots.input,
+                    output_root: roots.output,
+                    limits,
+                    assertions: Vec::new(),
+                },
+                cancel.clone(),
+            ),
+            cancel,
+        ))
         .map_err(RunCommandError::from)?;
     if receipt.status == ReceiptStatus::Succeeded {
         if let Some(delivery) = delivery {
@@ -232,6 +246,7 @@ async fn run_package(
     input_root: PathBuf,
     output_root: PathBuf,
     limits: ResourceLimits,
+    cancel: CancellationToken,
 ) -> Result<RunSummary, RunCommandError> {
     let (sender, mut receiver) = mpsc::channel(64);
     let task = tokio::spawn(run_skill(
@@ -243,7 +258,7 @@ async fn run_package(
         },
         PolicyEngine::default(),
         sender,
-        CancellationToken::new(),
+        cancel,
     ));
     while receiver.recv().await.is_some() {}
     task.await
@@ -377,7 +392,7 @@ fn human_receipt_summary(receipt: &Receipt) -> String {
     match receipt.status {
         ReceiptStatus::Succeeded => "Verification succeeded".to_owned(),
         ReceiptStatus::RunFailed => "Verification failed: run_failed".to_owned(),
-        ReceiptStatus::Cancelled => "Verification failed: cancelled".to_owned(),
+        ReceiptStatus::Cancelled => "Verification cancelled".to_owned(),
         ReceiptStatus::AssertionFailed => "Verification failed: assertion_failed".to_owned(),
     }
 }
@@ -397,10 +412,10 @@ fn replay_exit_code(summary: &RunSummary) -> ExitCode {
 }
 
 fn verify_exit_code(status: ReceiptStatus) -> ExitCode {
-    if status == ReceiptStatus::Succeeded {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::from(POLICY_ERROR_EXIT_CODE)
+    match status {
+        ReceiptStatus::Succeeded => ExitCode::SUCCESS,
+        ReceiptStatus::Cancelled => ExitCode::from(CANCELLED_EXIT_CODE),
+        _ => ExitCode::from(POLICY_ERROR_EXIT_CODE),
     }
 }
 
