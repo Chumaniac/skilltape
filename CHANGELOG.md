@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.3] - 2026-10-16
+
+- Publish required-output checks, the saved-delivery workbench and comparison,
+  literal Capture arguments, orderly Unix cancellation and bounded stable exports.
+- Release run `38862770537` passed all four platform builds, provenance/SBOM
+  generation and the public Windows installer smoke check.
+- All eight downloaded archive/SBOM checksums matched. An isolated Apple Silicon
+  installation passed required-file success/failure, unsafe-path rejection and
+  packaged Console API/UI checks. A missing required file returned exit3 and
+  did not publish a delivery directory.
+- Update installation commands to v0.2.3 and its immutable installer source.
+  Preserve previous tags, assets and dated source-candidate evidence below.
+
 ## Source quality — 2026-10-15
 
 - Preserve literal command arguments through repeatable Capture `--arg` options.

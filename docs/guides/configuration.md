@@ -5,7 +5,7 @@ a `.env` file: set these values in the shell that runs the installer or Console.
 
 ## Capture and Tape resource limits
 
-The source implementation limits Capture to 10,000 combined filesystem and
+v0.2.3 limits Capture to 10,000 combined filesystem and
 terminal events. Filesystem metadata is charged by occupied event slots and
 owned string capacities, up to 16 MiB; vector capacity and allocator overhead
 are additional and bounded by the event ceiling. The serialized terminal event
@@ -23,9 +23,9 @@ manifest ceiling. Oversized or invalid data returns an error rather than a
 partial successful page. Reads enforce the byte limit if the source grows;
 these checks do not freeze files against another process changing them.
 
-These limits apply to current source; no new binary release is implied.
+These limits are included in the v0.2.3 packages.
 
-## Arguments and cancellation (current source)
+## Arguments and cancellation
 
 `--command` names one executable. Pass each argument with `--arg`; spaces and
 shell metacharacters are preserved literally. Use `--arg=--flag` for an argument
@@ -45,7 +45,7 @@ Cancellation applies to execution; bounded synchronous input preparation must
 finish before the signal is handled. Windows Replay/Verify remains unsupported.
 Library callers can use `verify_run_with_cancel(request, token)`; `verify_run`
 retains its existing signature. A cancelled Receipt has no evaluated assertions.
-These changes are in source and are absent from published v0.2.1 assets.
+These changes are included in the published v0.2.3 assets.
 
 ## Installer settings
 
@@ -58,7 +58,7 @@ platform default.
 Unix shells:
 
 ```bash
-export SKILLTAPE_VERSION="0.2.1"
+export SKILLTAPE_VERSION="0.2.3"
 export SKILLTAPE_RELEASE_BASE_URL="https://github.com/Chumaniac/skilltape/releases/download"
 export SKILLTAPE_INSTALL_DIR="$HOME/.local/bin"
 export SKILLTAPE_TARGET="x86_64-unknown-linux-gnu"
@@ -69,7 +69,7 @@ export SKILLTAPE_CONSOLE_UI_DIST="/absolute/path/to/console"
 PowerShell:
 
 ```powershell
-$env:SKILLTAPE_VERSION = "0.2.1"
+$env:SKILLTAPE_VERSION = "0.2.3"
 $env:SKILLTAPE_RELEASE_BASE_URL = "https://github.com/Chumaniac/skilltape/releases/download"
 $env:SKILLTAPE_INSTALL_DIR = "$env:LOCALAPPDATA\SkillTape\bin"
 $env:SKILLTAPE_TARGET = "x86_64-pc-windows-msvc"
@@ -92,14 +92,14 @@ workspace directory:
 skilltape console --workspace .
 ```
 
-The source Console timeline shows up to 50 Tapes and 100 events per page.
+The packaged Console timeline shows up to 50 Tapes and 100 events per page.
 Use Previous/Next tapes to choose another group of captures and Previous/Next
 events to inspect the rest of a selected Tape. Changing the Tape resets the
 event page. The URL preserves both page positions for reload and browser
 back/forward navigation; pages replace earlier data rather than accumulating it.
 If a page request fails, Retry request reloads that same page. A finished
 capture is shown as Finished even when its completion timestamp is zero.
-These changes require a source build and are not part of the v0.1.0 release.
+These controls are included in the v0.2.3 packages.
 
 Return to the [installation guide](installation.md) for supported targets and
 updates, or the [Quickstart](quickstart.md) to create your first Skill.

@@ -1,6 +1,8 @@
 # Saved delivery workbench contract
 
-Date: 2026-10-10. Status: source implementation contract.
+Date: 2026-10-10. Status: implementation contract.
+
+Distribution update — 2026-10-16: included in the public v0.2.3 Console packages.
 
 ## User outcome
 

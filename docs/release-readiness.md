@@ -1,6 +1,22 @@
 # Release Readiness
 
-Date: 2026-10-10. Historical release evidence retains its original scope.
+Date: 2026-10-16. Historical release evidence retains its original scope.
+
+## Public v0.2.3 — 2026-10-16
+
+Release run `38862770537` passed four native platform builds, archive/SBOM
+provenance, release publication and the published Windows installer check.
+The tag points to verified main commit
+`9f6bec579258baa63234139af0fae650d9efdbd2`. All eight downloaded archive/SBOM
+checksums matched, and native archive attestation verification passed.
+
+An isolated Apple Silicon installation from the public release passed packaged
+Console API/UI checks and actual required-output verification. An existing
+regular file passed with exit0; a missing file returned assertion_failed/exit3
+and left its delivery unpublished. An unsafe relative path returned exit2.
+This is synthetic local release acceptance, not customer or business approval.
+Windows isolated Replay/Verify remain unsupported.
+
 
 ## Source quality — 2026-10-15
 
