@@ -11,17 +11,17 @@ Verify the Skill. A successful Receipt ends with `"status":"succeeded"`.
 
 ## macOS and Linux
 
-Install the fixed public v0.2.1 release without piping a download into a shell.
+Install the fixed public v0.2.3 release without piping a download into a shell.
 The installer source is pinned to commit
-`b715967df7d06067a50f8146bcdce87fd9538733`, and the public release base URL is
+`9f6bec579258baa63234139af0fae650d9efdbd2`, and the public release base URL is
 explicit.
 
 ```bash
-SKILLTAPE_VERSION="0.2.1"
+SKILLTAPE_VERSION="0.2.3"
 SKILLTAPE_RELEASE_BASE_URL="https://github.com/Chumaniac/skilltape/releases/download"
 installer_path="$(mktemp)"
 curl --fail --location --silent --show-error --output "$installer_path" \
-  "https://raw.githubusercontent.com/Chumaniac/skilltape/b715967df7d06067a50f8146bcdce87fd9538733/scripts/install.sh"
+  "https://raw.githubusercontent.com/Chumaniac/skilltape/9f6bec579258baa63234139af0fae650d9efdbd2/scripts/install.sh"
 chmod +x "$installer_path"
 export SKILLTAPE_VERSION SKILLTAPE_RELEASE_BASE_URL
 bash "$installer_path"
@@ -60,9 +60,9 @@ release. This path does not require a compiler or a checkout of this repository.
 
 ```powershell
 $installerPath = Join-Path $env:TEMP "skilltape-install.ps1"
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Chumaniac/skilltape/b715967df7d06067a50f8146bcdce87fd9538733/scripts/install.ps1" -OutFile $installerPath
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Chumaniac/skilltape/9f6bec579258baa63234139af0fae650d9efdbd2/scripts/install.ps1" -OutFile $installerPath
 $env:SKILLTAPE_RELEASE_BASE_URL = "https://github.com/Chumaniac/skilltape/releases/download"
-$env:SKILLTAPE_VERSION = "0.2.1"
+$env:SKILLTAPE_VERSION = "0.2.3"
 $env:SKILLTAPE_TARGET = "x86_64-pc-windows-msvc"
 & $installerPath
 $env:PATH = "$env:LOCALAPPDATA\SkillTape\bin;$env:PATH"

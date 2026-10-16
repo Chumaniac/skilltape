@@ -1,11 +1,5 @@
 # SkillTape
 
-The source catalog now includes a [multi-organization delivery](examples/verified-tenant-delivery/README.md)
-with actual bounded local production and independent composite-key checks.
-It keeps same local order IDs separate and demonstrates a successful execution
-whose balanced allocation still fails the consumer contract. Source binary0.2.3
-and the existing public0.2.1 release remain distinct; no live account is used.
-
 > **Beta** — Turn a real local workflow into a reviewable Agent Skill you can replay and verify before you share it.
 
 SkillTape captures a command you already run, turns it into a reviewable Skill,
@@ -15,68 +9,48 @@ configuration file.
 
 ![Terminal output from SkillTape Capture, Compile, Lint, and Verify](docs/assets/quickstart-terminal.svg)
 
-[Watch the 30-second terminal demo](docs/assets/quickstart-terminal.txt) · [Download v0.2.1](https://github.com/Chumaniac/skilltape/releases/tag/v0.2.1)
+[Watch the 30-second terminal demo](docs/assets/quickstart-terminal.txt) · [Download v0.2.3](https://github.com/Chumaniac/skilltape/releases/tag/v0.2.3)
 
 ## Verified public release
 
-[SkillTape v0.2.1](https://github.com/Chumaniac/skilltape/releases/tag/v0.2.1)
-is publicly available with persistent verified deliveries, bounded input reads,
-explicit path containment and paged Console evidence. Release run
-[37893425823](https://github.com/Chumaniac/skilltape/actions/runs/37893425823)
+[SkillTape v0.2.3](https://github.com/Chumaniac/skilltape/releases/tag/v0.2.3)
+is publicly available as native CLI, Console API and Console UI packages.
+[Release run 38862770537](https://github.com/Chumaniac/skilltape/actions/runs/38862770537)
 passed Linux, Intel Mac, Apple Silicon Mac and Windows builds, required
 provenance/SBOM/checksums and the published Windows installer smoke check.
-All eight archive/SBOM checksums were independently matched to public asset digests.
+All eight downloaded archive/SBOM checksums matched. An isolated native Mac
+installation passed required-output success/failure and packaged Console checks.
 
 Windows Replay/Verify still fail closed. The terminal demo records the historical
-v0.1.0 journey; the installation commands below use the published v0.2.1 release.
-Historical tags and demo evidence remain available.
+v0.1.0 journey; the commands below install v0.2.3. Earlier releases remain available.
 
-## Current source candidate
+## New in v0.2.3
 
-Current source adds repeatable literal Capture arguments (`--arg`) and orderly
-Ctrl+C handling for Replay/Verify on Unix. Cancellation returns exit 5, saves a
-cancelled Receipt when requested, and leaves incomplete deliveries unpublished.
-See [arguments and cancellation](docs/guides/configuration.md#arguments-and-cancellation-current-source).
-These maintenance changes require a source build and are not in v0.2.1.
-
-
-Source0.2.3 adds a [saved delivery workbench](docs/reference/saved-deliveries.md).
-Point Console at the parent of actual `verify --delivery-dir` outputs, select a
-folder, inspect its physical file hashes and recheck after a change. Reported
-execution, file integrity and independent business requirements remain separate.
-No demo ID, legacy run registry or manual Receipt copy is required for this path.
-The source workbench can also recheck and compare two saved bundles before
-sharing a replacement, showing added, removed and changed file hashes. Incomplete
-or failed inspections stay explicitly unavailable for comparison; this does not
-check business requirements or authenticate the baseline.
-The new physical inspection currently uses POSIX native file handles; Windows
-keeps existing Console views without claiming this new inspection capability.
-
-Source 0.2.2 adds bounded stable exports, shared no-replace publication and
-optional `export --receipt` association with successful metadata and matching
-copied bytes. See [stable export evidence](docs/guides/export-evidence.md).
-These additions are not in the existing public v0.2.1 assets and do not
-authenticate a Receipt or enable Windows isolated execution.
-
-For a current published installation, download the
-[v0.2.1 assets](https://github.com/Chumaniac/skilltape/releases/tag/v0.2.1).
-The immutable installer source is available at release commit
-`b715967df7d06067a50f8146bcdce87fd9538733`; select `SKILLTAPE_VERSION=0.2.1`
-and keep the release base explicit. The commands below use this published build.
+- Require output files with repeatable `verify --expect-file PATH`; missing files
+  fail verification and leave the delivery unpublished. See the example below.
+- Inspect and compare real saved bundles in the Console's
+  [Delivery workbench](docs/reference/saved-deliveries.md), including actual file
+  hashes and changes. Native physical inspection currently requires POSIX.
+- Pass literal Capture arguments with `--arg` and cancel Unix Replay/Verify with
+  orderly cleanup and exit 5. See [arguments and cancellation](docs/guides/configuration.md#arguments-and-cancellation).
+- Use bounded stable exports, optional `export --receipt` association and
+  complete no-overwrite delivery publication. The
+  [multi-organization example](examples/verified-tenant-delivery/README.md)
+  pairs actual local output with independent composite-key checks.
 
 ## Get a verified Skill in five minutes
 
-Install the fixed public v0.2.1 release without piping a download into a shell.
+Install the fixed public v0.2.3 release without piping a download into a shell.
 The installer below is fetched from commit
-`b715967df7d06067a50f8146bcdce87fd9538733`, and the release base URL stays
+`9f6bec579258baa63234139af0fae650d9efdbd2`, and the release base URL stays
 explicit.
 
 ```bash
-SKILLTAPE_VERSION="0.2.1"
+SKILLTAPE_VERSION="0.2.3"
 SKILLTAPE_RELEASE_BASE_URL="https://github.com/Chumaniac/skilltape/releases/download"
 installer_path="$(mktemp)"
 curl --fail --location --silent --show-error --output "$installer_path" \
-  "https://raw.githubusercontent.com/Chumaniac/skilltape/b715967df7d06067a50f8146bcdce87fd9538733/scripts/install.sh"
+  "https://raw.githubusercontent.com/Chumaniac/skilltape/9f6bec579258baa63234139af0fae650d9efdbd2/scripts/install.sh"
 chmod +x "$installer_path"
 export SKILLTAPE_VERSION SKILLTAPE_RELEASE_BASE_URL
 bash "$installer_path"
@@ -107,11 +81,11 @@ Compile, Lint, and Export remain usable while Replay and Verify fail closed.
 Windows supports Capture, Compile, Lint, and Export; Replay and Verify
 intentionally fail closed until an equivalent restricted executor is integrated.
 
-The source Console supports previous/next navigation through Tapes and events,
+The packaged Console supports previous/next navigation through Tapes and events,
 keeping only the current page in memory. See the [Console guide](docs/guides/configuration.md#local-console-overrides)
-for startup details. This improvement is not included in the published v0.1.0 assets.
+for startup details. This improvement is included in v0.2.3.
 
-Source maintenance on 2026-10-13 also bounds server-side Tape event reads to
+v0.2.3 also bounds server-side Tape event reads to
 16 MiB and 100,000 events while validating the complete stream. Capture merges
 at most 10,000 events, charges allocated filesystem metadata against a 16 MiB
 budget, and rejects oversized terminal event streams before merging. These are
@@ -120,16 +94,16 @@ without replacing an existing destination; budget or finalization failures do
 not publish a partial Tape. See the [resource limits](docs/guides/configuration.md#capture-and-tape-resource-limits).
 
 For retained deliveries, run `skilltape console --workspace /path/to/saved-parent`
-and choose **Delivery workbench**. This source0.2.3 interface discovers actual
+and choose **Delivery workbench**. This interface discovers actual
 bundles directly and provides bounded file checks and review actions. It never
 executes a workflow, edits files or declares business requirements accepted.
-The existing public0.2.1 binaries remain independently available.
+These features are included in the public v0.2.3 packages.
 
-The current source also bounds Replay/Verify inputs to 10,000 entries, depth 64,
+v0.2.3 also bounds Replay/Verify inputs to 10,000 entries, depth 64,
 16 MiB per file, and 64 MiB in total. Hashing and staging reject detected changes
 instead of reading a growing file without a limit. See the
 [input integrity boundaries](docs/guides/domain-workflows.md) for platform and
-concurrent-change limits. This source improvement is not in the published v0.1.0 assets.
+concurrent-change limits. These checks are included in v0.2.3.
 
 ## Use SkillTape when
 
@@ -146,8 +120,8 @@ concurrent-change limits. This source improvement is not in the published v0.1.0
 ## Learn more
 
 - [Expansion and deep optimization roadmap](docs/deep-optimization-roadmap.md) — concrete priorities, domain workflows, limits and release gates.
-- [Stable export and Receipt association](docs/guides/export-evidence.md) — source-only consistent bytes and explicitly unauthenticated evidence.
-- [Verified local delivery](docs/guides/verified-delivery.md) — source-only persistent artifacts, Receipt/file hashes, and an independently checked order-summary example.
+- [Stable export and Receipt association](docs/guides/export-evidence.md) — consistent bytes and explicitly unauthenticated evidence.
+- [Verified local delivery](docs/guides/verified-delivery.md) — persistent artifacts, Receipt/file hashes, and an independently checked order-summary example.
 - [Project overview](https://chumanic.com/projects/skilltape/) — Chinese introduction and current platform boundaries.
 - [Domain workflow examples](docs/guides/domain-workflows.md) — source examples for code-review evidence, knowledge references, data-export integrity, and incident-review materials; no external execution or platform connection.
 - [Quickstart](docs/guides/quickstart.md) — the same first verified result with troubleshooting.
@@ -159,4 +133,4 @@ concurrent-change limits. This source improvement is not in the published v0.1.0
 
 ### Require output files during Verify
 
-From a source build, use `skilltape verify ./skill --expect-file result.csv --expect-file summary.txt --json`. Each path is relative to the output root. Verify records each requirement in the Receipt and fails with exit code 3 if a required regular file is missing. A failed Verify does not publish a delivery directory. Unsafe paths fail before Replay; at most 64 paths of 1024 bytes each are accepted. This checks file existence, not business correctness or authenticated provenance. Published binaries retain their documented version behavior until a new release.
+With v0.2.3, use `skilltape verify ./skill --expect-file result.csv --expect-file summary.txt --json`. Each path is relative to the output root. Verify records each requirement in the Receipt and fails with exit code 3 if a required regular file is missing. A failed Verify does not publish a delivery directory. Unsafe paths fail before Replay; at most 64 paths of 1024 bytes each are accepted. This checks file existence, not business correctness or authenticated provenance. These requirements are available in the v0.2.3 CLI.

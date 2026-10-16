@@ -1,7 +1,7 @@
 # Stable export and optional Receipt association
 
-Status: source candidate 0.2.2, 2026-10-09. These additions are not in the
-existing public v0.2.1 assets. Ordinary Export remains a lint-only packaging
+Status: available in public v0.2.3, 2026-10-16. Introduced as source
+candidate 0.2.2 on 2026-10-09. Ordinary Export remains a lint-only packaging
 operation; it does not run a Skill or authenticate its author.
 
 ## Stable selected-file export
@@ -30,7 +30,7 @@ parents. A package must still be reviewed before anyone executes it.
 
 ## Associate a successful Receipt
 
-Build the current source first. On a platform with the existing restricted
+Install v0.2.3 or build the current source. On a platform with the existing restricted
 executor, use an independent new workspace and retain the Receipt outside the
 package tree:
 

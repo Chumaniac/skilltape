@@ -14,7 +14,7 @@ skilltape-v<version>-<target>.zip      # Windows
 checksums.txt
 ```
 
-The public `v0.2.1` release supports these targets:
+The public `v0.2.3` release supports these targets:
 
 - `x86_64-unknown-linux-gnu`
 - `x86_64-apple-darwin`
@@ -45,9 +45,9 @@ installed files only after the new archive has passed all checks:
 ```bash
 installer_path="$(mktemp)"
 curl --fail --location --silent --show-error --output "$installer_path" \
-  "https://raw.githubusercontent.com/Chumaniac/skilltape/b715967df7d06067a50f8146bcdce87fd9538733/scripts/install.sh"
+  "https://raw.githubusercontent.com/Chumaniac/skilltape/9f6bec579258baa63234139af0fae650d9efdbd2/scripts/install.sh"
 export SKILLTAPE_RELEASE_BASE_URL="https://github.com/Chumaniac/skilltape/releases/download"
-export SKILLTAPE_VERSION="0.2.1"
+export SKILLTAPE_VERSION="0.2.3"
 bash "$installer_path"
 ```
 
@@ -57,9 +57,9 @@ custom Unix location:
 ```bash
 installer_path="$(mktemp)"
 curl --fail --location --silent --show-error --output "$installer_path" \
-  "https://raw.githubusercontent.com/Chumaniac/skilltape/b715967df7d06067a50f8146bcdce87fd9538733/scripts/install.sh"
+  "https://raw.githubusercontent.com/Chumaniac/skilltape/9f6bec579258baa63234139af0fae650d9efdbd2/scripts/install.sh"
 SKILLTAPE_RELEASE_BASE_URL="https://github.com/Chumaniac/skilltape/releases/download" \
-  bash "$installer_path" 0.2.1 "$HOME/.local/bin" "aarch64-apple-darwin"
+  bash "$installer_path" 0.2.3 "$HOME/.local/bin" "aarch64-apple-darwin"
 ```
 
 On Windows, download the fixed installer source before setting the same values
@@ -67,9 +67,9 @@ in PowerShell:
 
 ```powershell
 $installerPath = Join-Path $env:TEMP "skilltape-install.ps1"
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Chumaniac/skilltape/b715967df7d06067a50f8146bcdce87fd9538733/scripts/install.ps1" -OutFile $installerPath
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Chumaniac/skilltape/9f6bec579258baa63234139af0fae650d9efdbd2/scripts/install.ps1" -OutFile $installerPath
 $env:SKILLTAPE_RELEASE_BASE_URL = "https://github.com/Chumaniac/skilltape/releases/download"
-$env:SKILLTAPE_VERSION = "0.2.1"
+$env:SKILLTAPE_VERSION = "0.2.3"
 $env:SKILLTAPE_INSTALL_DIR = "$env:LOCALAPPDATA\SkillTape\bin"
 $env:SKILLTAPE_TARGET = "x86_64-pc-windows-msvc"
 & $installerPath
