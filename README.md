@@ -156,3 +156,7 @@ concurrent-change limits. This source improvement is not in the published v0.1.0
 - [Minimal Skill example](examples/minimal-skill/README.md) — a small valid package to inspect.
 - [Security](SECURITY.md) — sandbox boundaries, redaction, and responsible disclosure.
 - [Contributing](CONTRIBUTING.md) — development and contribution guidance.
+
+### Require output files during Verify
+
+From a source build, use `skilltape verify ./skill --expect-file result.csv --expect-file summary.txt --json`. Each path is relative to the output root. Verify records each requirement in the Receipt and fails with exit code 3 if a required regular file is missing. A failed Verify does not publish a delivery directory. Unsafe paths fail before Replay; at most 64 paths of 1024 bytes each are accepted. This checks file existence, not business correctness or authenticated provenance. Published binaries retain their documented version behavior until a new release.

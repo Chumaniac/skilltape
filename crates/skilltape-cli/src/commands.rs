@@ -97,6 +97,9 @@ enum Command {
         receipt: Option<PathBuf>,
         #[arg(long, conflicts_with = "receipt")]
         delivery_dir: Option<PathBuf>,
+        /// Require a regular file relative to the output root; repeat up to 64 times.
+        #[arg(long = "expect-file", value_name = "PATH")]
+        expected_files: Vec<String>,
         #[arg(long)]
         json: bool,
     },
@@ -186,12 +189,14 @@ pub fn run() -> ExitCode {
             input,
             receipt,
             delivery_dir,
+            expected_files,
             json,
         } => run_command::verify(run_command::VerifyConfig {
             skill_path,
             input,
             receipt,
             delivery_dir,
+            expected_files,
             json,
         }),
         Command::Export {
