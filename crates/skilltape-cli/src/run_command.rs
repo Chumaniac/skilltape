@@ -13,7 +13,7 @@ use skilltape_runner::{
     RunStatus, RunSummary, StepStatus,
 };
 use skilltape_verify::{
-    verify_run_with_cancel, Receipt, ReceiptStatus, VerifyError, VerifyRequest,
+    verify_run_with_cancel, Assertion, Receipt, ReceiptStatus, VerifyError, VerifyRequest,
 };
 use tempfile::{Builder, TempDir};
 use thiserror::Error;
@@ -43,6 +43,7 @@ pub(crate) struct VerifyConfig {
     pub input: Option<PathBuf>,
     pub receipt: Option<PathBuf>,
     pub delivery_dir: Option<PathBuf>,
+    pub expected_files: Vec<String>,
     pub json: bool,
 }
 
@@ -202,6 +203,19 @@ fn execute_replay(config: ReplayConfig) -> Result<RunSummary, RunCommandError> {
 }
 
 fn execute_verify(config: VerifyConfig) -> Result<Receipt, RunCommandError> {
+    if config.expected_files.len() > 64
+        || config.expected_files.iter().any(|path| path.len() > 1024)
+    {
+        return Err(VerifyError::InvalidAssertion {
+            message: "expected files exceed the 64-file or 1024-byte path limit".into(),
+        }
+        .into());
+    }
+    let assertions = config
+        .expected_files
+        .into_iter()
+        .map(|path| Assertion::FileExists { path })
+        .collect();
     let package = SkillPackage::load(config.skill_path)?;
     let mut roots = prepare_roots(config.input)?;
     let delivery = config
@@ -226,7 +240,7 @@ fn execute_verify(config: VerifyConfig) -> Result<Receipt, RunCommandError> {
                     input_root: roots.input,
                     output_root: roots.output,
                     limits,
-                    assertions: Vec::new(),
+                    assertions,
                 },
                 cancel.clone(),
             ),

@@ -466,3 +466,58 @@ fn verify_interrupt_saves_cancelled_receipt_and_cleans_workspace() {
 fn verify_interrupt_does_not_publish_an_incomplete_delivery() {
     interrupt_running_command("verify", true);
 }
+
+#[test]
+fn verify_expected_files_are_enforced_and_recorded() {
+    for (path, expected_status, expected_code) in [
+        ("result.txt", "succeeded", 0),
+        ("missing.txt", "assertion_failed", 3),
+    ] {
+        let (_temp, skill, input) = file_package();
+        let output = Command::cargo_bin("skilltape")
+            .expect("binary")
+            .arg("verify")
+            .arg(&skill)
+            .arg("--input")
+            .arg(&input)
+            .args(["--expect-file", path, "--json"])
+            .assert()
+            .code(expected_code)
+            .get_output()
+            .stdout
+            .clone();
+        let receipt: Value = serde_json::from_slice(&output).expect("receipt");
+        assert_eq!(receipt["status"], expected_status);
+        assert_eq!(receipt["assertions"][0]["target"], path);
+        assert_eq!(receipt["assertions"][0]["passed"], expected_code == 0);
+    }
+}
+
+#[test]
+fn verify_expected_files_reject_unsafe_paths_before_running() {
+    let (_temp, skill, input) = file_package();
+    Command::cargo_bin("skilltape")
+        .expect("binary")
+        .arg("verify")
+        .arg(&skill)
+        .arg("--input")
+        .arg(&input)
+        .args(["--expect-file", "../escape.txt", "--json"])
+        .assert()
+        .code(2)
+        .stderr(predicates::str::contains("assertion path is unsafe"));
+}
+
+#[test]
+fn verify_expected_files_are_bounded() {
+    let (_temp, skill, input) = file_package();
+    let mut command = Command::cargo_bin("skilltape").expect("binary");
+    command.arg("verify").arg(&skill).arg("--input").arg(&input);
+    for _ in 0..65 {
+        command.args(["--expect-file", "result.txt"]);
+    }
+    command
+        .assert()
+        .code(2)
+        .stderr(predicates::str::contains("64-file"));
+}
