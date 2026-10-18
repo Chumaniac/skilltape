@@ -100,6 +100,9 @@ enum Command {
         /// Require a regular file relative to the output root; repeat up to 64 times.
         #[arg(long = "expect-file", value_name = "PATH")]
         expected_files: Vec<String>,
+        /// Require exact output bytes; shares the 64-requirement limit with --expect-file.
+        #[arg(long = "expect-sha256", value_name = "PATH=SHA256")]
+        expected_hashes: Vec<String>,
         #[arg(long)]
         json: bool,
     },
@@ -190,6 +193,7 @@ pub fn run() -> ExitCode {
             receipt,
             delivery_dir,
             expected_files,
+            expected_hashes,
             json,
         } => run_command::verify(run_command::VerifyConfig {
             skill_path,
@@ -197,6 +201,7 @@ pub fn run() -> ExitCode {
             receipt,
             delivery_dir,
             expected_files,
+            expected_hashes,
             json,
         }),
         Command::Export {

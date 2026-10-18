@@ -2,6 +2,29 @@
 
 Date: 2026-10-16. Historical release evidence retains its original scope.
 
+## Output digest source candidate - 2026-10-18
+
+The current source exposes `verify --expect-sha256 PATH=SHA256` through the
+existing assertion and Receipt model. Caller-supplied hashes are checked before
+execution; shared hashing is bounded to 16 MiB per file and 64 MiB per Verify.
+This candidate retains the executor, permission policy, no-overwrite behavior,
+and v0.2.3 public assets. It does not publish a new package or release.
+
+Regression evidence covers a correct reference, changed bytes, invalid and
+unsafe requirements, combined capacity, contradictory aliases, failed delivery
+non-publication, file size limits, shared read budgets and replacement detection.
+Required hosted checks remain the merge gate; source validation is separate
+from release installation and business acceptance.
+
+Local validation passed 340 Rust tests, warning-free workspace Clippy and
+formatting, the Console production build, 14 browser checks using an isolated
+installed-Chrome profile, 4 release-package fixtures, 14 workflow fixtures and
+the installer fixture. The pinned Playwright browser was absent, and nested
+macOS isolation was unavailable in the desktop sandbox; the unchanged tests
+passed with native isolation and the installed Chrome. Language, local links
+and whitespace checks passed. Existing workspace `libc` is reused without a
+new dependency package or version upgrade. CPU and process RSS were not measured.
+
 ## Public v0.2.3 — 2026-10-16
 
 Release run `38862770537` passed four native platform builds, archive/SBOM

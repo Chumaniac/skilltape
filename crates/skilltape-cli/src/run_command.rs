@@ -13,7 +13,8 @@ use skilltape_runner::{
     RunStatus, RunSummary, StepStatus,
 };
 use skilltape_verify::{
-    verify_run_with_cancel, Assertion, Receipt, ReceiptStatus, VerifyError, VerifyRequest,
+    validate_assertions, verify_run_with_cancel, Assertion, Receipt, ReceiptStatus, VerifyError,
+    VerifyRequest,
 };
 use tempfile::{Builder, TempDir};
 use thiserror::Error;
@@ -44,6 +45,7 @@ pub(crate) struct VerifyConfig {
     pub receipt: Option<PathBuf>,
     pub delivery_dir: Option<PathBuf>,
     pub expected_files: Vec<String>,
+    pub expected_hashes: Vec<String>,
     pub json: bool,
 }
 
@@ -203,7 +205,7 @@ fn execute_replay(config: ReplayConfig) -> Result<RunSummary, RunCommandError> {
 }
 
 fn execute_verify(config: VerifyConfig) -> Result<Receipt, RunCommandError> {
-    if config.expected_files.len() > 64
+    if config.expected_files.len() + config.expected_hashes.len() > 64
         || config.expected_files.iter().any(|path| path.len() > 1024)
     {
         return Err(VerifyError::InvalidAssertion {
@@ -211,11 +213,36 @@ fn execute_verify(config: VerifyConfig) -> Result<Receipt, RunCommandError> {
         }
         .into());
     }
-    let assertions = config
+    let mut assertions: Vec<_> = config
         .expected_files
         .into_iter()
         .map(|path| Assertion::FileExists { path })
         .collect();
+    let mut hashes = std::collections::BTreeMap::new();
+    for requirement in config.expected_hashes {
+        let invalid = || VerifyError::InvalidAssertion {
+            message: "invalid output requirement; use a safe PATH=64_HEX_CHARACTERS".into(),
+        };
+        let (path, digest) = requirement.rsplit_once('=').ok_or_else(invalid)?;
+        if path.len() > 1024 || digest.len() != 64 || !digest.bytes().all(|b| b.is_ascii_hexdigit())
+        {
+            return Err(invalid().into());
+        }
+        let assertion = Assertion::FileHash {
+            path: path.to_owned(),
+            sha256: digest.to_ascii_lowercase(),
+        };
+        validate_assertions(std::slice::from_ref(&assertion)).map_err(|_| invalid())?;
+        let key = path.strip_prefix("outputs/").unwrap_or(path).to_owned();
+        if let Some(previous) = hashes.insert(key, digest.to_ascii_lowercase()) {
+            if !previous.eq_ignore_ascii_case(digest) {
+                return Err(invalid().into());
+            }
+            continue;
+        }
+        assertions.push(assertion);
+    }
+    validate_assertions(&assertions)?;
     let package = SkillPackage::load(config.skill_path)?;
     let mut roots = prepare_roots(config.input)?;
     let delivery = config

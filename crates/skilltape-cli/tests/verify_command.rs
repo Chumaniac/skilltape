@@ -521,3 +521,85 @@ fn verify_expected_files_are_bounded() {
         .code(2)
         .stderr(predicates::str::contains("64-file"));
 }
+
+#[test]
+fn verify_expected_hashes_bind_actual_bytes_and_failed_deliveries_stay_unpublished() {
+    use sha2::{Digest, Sha256};
+
+    let expected: String = Sha256::digest(b"secret-cli-value")
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    for (digest, status, code) in [
+        (expected.to_uppercase(), "succeeded", 0),
+        ("0".repeat(64), "assertion_failed", 3),
+    ] {
+        let (temp, skill, input) = file_package();
+        let delivery = temp.path().join("delivery");
+        let output = Command::cargo_bin("skilltape")
+            .expect("binary")
+            .arg("verify")
+            .arg(&skill)
+            .arg("--input")
+            .arg(&input)
+            .arg("--delivery-dir")
+            .arg(&delivery)
+            .args(["--expect-sha256", &format!("result.txt={digest}"), "--json"])
+            .assert()
+            .code(code)
+            .get_output()
+            .stdout
+            .clone();
+        let receipt: Value = serde_json::from_slice(&output).expect("receipt");
+        assert_eq!(receipt["status"], status);
+        assert_eq!(receipt["assertions"][0]["kind"], "file_hash");
+        assert_eq!(receipt["assertions"][0]["passed"], code == 0);
+        assert_eq!(delivery.exists(), code == 0);
+        assert!(!String::from_utf8_lossy(&output).contains("secret-cli-value"));
+    }
+}
+
+#[test]
+fn verify_expected_hashes_reject_invalid_requirements_before_loading_a_skill() {
+    for requirement in [
+        "result.txt",
+        "result.txt=bad",
+        "result.txt=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
+        "=0000000000000000000000000000000000000000000000000000000000000000",
+        "../escape=0000000000000000000000000000000000000000000000000000000000000000",
+        "./result.txt=0000000000000000000000000000000000000000000000000000000000000000",
+    ] {
+        Command::cargo_bin("skilltape")
+            .expect("binary")
+            .args(["verify", "missing-skill", "--expect-sha256", requirement])
+            .assert()
+            .code(2)
+            .stderr(predicates::str::contains("invalid output requirement"));
+    }
+}
+
+#[test]
+fn verify_conflicting_output_hashes_fail_before_loading_a_skill() {
+    Command::cargo_bin("skilltape")
+        .expect("binary")
+        .args(["verify", "missing-skill", "--expect-sha256"])
+        .arg(format!("result.txt={}", "0".repeat(64)))
+        .arg("--expect-sha256")
+        .arg(format!("outputs/result.txt={}", "1".repeat(64)))
+        .assert()
+        .code(2)
+        .stderr(predicates::str::contains("invalid output requirement"));
+}
+
+#[test]
+fn verify_expected_hashes_share_the_requirement_budget() {
+    let mut command = Command::cargo_bin("skilltape").expect("binary");
+    command.args(["verify", "missing-skill", "--expect-file", "result.txt"]);
+    for _ in 0..64 {
+        command.args(["--expect-sha256", &format!("result.txt={}", "0".repeat(64))]);
+    }
+    command
+        .assert()
+        .code(2)
+        .stderr(predicates::str::contains("64-file"));
+}

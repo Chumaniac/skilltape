@@ -134,3 +134,13 @@ concurrent-change limits. These checks are included in v0.2.3.
 ### Require output files during Verify
 
 With v0.2.3, use `skilltape verify ./skill --expect-file result.csv --expect-file summary.txt --json`. Each path is relative to the output root. Verify records each requirement in the Receipt and fails with exit code 3 if a required regular file is missing. A failed Verify does not publish a delivery directory. Unsafe paths fail before Replay; at most 64 paths of 1024 bytes each are accepted. This checks file existence, not business correctness or authenticated provenance. These requirements are available in the v0.2.3 CLI.
+
+### Require exact output bytes in current source
+
+Build the current source to use `verify --expect-sha256 PATH=SHA256`. This option
+checks the actual output against an independently supplied 64-digit SHA-256,
+records a `file_hash` assertion in the Receipt, and leaves failed deliveries
+unpublished. It shares the 64-requirement budget with `--expect-file` and retains
+the existing sandbox. See the [output digest guide](docs/guides/output-digests.md)
+for an example, limits and failure cases. This feature is not in the published
+v0.2.3 archives.
