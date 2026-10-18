@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased source - 2026-10-18
+
+- Add repeatable `verify --expect-sha256 PATH=SHA256` requirements, using the
+  existing FileHash assertion and Receipt contract. Validate unsafe paths,
+  malformed digests and contradictory requirements before loading or executing
+  the Skill; failed checks do not publish a delivery.
+- Bound shared output hashing to 16 MiB per file and 64 MiB per verification,
+  stream the bytes and reject detected replacement or changes during reading.
+- Preserve v0.2.3 release assets. These capabilities require the current source.
+
 ## [0.2.3] - 2026-10-16
 
 - Publish required-output checks, the saved-delivery workbench and comparison,

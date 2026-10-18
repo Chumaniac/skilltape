@@ -8,6 +8,8 @@ use skilltape_runner::{RunSummary, StepStatus};
 use thiserror::Error;
 
 const MAX_TEXT_ASSERTION_BYTES: u64 = 1024 * 1024;
+const MAX_HASH_FILE_BYTES: u64 = 16 * 1024 * 1024;
+const MAX_HASH_TOTAL_BYTES: u64 = 64 * 1024 * 1024;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -30,6 +32,11 @@ impl Assertion {
                 return Err(AssertionError::InvalidTarget);
             }
             Self::CommandExit { .. } => {}
+        }
+        if let Self::FileHash { sha256, .. } = self {
+            if sha256.len() != 64 || !sha256.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+                return Err(AssertionError::InvalidTarget);
+            }
         }
         Ok(())
     }
@@ -69,6 +76,10 @@ pub(crate) enum AssertionError {
     UnsafePath,
     #[error("assertion text input is too large")]
     TextTooLarge,
+    #[error("assertion hash input exceeds the 16 MiB file or 64 MiB total limit")]
+    HashTooLarge,
+    #[error("assertion hash input changed while reading")]
+    ChangedInput,
     #[error("assertion input failed: {0}")]
     Io(#[from] io::Error),
 }
@@ -78,9 +89,10 @@ pub(crate) fn evaluate(
     output_root: &Path,
     summary: &RunSummary,
 ) -> Result<Vec<AssertionResult>, AssertionError> {
+    let mut hash_budget = MAX_HASH_TOTAL_BYTES;
     assertions
         .iter()
-        .map(|assertion| evaluate_one(assertion, output_root, summary))
+        .map(|assertion| evaluate_one(assertion, output_root, summary, &mut hash_budget))
         .collect()
 }
 
@@ -88,6 +100,7 @@ fn evaluate_one(
     assertion: &Assertion,
     output_root: &Path,
     summary: &RunSummary,
+    hash_budget: &mut u64,
 ) -> Result<AssertionResult, AssertionError> {
     let (passed, reason) = match assertion {
         Assertion::FileExists { path } => {
@@ -105,22 +118,16 @@ fn evaluate_one(
             if !metadata.is_file() {
                 (false, "target is not a file")
             } else {
-                let mut file = fs::File::open(&target)?;
-                let mut hasher = Sha256::new();
-                let mut buffer = [0_u8; 8192];
-                loop {
-                    let bytes_read = file.read(&mut buffer)?;
-                    if bytes_read == 0 {
-                        break;
-                    }
-                    hasher.update(&buffer[..bytes_read]);
-                }
-                let actual = hasher
-                    .finalize()
-                    .iter()
-                    .map(|byte| format!("{byte:02x}"))
-                    .collect::<String>();
-                (actual.eq_ignore_ascii_case(sha256), "file hash matches")
+                let actual = hash_output(&target, &metadata, hash_budget)?;
+                let matches = actual.eq_ignore_ascii_case(sha256);
+                (
+                    matches,
+                    if matches {
+                        "file hash matches"
+                    } else {
+                        "file hash differs"
+                    },
+                )
             }
         }
         Assertion::FileTextContains { path, text } => {
@@ -153,6 +160,80 @@ fn evaluate_one(
     };
 
     Ok(result(assertion, passed, reason))
+}
+
+fn hash_output(
+    path: &Path,
+    expected: &fs::Metadata,
+    remaining: &mut u64,
+) -> Result<String, AssertionError> {
+    if expected.len() > MAX_HASH_FILE_BYTES || expected.len() > *remaining {
+        return Err(AssertionError::HashTooLarge);
+    }
+    let mut options = fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    let file = options.open(path)?;
+    if !same_hash_metadata(expected, &file.metadata()?)? {
+        return Err(AssertionError::ChangedInput);
+    }
+    // The extra byte detects growth without following an unbounded writer.
+    let mut reader = file.take(expected.len() + 1);
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 8192];
+    let mut total = 0_u64;
+    loop {
+        let count = match reader.read(&mut buffer) {
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            result => result?,
+        };
+        if count == 0 {
+            break;
+        }
+        total += count as u64;
+        *remaining = remaining
+            .checked_sub(count as u64)
+            .ok_or(AssertionError::HashTooLarge)?;
+        hasher.update(&buffer[..count]);
+    }
+    let current = safe_metadata(path)?.ok_or(AssertionError::ChangedInput)?;
+    if total != expected.len()
+        || !same_hash_metadata(expected, &reader.get_ref().metadata()?)?
+        || !same_hash_metadata(expected, &current)?
+    {
+        return Err(AssertionError::ChangedInput);
+    }
+    Ok(hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect())
+}
+
+fn same_hash_metadata(left: &fs::Metadata, right: &fs::Metadata) -> io::Result<bool> {
+    if !right.is_file()
+        || right.file_type().is_symlink()
+        || left.len() != right.len()
+        || left.modified()? != right.modified()?
+    {
+        return Ok(false);
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        if left.dev() != right.dev()
+            || left.ino() != right.ino()
+            || left.ctime() != right.ctime()
+            || left.ctime_nsec() != right.ctime_nsec()
+        {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
 
 fn result(assertion: &Assertion, passed: bool, reason: &str) -> AssertionResult {
@@ -302,7 +383,7 @@ pub(crate) fn validate_relative_path(path: &str) -> Result<(), AssertionError> {
         || path.as_bytes().get(1) == Some(&b':')
         || path
             .split('/')
-            .any(|segment| segment.is_empty() || segment == "..")
+            .any(|segment| segment.is_empty() || segment == "." || segment == "..")
         || Path::new(path).components().any(|component| {
             matches!(
                 component,
@@ -313,4 +394,82 @@ pub(crate) fn validate_relative_path(path: &str) -> Result<(), AssertionError> {
         return Err(AssertionError::UnsafePath);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn hash_checks_reject_oversized_files_without_reading_them() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("large");
+        fs::File::create(&path)
+            .unwrap()
+            .set_len(MAX_HASH_FILE_BYTES + 1)
+            .unwrap();
+        let mut budget = MAX_HASH_TOTAL_BYTES;
+        assert!(matches!(
+            hash_output(&path, &fs::metadata(&path).unwrap(), &mut budget),
+            Err(AssertionError::HashTooLarge)
+        ));
+        assert_eq!(budget, MAX_HASH_TOTAL_BYTES);
+    }
+
+    #[test]
+    fn hash_checks_share_a_total_read_budget() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("value");
+        fs::write(&path, b"abc").unwrap();
+        let metadata = fs::metadata(&path).unwrap();
+        let mut budget = 3;
+        assert_eq!(
+            hash_output(&path, &metadata, &mut budget).unwrap(),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        assert_eq!(budget, 0);
+        assert!(matches!(
+            hash_output(&path, &metadata, &mut budget),
+            Err(AssertionError::HashTooLarge)
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn hash_checks_reject_a_replaced_file_with_the_same_size() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("value");
+        let other = temp.path().join("replacement");
+        fs::write(&path, b"abc").unwrap();
+        let metadata = fs::metadata(&path).unwrap();
+        fs::write(&other, b"xyz").unwrap();
+        fs::rename(other, &path).unwrap();
+        let mut budget = MAX_HASH_TOTAL_BYTES;
+        assert!(matches!(
+            hash_output(&path, &metadata, &mut budget),
+            Err(AssertionError::ChangedInput)
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn replacing_a_hash_input_with_a_fifo_cannot_block_verification() {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+        use std::time::Duration;
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("value");
+        fs::write(&path, b"abc").unwrap();
+        let metadata = fs::metadata(&path).unwrap();
+        fs::remove_file(&path).unwrap();
+        let name = CString::new(path.as_os_str().as_bytes()).unwrap();
+        assert_eq!(unsafe { libc::mkfifo(name.as_ptr(), 0o600) }, 0);
+        let (send, receive) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let mut budget = MAX_HASH_TOTAL_BYTES;
+            let _ = send.send(hash_output(&path, &metadata, &mut budget).is_err());
+        });
+        assert!(receive.recv_timeout(Duration::from_secs(2)).unwrap());
+    }
 }

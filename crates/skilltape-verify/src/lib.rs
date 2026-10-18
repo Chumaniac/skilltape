@@ -51,18 +51,24 @@ pub async fn verify_run(request: VerifyRequest) -> Result<Receipt, VerifyError> 
     verify_run_with_cancel(request, CancellationToken::new()).await
 }
 
-/// Verify with caller-owned cancellation while preserving cleanup and a cancelled Receipt.
-pub async fn verify_run_with_cancel(
-    request: VerifyRequest,
-    cancel: CancellationToken,
-) -> Result<Receipt, VerifyError> {
-    for assertion in &request.assertions {
+/// Validate caller-supplied assertions without loading or executing a Skill.
+pub fn validate_assertions(assertions: &[Assertion]) -> Result<(), VerifyError> {
+    for assertion in assertions {
         assertion
             .validate()
             .map_err(|error| VerifyError::InvalidAssertion {
                 message: error.to_string(),
             })?;
     }
+    Ok(())
+}
+
+/// Verify with caller-owned cancellation while preserving cleanup and a cancelled Receipt.
+pub async fn verify_run_with_cancel(
+    request: VerifyRequest,
+    cancel: CancellationToken,
+) -> Result<Receipt, VerifyError> {
+    validate_assertions(&request.assertions)?;
     ensure_directory(&request.input_root).map_err(|_| VerifyError::InvalidInputRoot)?;
     preflight_input_capacity(&request.input_root)?;
 
