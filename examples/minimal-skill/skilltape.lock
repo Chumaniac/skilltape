@@ -1,6 +1,13 @@
 {
   "schema": "skilltape.dev/lock/v1",
-  "engine": { "version": "0.1.0" },
-  "tools": [{ "program": "printf", "version": "system" }],
+  "engine": {
+    "version": "0.1.0"
+  },
+  "tools": [
+    {
+      "program": "/bin/cp",
+      "version": "system"
+    }
+  ],
   "scripts": []
 }

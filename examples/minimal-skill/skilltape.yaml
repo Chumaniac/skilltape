@@ -1,17 +1,20 @@
 schema: skilltape.dev/skill/v1
 name: minimal-skill
 version: 0.1.0
-description: A valid minimal SkillTape package demonstrating a declared printf step.
+description: A valid minimal SkillTape package with an explicit file copy and reviewed input bytes.
 engine:
   min_version: 0.1.0
 entrypoint:
   workflow: workflow.yaml
   permissions: permissions.json
   lockfile: skilltape.lock
-inputs: []
+inputs:
+  - id: sample
+    type: directory
+    required: true
 outputs:
   - id: message
     type: text
-    path: fixtures/output/message.txt
+    path: message.txt
 targets:
   - generic-agent-skill

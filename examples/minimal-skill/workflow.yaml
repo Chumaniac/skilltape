@@ -2,10 +2,11 @@ schema: skilltape.dev/workflow/v1
 steps:
   - id: write-message
     action: exec
-    program: printf
+    program: /bin/cp
     args:
-      - "hello from SkillTape\n"
-    timeout_ms: 1000
+      - inputs/sample.txt
+      - message.txt
+    timeout_ms: 3000
     outputs:
-      - path: fixtures/output/message.txt
+      - path: message.txt
         type: text

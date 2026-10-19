@@ -1,4 +1,5 @@
 # minimal-skill
 
-This valid example declares a `printf` workflow step that writes a small text
-output to `fixtures/output/message.txt` in the workspace.
+Copy the reviewed synthetic `inputs/sample.txt` into `message.txt` using the
+system `/bin/cp` in the isolated workspace. Network and environment secrets
+remain disabled. The caller supplies the fixture input directory explicitly.
