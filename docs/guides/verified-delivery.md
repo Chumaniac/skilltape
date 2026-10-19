@@ -1,6 +1,6 @@
 # Verified local delivery
 
-Install SkillTape v0.2.3 to preserve a completed workflow's actual output files
+Install SkillTape v0.3.0 to preserve a completed workflow's actual output files
 and independently inspect them with SkillSync. The native packages include
 `--delivery-dir`; source builds remain available for contributors.
 

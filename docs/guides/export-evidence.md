@@ -30,7 +30,7 @@ parents. A package must still be reviewed before anyone executes it.
 
 ## Associate a successful Receipt
 
-Install v0.2.3 or build the current source. On a platform with the existing restricted
+Install v0.3.0 or build the current source. On a platform with the existing restricted
 executor, use an independent new workspace and retain the Receipt outside the
 package tree:
 

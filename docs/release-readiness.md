@@ -1,6 +1,16 @@
 # Release Readiness
 
-Date: 2026-10-16. Historical release evidence retains its original scope.
+Date: 2026-10-19. Historical release evidence retains its original scope.
+
+## Version 0.3.0 distribution candidate
+
+This candidate packages the output-digest CLI and saved-Receipt workbench on
+all four existing native targets. CLI/API/Console metadata are aligned to
+0.3.0. Main CI must pass before creating the immutable tag; the Release
+workflow then supplies archive checksums, SBOM/provenance, packaged Console
+checks and the published Windows installer gate. Installed-package journey
+evidence is recorded separately after downloading the published assets.
+
 
 ## Console Receipt review source candidate - 2026-10-19
 
