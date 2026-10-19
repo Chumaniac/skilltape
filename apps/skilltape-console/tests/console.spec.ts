@@ -266,9 +266,9 @@ test('receipt view shows bounded evidence and policy decisions', async ({ page }
   await mockApi(page)
   await page.goto('/#receipt?run=run-a')
 
-  await expect(page.getByRole('heading', { name: 'Evidence you can inspect, not just trust' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Verification receipt' })).toBeVisible()
   await expect(page.locator('.page-heading .status-badge').getByText('Succeeded', { exact: true })).toBeVisible()
-  await expect(page.getByText('Output redacted')).toBeVisible()
+  await expect(page.getByText('Output digests and byte counts')).toBeVisible()
   await expect(page.locator('.decision-list').getByText('POLICY001', { exact: false })).toBeVisible()
   await expect(page.locator('.result-list').getByText('File Exists', { exact: true })).toBeVisible()
 })
@@ -292,6 +292,38 @@ test('receipt review filters failed output checks and keeps the complete outcome
   await page.getByRole('button', { name: 'All checks (3)', exact: true }).click()
   await expect(page.locator('.result-list li')).toHaveCount(3)
   await expect(page.locator('.result-list').getByText('Passed', { exact: true })).toHaveCount(2)
+})
+
+test('receipt next review action focuses failed checks and resets for another saved run', async ({ page }) => {
+  await mockApi(page, 'normal', {
+    ...receipt, status: 'assertion_failed', assertions: [
+      { kind: 'file_exists', target: 'outputs/report.csv', passed: true, reason: 'file exists' },
+      { kind: 'file_hash', target: 'outputs/report.csv', passed: false, reason: 'output hash does not match expected digest' },
+    ],
+  })
+  await page.route('**/api/v1/receipts/other-run', route => route.fulfill({ json: {
+    schema: 'skilltape.dev/receipt/v1', id: 'other-run', document: receipt,
+  } }))
+  await page.goto('/#receipt?run=run-a')
+  await expect(page.getByRole('region', { name: 'What to review next' })).toContainText('1 check needs attention')
+  await page.getByRole('button', { name: 'Review failed checks', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Checks against expected results' })).toBeFocused()
+  await expect(page.locator('.result-list li')).toHaveCount(1)
+  await expect(page).toHaveURL(/#receipt\?run=run-a$/)
+  await page.getByLabel('Saved Receipt ID', { exact: true }).fill('other-run')
+  await page.getByRole('button', { name: 'Open Receipt', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'All checks (1)', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.locator('.result-list li')).toHaveCount(1)
+  await expect(page.getByRole('region', { name: 'What to review next' })).toContainText('This run completed')
+})
+
+test('receipt without explicit checks directs review to execution', async ({ page }) => {
+  await mockApi(page, 'normal', { ...receipt, assertions: [] })
+  await page.goto('/#receipt?run=run-a')
+  await expect(page.getByRole('region', { name: 'What to review next' })).toContainText('without explicit checks')
+  await page.getByRole('button', { name: 'Review step results', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Step outcomes' })).toBeFocused()
+  await expect(page.getByText('No explicit assertions were recorded.', { exact: true })).toBeVisible()
 })
 
 test('saved Receipt picker recovers from missing IDs and rejects path input without a request', async ({ page }) => {

@@ -1,6 +1,9 @@
 # Review saved verification results
 
 Status: included in the v0.3.0 distribution; absent from v0.2.3 archives.
+
+Version 0.3.1 adds a next-action summary. Use **Review failed checks** to filter failures and focus their heading, or **Review step results** for execution-only evidence. Opening another saved Receipt resets the filter.
+
 Date: 2026-10-19.
 
 Save a Receipt inside the workspace you will open in Console. For an existing
