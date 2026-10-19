@@ -1,5 +1,9 @@
 # Release Readiness
 
+## Version 0.4.1 terminal metadata repair
+
+An invalid synthetic step label reproduced raw terminal control bytes in human preflight output. Render labels through Rust string debug escaping; retain the label as data and preserve JSON output. Negative CLI cases cover ESC, newline and a directional control. Keep v0.4.0 source/tag/assets as history; the patch uses a new immutable release.
+
 ## Version 0.4.0 distribution candidate
 
 Adds read-only CLI and Console policy preflight backed by the replay policy checks. The preview is limited to 1,000 steps/checks and the UI renders 32 checks. It is not an execution or input-acceptance result. Required native and Console CI, release archives and an installed-package flow remain separate gates. Existing release and successful Receipt assets are retained.
