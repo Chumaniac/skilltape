@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0] - 2026-10-19
+
+- Package exact output digest requirements and the saved-Receipt review workbench
+  for native installation, including failure filtering and recoverable errors.
+- Keep all four native targets, checksums, archive/SBOM provenance, and the
+  existing staged installers. Previous releases and assets remain unchanged.
+
 ## Unreleased source - 2026-10-19
 
 - Open actual saved Receipts from the Console by filename, recover from a

@@ -1,6 +1,6 @@
 # Verify exact output bytes
 
-Status: current source, not included in published v0.2.3 archives.
+Status: included in the v0.3.0 distribution; absent from v0.2.3 archives.
 Date: 2026-10-18.
 
 An existing file is insufficient evidence that a workflow produced the expected

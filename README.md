@@ -9,44 +9,38 @@ configuration file.
 
 ![Terminal output from SkillTape Capture, Compile, Lint, and Verify](docs/assets/quickstart-terminal.svg)
 
-[Watch the 30-second terminal demo](docs/assets/quickstart-terminal.txt) · [Download v0.2.3](https://github.com/Chumaniac/skilltape/releases/tag/v0.2.3)
+[Watch the 30-second terminal demo](docs/assets/quickstart-terminal.txt) · [Download v0.3.0](https://github.com/Chumaniac/skilltape/releases/tag/v0.3.0)
 
-## Verified public release
+## Version 0.3.0
 
-[SkillTape v0.2.3](https://github.com/Chumaniac/skilltape/releases/tag/v0.2.3)
-is publicly available as native CLI, Console API and Console UI packages.
-[Release run 38862770537](https://github.com/Chumaniac/skilltape/actions/runs/38862770537)
-passed Linux, Intel Mac, Apple Silicon Mac and Windows builds, required
-provenance/SBOM/checksums and the published Windows installer smoke check.
-All eight downloaded archive/SBOM checksums matched. An isolated native Mac
-installation passed required-output success/failure and packaged Console checks.
+[Download SkillTape v0.3.0](https://github.com/Chumaniac/skilltape/releases/tag/v0.3.0)
+for Linux x86_64, Intel Mac, Apple Silicon Mac, or Windows x86_64. Packages
+contain the native CLI, read-only Console API, and Console UI. The Release
+workflow builds all four targets, publishes checksums and attestations, and
+checks the packaged Console and Windows installer.
 
-Windows Replay/Verify still fail closed. The terminal demo records the historical
-v0.1.0 journey; the commands below install v0.2.3. Earlier releases remain available.
+- Require exact output bytes with repeatable `verify --expect-sha256 PATH=SHA256`.
+  A mismatch fails verification and leaves the delivery unpublished.
+- Open real saved Receipts by filename, inspect explicit pass/fail outcomes,
+  and filter checks needing attention in the Console.
+- Retain required-file checks, saved-delivery review/comparison, literal
+  Capture arguments, orderly cancellation, and bounded no-overwrite exports.
 
-## New in v0.2.3
-
-- Require output files with repeatable `verify --expect-file PATH`; missing files
-  fail verification and leave the delivery unpublished. See the example below.
-- Inspect and compare real saved bundles in the Console's
-  [Delivery workbench](docs/reference/saved-deliveries.md), including actual file
-  hashes and changes. Native physical inspection currently requires POSIX.
-- Pass literal Capture arguments with `--arg` and cancel Unix Replay/Verify with
-  orderly cleanup and exit 5. See [arguments and cancellation](docs/guides/configuration.md#arguments-and-cancellation).
-- Use bounded stable exports, optional `export --receipt` association and
-  complete no-overwrite delivery publication. The
-  [multi-organization example](examples/verified-tenant-delivery/README.md)
-  pairs actual local output with independent composite-key checks.
+See [output digest checks](docs/guides/output-digests.md) and
+[Receipt review](docs/guides/receipt-review.md) for complete usage examples.
+Windows Replay/Verify still fail closed. Earlier
+[v0.2.3 assets](https://github.com/Chumaniac/skilltape/releases/tag/v0.2.3)
+and their dated verification evidence remain available.
 
 ## Get a verified Skill in five minutes
 
-Install the fixed public v0.2.3 release without piping a download into a shell.
+Install the fixed public v0.3.0 release without piping a download into a shell.
 The installer below is fetched from commit
 `9f6bec579258baa63234139af0fae650d9efdbd2`, and the release base URL stays
 explicit.
 
 ```bash
-SKILLTAPE_VERSION="0.2.3"
+SKILLTAPE_VERSION="0.3.0"
 SKILLTAPE_RELEASE_BASE_URL="https://github.com/Chumaniac/skilltape/releases/download"
 installer_path="$(mktemp)"
 curl --fail --location --silent --show-error --output "$installer_path" \
@@ -99,11 +93,11 @@ bundles directly and provides bounded file checks and review actions. It never
 executes a workflow, edits files or declares business requirements accepted.
 These features are included in the public v0.2.3 packages.
 
-The current source also provides a saved-Receipt picker and an assertion review
+Version 0.3.0 also provides a saved-Receipt picker and an assertion review
 with **All checks** and **Needs attention** filters. It reads the actual v1
 `kind` field, shows explicit pass/fail labels, and keeps the run outcome visible
 while filtering. See [review saved verification results](docs/guides/receipt-review.md)
-for an operational example. This UI update is not in the existing v0.2.3 archives.
+for an operational example. This UI update requires v0.3.0 or the current source.
 
 v0.2.3 also bounds Replay/Verify inputs to 10,000 entries, depth 64,
 16 MiB per file, and 64 MiB in total. Hashing and staging reject detected changes
@@ -141,9 +135,9 @@ concurrent-change limits. These checks are included in v0.2.3.
 
 With v0.2.3, use `skilltape verify ./skill --expect-file result.csv --expect-file summary.txt --json`. Each path is relative to the output root. Verify records each requirement in the Receipt and fails with exit code 3 if a required regular file is missing. A failed Verify does not publish a delivery directory. Unsafe paths fail before Replay; at most 64 paths of 1024 bytes each are accepted. This checks file existence, not business correctness or authenticated provenance. These requirements are available in the v0.2.3 CLI.
 
-### Require exact output bytes in current source
+### Require exact output bytes in v0.3.0
 
-Build the current source to use `verify --expect-sha256 PATH=SHA256`. This option
+Use v0.3.0 or the current source for `verify --expect-sha256 PATH=SHA256`. This option
 checks the actual output against an independently supplied 64-digit SHA-256,
 records a `file_hash` assertion in the Receipt, and leaves failed deliveries
 unpublished. It shares the 64-requirement budget with `--expect-file` and retains

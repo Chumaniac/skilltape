@@ -1,6 +1,6 @@
 # Review saved verification results
 
-Status: current source, not included in the existing v0.2.3 archives.
+Status: included in the v0.3.0 distribution; absent from v0.2.3 archives.
 Date: 2026-10-19.
 
 Save a Receipt inside the workspace you will open in Console. For an existing
