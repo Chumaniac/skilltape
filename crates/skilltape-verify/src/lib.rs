@@ -16,9 +16,11 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 mod assertions;
+mod policy_plan;
 mod receipt;
 
 pub use assertions::{Assertion, AssertionResult};
+pub use policy_plan::{policy_plan, PolicyPlan, PolicyPlanCheck};
 pub use receipt::{PolicyDecisionSummary, Receipt, ReceiptStatus, ReceiptStep};
 
 pub struct VerifyRequest {

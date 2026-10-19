@@ -1,5 +1,10 @@
 # Release Readiness
 
+## Version 0.4.0 distribution candidate
+
+Adds read-only CLI and Console policy preflight backed by the replay policy checks. The preview is limited to 1,000 steps/checks and the UI renders 32 checks. It is not an execution or input-acceptance result. Required native and Console CI, release archives and an installed-package flow remain separate gates. Existing release and successful Receipt assets are retained.
+
+
 ## Version 0.3.1 distribution candidate
 
 A frontend-only review workflow change plus matching CLI/API/UI package versions. Native main and release gates remain required. Baseline screenshot and failing old-version next-action check were recorded before implementation; the new browser flow verifies focus, failure filtering and selection reset. Preserve previous releases and existing successful artifacts.

@@ -168,6 +168,9 @@ async fn skill_diff_exposes_hashes_and_lint_without_absolute_paths() {
     let (status, body, diff) = request(&root, "/api/v1/skills/demo/diff", &[]).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(diff["package_path"], "skills/demo");
+    assert_eq!(diff["policy_plan"]["execution"], "not-run");
+    assert_eq!(diff["policy_plan"]["allowed"], true);
+    assert!(diff["policy_plan"]["checks"].as_array().unwrap().len() <= 1000);
     assert_eq!(diff["lint"]["errors"].as_array().map(Vec::len), Some(0));
     assert_eq!(diff["files"].as_array().map(Vec::len), Some(6));
     assert!(!body.contains(root.to_string_lossy().as_ref()));

@@ -126,6 +126,7 @@ pub struct SkillDiff {
     pub lockfile: Value,
     pub files: Vec<FileSummary>,
     pub lint: LintSummary,
+    pub policy_plan: Option<skilltape_verify::PolicyPlan>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -275,6 +276,7 @@ impl ConsoleReadModel {
                 .map_err(|_| ReadModelError::InvalidDocument)?,
             files,
             lint: lint_summary(lint),
+            policy_plan: skilltape_verify::policy_plan(&package).ok(),
         })
     }
 

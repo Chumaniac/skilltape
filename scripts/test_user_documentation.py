@@ -88,7 +88,7 @@ class UserDocumentationContractTests(unittest.TestCase):
         self.assertIn("docs/assets/quickstart-terminal.txt", text)
         self.assertIn("docs/guides/quickstart.md", text)
         self.assertIn(
-            "https://github.com/Chumaniac/skilltape/releases/tag/v0.3.1", text
+            "https://github.com/Chumaniac/skilltape/releases/tag/v0.4.0", text
         )
         destinations = {
             destination.split("#", 1)[0].strip().strip("<>")
@@ -177,7 +177,7 @@ class UserDocumentationContractTests(unittest.TestCase):
         self.assertEqual(2, text.count(unix_download))
         self.assertEqual(2, text.count('bash "$installer_path"'))
         self.assertIn(
-            'bash "$installer_path" 0.3.1 "$HOME/.local/bin" "aarch64-apple-darwin"',
+            'bash "$installer_path" 0.4.0 "$HOME/.local/bin" "aarch64-apple-darwin"',
             text,
         )
         self.assertIn(
@@ -191,7 +191,7 @@ class UserDocumentationContractTests(unittest.TestCase):
         )
         for value in (
             '"https://github.com/Chumaniac/skilltape/releases/download"',
-            '"0.3.1"',
+            '"0.4.0"',
             '"$env:LOCALAPPDATA\\SkillTape\\bin"',
             '"x86_64-pc-windows-msvc"',
         ):

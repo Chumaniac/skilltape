@@ -651,6 +651,47 @@ fn failed_action(step_id: &str, message: String) -> StepExecution {
     }
 }
 
+/// Preview the same declared-capability decisions used by replay, without any I/O.
+/// This is not input, sandbox, output, or successful-execution verification.
+pub fn preview_policy(
+    package: &LoadedSkillPackage,
+    policy: &PolicyEngine,
+) -> Result<Vec<PolicyDecisionRecord>, RunError> {
+    const MAX_CHECKS: usize = 1000;
+    if package.workflow.steps.len() > MAX_CHECKS {
+        return Err(RunError::InvalidLimits {
+            message: "policy preview exceeds 1000 steps or checks".into(),
+        });
+    }
+    let mut records = Vec::new();
+    for step in &package.workflow.steps {
+        let count = match step {
+            Step::Exec(step) => 1 + step.outputs.len(),
+            Step::Script(step) => 2 + step.outputs.len(),
+            Step::File(step) => {
+                if step.operation == "mkdir" {
+                    1
+                } else {
+                    2
+                }
+            }
+            Step::Assert(_) => 1,
+        };
+        if count > MAX_CHECKS - records.len() {
+            return Err(RunError::InvalidLimits {
+                message: "policy preview exceeds 1000 steps or checks".into(),
+            });
+        }
+        record_decisions(
+            &mut records,
+            step_id(step),
+            PolicyPhase::Before,
+            &policy_checks(policy, step, package),
+        );
+    }
+    Ok(records)
+}
+
 fn policy_checks(
     policy: &PolicyEngine,
     step: &Step,
