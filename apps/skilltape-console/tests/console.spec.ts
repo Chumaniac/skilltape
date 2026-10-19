@@ -34,7 +34,7 @@ const skill = {
 
 const receipt = {
   schema: 'skilltape.dev/receipt/v1',
-  run_id: 'run-a',
+  run_id: 'd'.repeat(64),
   skill_hash: 'a'.repeat(64),
   status: 'succeeded',
   steps: [
@@ -50,13 +50,13 @@ const receipt = {
       stderr_truncated: false,
     },
   ],
-  assertions: [{ type: 'file_exists', target: 'outputs/a', passed: true, reason: 'file exists' }],
+  assertions: [{ kind: 'file_exists', target: 'outputs/a', passed: true, reason: 'file exists' }],
   policy_decisions: [
     { step_id: 'format', phase: 'before', allowed: true, code: 'POLICY001', reason: 'allowed', risk: 'low' },
   ],
 }
 
-async function mockApi(page: import('@playwright/test').Page, mode: 'normal' | 'error' = 'normal') {
+async function mockApi(page: import('@playwright/test').Page, mode: 'normal' | 'error' = 'normal', storedReceipt = receipt) {
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url())
     if (mode === 'error' && url.pathname.endsWith('/workspaces')) {
@@ -151,10 +151,14 @@ async function mockApi(page: import('@playwright/test').Page, mode: 'normal' | '
       await route.fulfill({ contentType: 'application/json', body: JSON.stringify(skill) })
       return
     }
-    if (url.pathname.endsWith('/receipts/run-a')) {
+    if (url.pathname.includes('/receipts/')) {
+      if (!url.pathname.endsWith('/receipts/run-a')) {
+        await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: { message: 'Saved Receipt not found.' } }) })
+        return
+      }
       await route.fulfill({
         contentType: 'application/json',
-        body: JSON.stringify({ schema: 'skilltape.dev/receipt/v1', id: 'run-a', document: receipt }),
+        body: JSON.stringify({ schema: 'skilltape.dev/receipt/v1', id: 'run-a', document: storedReceipt }),
       })
       return
     }
@@ -267,6 +271,92 @@ test('receipt view shows bounded evidence and policy decisions', async ({ page }
   await expect(page.getByText('Output redacted')).toBeVisible()
   await expect(page.locator('.decision-list').getByText('POLICY001', { exact: false })).toBeVisible()
   await expect(page.locator('.result-list').getByText('File Exists', { exact: true })).toBeVisible()
+})
+
+test('receipt review filters failed output checks and keeps the complete outcome visible', async ({ page }, testInfo) => {
+  await mockApi(page, 'normal', {
+    ...receipt, status: 'assertion_failed', assertions: [
+      { kind: 'file_exists', target: 'outputs/report.csv', passed: true, reason: 'file exists' },
+      { kind: 'file_hash', target: 'outputs/report.csv', passed: false, reason: 'output hash does not match expected digest' },
+      { kind: 'command_exit', target: 'export', passed: true, reason: 'exit code matches' },
+    ],
+  })
+  await page.goto('/#receipt?run=run-a')
+  await expect(page.getByRole('status').filter({ hasText: '2 passed · 1 failed' })).toBeVisible()
+  await page.getByRole('button', { name: 'Needs attention (1)', exact: true }).click()
+  await expect(page.locator('.result-list li')).toHaveCount(1)
+  await expect(page.locator('.result-list')).toContainText('File Hash')
+  await expect(page.locator('.result-list')).toContainText('Failed')
+  await expect(page.locator('.page-heading')).toContainText('Assertion Failed')
+  await page.screenshot({ path: testInfo.outputPath('receipt-output-review-desktop.png'), fullPage: true })
+  await page.getByRole('button', { name: 'All checks (3)', exact: true }).click()
+  await expect(page.locator('.result-list li')).toHaveCount(3)
+  await expect(page.locator('.result-list').getByText('Passed', { exact: true })).toHaveCount(2)
+})
+
+test('saved Receipt picker recovers from missing IDs and rejects path input without a request', async ({ page }) => {
+  const requests: string[] = []
+  page.on('request', request => { if (request.url().includes('/api/v1/receipts/')) requests.push(request.url()) })
+  await mockApi(page)
+  await page.goto('/#receipt?run=missing')
+  await expect(page.getByRole('alert')).toContainText('Saved Receipt not found')
+  const input = page.getByLabel('Saved Receipt ID', { exact: true })
+  await input.fill('../private')
+  await page.getByRole('button', { name: 'Open Receipt', exact: true }).click()
+  await expect(page.getByText('Use a saved filename, not a path.', { exact: true })).toBeVisible()
+  expect(requests).toHaveLength(1)
+  await input.fill('run-a.json')
+  await input.press('Enter')
+  await expect(page.locator('.result-list')).toContainText('File Exists')
+  await expect(page).toHaveURL(/#receipt\?run=run-a$/)
+  await expect(page.getByRole('button', { name: 'All checks (1)', exact: true })).toHaveAttribute('aria-pressed', 'true')
+})
+
+test('malformed or oversized stored Receipts show a recoverable error', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  const cases = [
+    { ...receipt, assertions: [{ type: 'file_hash', target: 'output', passed: true, reason: 'legacy fixture field' }] },
+    { ...receipt, assertions: Array.from({ length: 1001 }, () => receipt.assertions[0]) },
+    { ...receipt, steps: [{ ...receipt.steps[0], stdout_bytes: -1 }] },
+    { ...receipt, assertions: [{ ...receipt.assertions[0], passed: false }] },
+    { ...receipt, raw_output: 'private-sentinel-not-for-display' },
+  ]
+  for (const document of cases) {
+    await page.route('**/api/v1/receipts/**', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ schema: receipt.schema, id: 'run-a', document }) }))
+    await page.goto('/#receipt?run=run-a')
+    await expect(page.getByRole('alert')).toContainText('invalid or unsupported')
+    await expect(page.getByRole('button', { name: 'Open Receipt', exact: true })).toBeVisible()
+    await expect(page.locator('.result-list')).toHaveCount(0)
+    await expect(page.locator('body')).not.toContainText('private-sentinel-not-for-display')
+    await page.unroute('**/api/v1/receipts/**')
+  }
+  expect(errors).toEqual([])
+})
+
+test('opening a different saved Receipt clears the previous failure filter', async ({ page }) => {
+  await mockApi(page, 'normal', { ...receipt, status: 'assertion_failed', assertions: [{ ...receipt.assertions[0], passed: false }] })
+  await page.route('**/api/v1/receipts/run-b', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ schema: receipt.schema, id: 'run-b', document: { ...receipt, run_id: 'e'.repeat(64) } }) }))
+  await page.goto('/#receipt?run=run-a')
+  await page.getByRole('button', { name: 'Needs attention (1)', exact: true }).click()
+  await page.getByLabel('Saved Receipt ID', { exact: true }).fill('run-b')
+  await page.getByRole('button', { name: 'Open Receipt', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'All checks (1)', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.locator('.result-list')).toContainText('Passed')
+  await expect(page.locator('.page-heading')).toContainText('Succeeded')
+})
+
+test('receipt details render literal untrusted text and remain readable on mobile', async ({ page }, testInfo) => {
+  const target = 'outputs/' + 'long-file-name-'.repeat(24) + '<img src=x onerror=alert(1)>.csv'
+  const reason = '<script>window.receiptInjected=true</script> digest mismatch'
+  await mockApi(page, 'normal', { ...receipt, status: 'assertion_failed', assertions: [{ kind: 'file_hash', target, passed: false, reason }] })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/#receipt?run=run-a')
+  await expect(page.locator('.result-list')).toContainText(target)
+  await expect(page.locator('.result-list')).toContainText(reason)
+  await expect(page.locator('.result-list img, .result-list script')).toHaveCount(0)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true)
+  await page.screenshot({ path: testInfo.outputPath('receipt-output-review-mobile.png'), fullPage: true })
 })
 
 test('empty and unavailable states explain the next step', async ({ page }) => {

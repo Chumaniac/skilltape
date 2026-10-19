@@ -537,6 +537,15 @@ select {
   font-size: 0.78rem;
 }
 
+.receipt-picker { margin-bottom: 1rem; }
+.receipt-picker label { display: block; margin-bottom: 0.6rem; font-weight: 650; }
+.receipt-picker-controls, .receipt-filters { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.receipt-picker input { flex: 1; min-width: min(100%, 12rem); padding: 0.6rem; color: var(--text); background: var(--bg-soft); border: 1px solid var(--line-bright); border-radius: 0.5rem; }
+.receipt-picker p { font-size: 0.78rem; overflow-wrap: anywhere; }
+.receipt-picker [role="alert"]:empty { display: none; }
+.receipt-filters [aria-pressed="true"] { color: var(--cyan); border-color: var(--cyan); background: var(--cyan-soft); }
+.receipt-review .result-list strong, .receipt-review .result-list span, .receipt-review .result-list small { white-space: normal; overflow-wrap: anywhere; }
+
 .page-navigation {
   display: flex;
   flex-wrap: wrap;

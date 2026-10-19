@@ -99,6 +99,12 @@ bundles directly and provides bounded file checks and review actions. It never
 executes a workflow, edits files or declares business requirements accepted.
 These features are included in the public v0.2.3 packages.
 
+The current source also provides a saved-Receipt picker and an assertion review
+with **All checks** and **Needs attention** filters. It reads the actual v1
+`kind` field, shows explicit pass/fail labels, and keeps the run outcome visible
+while filtering. See [review saved verification results](docs/guides/receipt-review.md)
+for an operational example. This UI update is not in the existing v0.2.3 archives.
+
 v0.2.3 also bounds Replay/Verify inputs to 10,000 entries, depth 64,
 16 MiB per file, and 64 MiB in total. Hashing and staging reject detected changes
 instead of reading a growing file without a limit. See the

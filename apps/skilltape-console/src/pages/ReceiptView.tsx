@@ -8,18 +8,45 @@ interface ReceiptViewProps {
   receiptId?: string
 }
 
+function ReceiptPicker({ receiptId, onOpen }: { receiptId: string; onOpen: (id: string) => void }) {
+  const [error, setError] = useState('')
+  return (
+    <form className="panel receipt-picker" onSubmit={(event) => {
+      event.preventDefault()
+      const id = String(new FormData(event.currentTarget).get('receipt-id') ?? '').trim().replace(/\.json$/i, '')
+      if (!id || id === '.' || id === '..' || /[/\\:\u0000-\u001f\u007f]/.test(id)) {
+        setError('Use a saved filename, not a path.')
+        return
+      }
+      setError('')
+      onOpen(id)
+    }}>
+      <label htmlFor="receipt-id">Saved Receipt ID</label>
+      <div className="receipt-picker-controls">
+        <input id="receipt-id" name="receipt-id" defaultValue={receiptId} maxLength={255} required
+          aria-describedby="receipt-picker-help receipt-picker-error" aria-invalid={error ? true : undefined}
+          onInput={() => setError('')} autoComplete="off" spellCheck={false} />
+        <button className="button" type="submit">Open Receipt</button>
+      </div>
+      <p id="receipt-picker-help" className="muted">Enter a filename from .skilltape/receipts, with or without .json. This viewer only reads saved evidence.</p>
+      <p id="receipt-picker-error" role="alert">{error}</p>
+    </form>
+  )
+}
+
 export function ReceiptViewPage({ receiptId = 'run-a' }: ReceiptViewProps) {
   const [receipt, setReceipt] = useState<Receipt | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [reload, setReload] = useState(0)
+  const [failedOnly, setFailedOnly] = useState(false)
 
   useEffect(() => {
     const controller = new AbortController()
     setLoading(true)
     setError('')
     getReceipt(receiptId, controller.signal)
-      .then((stored) => setReceipt(stored.document as unknown as Receipt))
+      .then((stored) => { if (!controller.signal.aborted) setReceipt(stored.document) })
       .catch((reason: unknown) => {
         if (!controller.signal.aborted) {
           setError(reason instanceof Error ? reason.message : 'Could not read the verification Receipt.')
@@ -31,15 +58,21 @@ export function ReceiptViewPage({ receiptId = 'run-a' }: ReceiptViewProps) {
     return () => controller.abort()
   }, [receiptId, reload])
 
-  if (loading) return <PageLoading label="Loading verification Receipt…" />
-  if (error) return <PageError message={error} onRetry={() => setReload((value) => value + 1)} />
+  const picker = <ReceiptPicker key={receiptId} receiptId={receiptId} onOpen={(id) => {
+    if (id === receiptId) setReload(value => value + 1)
+    else window.location.hash = 'receipt?run=' + encodeURIComponent(id)
+  }} />
+  if (loading) return <>{picker}<PageLoading label="Loading verification Receipt…" /></>
+  if (error) return <>{picker}<PageError message={error} onRetry={() => setReload((value) => value + 1)} /></>
   if (!receipt) {
-    return <EmptyState title="No Receipt selected" message="Run skilltape verify to create a Receipt for this view." />
+    return <>{picker}<EmptyState title="No Receipt selected" message="Run skilltape verify to create a Receipt for this view." /></>
   }
 
+  const failed = receipt.assertions.filter(assertion => !assertion.passed)
+  const visible = failedOnly ? failed : receipt.assertions
   const statusTone = receipt.status === 'succeeded' ? 'good' : receipt.status === 'assertion_failed' ? 'warn' : 'danger'
   return (
-    <section className="page-section">
+    <>{picker}<section className="page-section receipt-review">
       <header className="page-heading">
         <div>
           <p className="eyebrow">Verify run</p>
@@ -116,21 +149,27 @@ export function ReceiptViewPage({ receiptId = 'run-a' }: ReceiptViewProps) {
               <h2>Expected outcomes</h2>
             </div>
           </div>
+          <p role="status">{receipt.assertions.length - failed.length} passed · {failed.length} failed</p>
+          <div className="receipt-filters" role="group" aria-label="Assertion filters">
+            <button className="button button-secondary" type="button" aria-pressed={!failedOnly} onClick={() => setFailedOnly(false)}>All checks ({receipt.assertions.length})</button>
+            <button className="button button-secondary" type="button" aria-pressed={failedOnly} onClick={() => setFailedOnly(true)}>Needs attention ({failed.length})</button>
+          </div>
           {receipt.assertions.length > 0 ? (
-            <ul className="result-list">
-              {receipt.assertions.map((assertion, index) => (
+            visible.length > 0 ? <ul className="result-list">
+              {visible.map((assertion, index) => (
                 <li key={assertion.target + index}>
                   <span className={assertion.passed ? 'result-icon result-pass' : 'result-icon result-fail'} aria-hidden="true">
                     {assertion.passed ? '✓' : '!'}
                   </span>
                   <div>
-                    <strong>{titleCase(assertion.type)}</strong>
+                    <strong>{titleCase(assertion.kind)}</strong>
+                    <StatusBadge tone={assertion.passed ? 'good' : 'danger'}>{assertion.passed ? 'Passed' : 'Failed'}</StatusBadge>
                     <span>{assertion.target}</span>
                     <small>{assertion.reason}</small>
                   </div>
                 </li>
               ))}
-            </ul>
+            </ul> : <p className="muted">No failed assertions. Review the run status and policy decisions separately.</p>
           ) : (
             <p className="muted">No explicit assertions were recorded.</p>
           )}
@@ -173,6 +212,6 @@ export function ReceiptViewPage({ receiptId = 'run-a' }: ReceiptViewProps) {
           <JsonDisclosure label="View Receipt JSON" value={receipt} />
         </article>
       </div>
-    </section>
+    </section></>
   )
 }

@@ -121,7 +121,7 @@ export interface ReceiptStep {
 }
 
 export interface AssertionResult {
-  type: string
+  kind: 'file_exists' | 'file_hash' | 'file_text_contains' | 'command_exit'
   target: string
   passed: boolean
   reason: string

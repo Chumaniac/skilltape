@@ -113,7 +113,7 @@ function App() {
           {route.page === 'timeline' ? <TimelinePage tapeId={route.tapeId} tapeOffset={route.tapeOffset} eventOffset={route.eventOffset} /> : null}
           {route.page === 'compile' ? <CompileReviewPage skillId={route.skillId} /> : null}
           {route.page === 'permissions' ? <PermissionReviewPage skillId={route.skillId} /> : null}
-          {route.page === 'receipt' ? <ReceiptViewPage receiptId={route.receiptId} /> : null}
+          {route.page === 'receipt' ? <ReceiptViewPage key={route.receiptId ?? 'run-a'} receiptId={route.receiptId} /> : null}
           {route.page === 'export' ? <ExportTargetsPage /> : null}
         </main>
 
