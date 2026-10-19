@@ -2,6 +2,28 @@
 
 Date: 2026-10-16. Historical release evidence retains its original scope.
 
+## Console Receipt review source candidate - 2026-10-19
+
+The Console now opens saved Receipts by filename, shows explicit assertion
+outcomes and counts, and filters failed checks without hiding the overall run
+status. The previous fixture used `type` while the real v1 schema emits `kind`;
+using the actual field reproduced a missing Receipt page before the repair.
+Unsupported documents fail visibly rather than crashing or becoming accepted
+evidence. This is a source update; no release or deployment is performed.
+
+Local validation passed the Console build and 19 browser checks, including
+canonical fields, failure filtering, missing-file recovery, path rejection,
+cross-Receipt state reset, literal untrusted text and mobile layout. A native
+CLI generated matching and mismatched digest Receipts (exit 0 and 3); the real
+local API and built UI opened both, selected the failed hash check and produced
+desktop/mobile captures without a mocked API. Existing successful Receipts
+were reused during the harness connection retry.
+
+The unchanged Rust workspace, warning-free Clippy, formatting, package/workflow
+fixtures and installer checks passed. Review rendering is bounded to 1,000
+entries per collection and 4,096 characters per text field; CPU/RSS were not
+measured. Hosted checks remain required before merging this candidate.
+
 ## Output digest source candidate - 2026-10-18
 
 The current source exposes `verify --expect-sha256 PATH=SHA256` through the

@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased source - 2026-10-19
+
+- Open actual saved Receipts from the Console by filename, recover from a
+  missing or unsupported document, and filter assertions needing attention.
+- Read the v1 `kind` field emitted by Verify instead of the incorrect `type`
+  field used by the old UI fixture; show explicit pass/fail labels and counts.
+- Reject unsupported Receipt shapes before rendering, bound each displayed
+  collection to 1,000 entries, and retain read-only local behavior. Existing
+  v0.2.3 release assets are unchanged.
+
 ## Unreleased source - 2026-10-18
 
 - Add repeatable `verify --expect-sha256 PATH=SHA256` requirements, using the
