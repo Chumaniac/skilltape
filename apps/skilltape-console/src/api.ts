@@ -61,8 +61,21 @@ export function getTapeEvents(tapeId: string, signal?: AbortSignal, offset = 0) 
   return get<TapeEvents>('/tapes/' + encodeURIComponent(tapeId) + '/events?limit=100&offset=' + offset, signal)
 }
 
-export function getSkillDiff(skillId: string, signal?: AbortSignal) {
-  return get<SkillDiff>('/skills/' + encodeURIComponent(skillId) + '/diff', signal)
+export async function getSkillDiff(skillId: string, signal?: AbortSignal) {
+  const skill = await get<SkillDiff>('/skills/' + encodeURIComponent(skillId) + '/diff', signal)
+  const plan = skill.policy_plan
+  if (plan != null && (plan.schema !== 'skilltape.dev/policy-plan/v1' || plan.execution !== 'not-run' ||
+    typeof plan.allowed !== 'boolean' || typeof plan.package_valid !== 'boolean' ||
+    !Array.isArray(plan.package_error_codes) || plan.package_error_codes.length > 64 ||
+    !plan.package_error_codes.every(code => typeof code === 'string' && /^[A-Z0-9_]{1,64}$/.test(code)) ||
+    !Array.isArray(plan.checks) || plan.checks.length > 1000 ||
+    !plan.checks.every((check, index) => check && check.ordinal === index + 1 && typeof check.step_id === 'string' && check.step_id.length <= 4096 &&
+      typeof check.allowed === 'boolean' && typeof check.code === 'string' && /^[A-Z0-9_]{1,64}$/.test(check.code) &&
+      typeof check.reason === 'string' && check.reason.length <= 512 && ['low', 'medium', 'high', 'critical'].includes(check.risk)) ||
+    (plan.allowed && (!plan.package_valid || plan.package_error_codes.length > 0 || plan.checks.some(check => !check.allowed))))) {
+    throw new ApiError('The policy preflight is invalid or unsupported. No execution is approved.', 502, 'invalid_policy_plan')
+  }
+  return skill
 }
 
 export function getRun(runId: string, signal?: AbortSignal) {

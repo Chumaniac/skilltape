@@ -401,3 +401,26 @@ test('empty and unavailable states explain the next step', async ({ page }) => {
   await expect(page.getByRole('alert')).toContainText('Start the local Console API')
   await expect(page.getByRole('button', { name: 'Retry request' })).toBeVisible()
 })
+
+
+test('permission preflight is bounded, read-only and fails closed on inconsistent plans', async ({ page }) => {
+  const checks = Array.from({ length: 40 }, (_, index) => ({ ordinal: index + 1, step_id: 'step-' + index, allowed: index !== 35, code: index === 35 ? 'PKG006' : 'POLICY_ALLOWED', reason: index === 35 ? 'path is outside declared filesystem write scopes' : 'allowed', risk: index === 35 ? 'high' : 'low' }))
+  let plan = { schema: 'skilltape.dev/policy-plan/v1', execution: 'not-run', allowed: false, package_valid: false, package_error_codes: ['PKG006'], checks }
+  const requests: string[] = []
+  page.on('request', request => { if (request.url().includes('/api/v1/')) requests.push(request.method()) })
+  await mockApi(page)
+  await page.route('**/api/v1/skills/demo/diff', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ...skill, policy_plan: plan }) }))
+  await page.goto('/#permissions?skill=demo')
+  const panel = page.getByRole('article').filter({ has: page.getByRole('heading', { name: 'Execution policy preflight' }) })
+  await expect(panel.getByText('Blocked — review package', { exact: true })).toBeVisible()
+  await panel.locator('summary').click()
+  await expect(panel.locator('li')).toHaveCount(32)
+  await expect(panel).toContainText('first 32 checks')
+  await page.setViewportSize({ width: 390, height: 844 })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  expect(requests.every(method => method === 'GET')).toBe(true)
+  plan = { ...plan, allowed: true }
+  await page.reload()
+  await expect(page.getByText('The policy preflight is invalid or unsupported. No execution is approved.')).toBeVisible()
+  await expect(page.getByText('Allowed by declared policy', { exact: true })).toHaveCount(0)
+})

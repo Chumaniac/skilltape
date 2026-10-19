@@ -100,6 +100,16 @@ export interface SkillDiff {
   lockfile: Record<string, unknown>
   files: FileSummary[]
   lint: LintSummary
+  policy_plan?: PolicyPlan | null
+}
+
+export interface PolicyPlan {
+  schema: 'skilltape.dev/policy-plan/v1'
+  execution: 'not-run'
+  allowed: boolean
+  package_valid: boolean
+  package_error_codes: string[]
+  checks: Array<Omit<PolicyDecision, 'phase'> & { ordinal: number }>
 }
 
 export interface StoredDocument {

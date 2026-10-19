@@ -14,6 +14,8 @@ mod compile_command;
 mod console_command;
 #[path = "export_command.rs"]
 mod export_command;
+#[path = "preflight_command.rs"]
+mod preflight_command;
 #[path = "run_command.rs"]
 mod run_command;
 
@@ -29,6 +31,12 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Inspect package policy without executing steps or creating any output.
+    Preflight {
+        skill_path: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
     Init {
         name: String,
         #[arg(long)]
@@ -129,6 +137,7 @@ pub fn run() -> ExitCode {
         None
     };
     match Cli::parse().command {
+        Command::Preflight { skill_path, json } => preflight_command::run(skill_path, json),
         Command::Init {
             name,
             output,

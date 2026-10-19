@@ -121,6 +121,60 @@ async fn verify_fixture(
 }
 
 #[tokio::test]
+async fn policy_preflight_matches_real_before_checks_without_creating_output() {
+    let root = tempdir().expect("root");
+    let input = input_root(root.path());
+    let output = root.path().join("output");
+    let fixture = file_copy_package();
+    let plan = skilltape_verify::policy_plan(&fixture.package).expect("plan");
+    assert_eq!(plan.execution, "not-run");
+    assert!(!output.exists());
+    let receipt = verify_fixture(fixture, &input, &output, vec![]).await;
+    let before = receipt
+        .policy_decisions
+        .iter()
+        .filter(|item| item.phase == "before")
+        .collect::<Vec<_>>();
+    assert_eq!(plan.checks.len(), before.len());
+    for (preview, actual) in plan.checks.iter().zip(before) {
+        assert_eq!(preview.step_id, actual.step_id);
+        assert_eq!(preview.decision.allowed, actual.allowed);
+        assert_eq!(preview.decision.code, actual.code);
+        assert_eq!(preview.decision.reason, actual.reason);
+    }
+}
+
+#[test]
+fn policy_preflight_reports_denials_without_arguments_and_rejects_excessive_work() {
+    let fixture = package(
+        vec![
+            json!({"action":"exec","id":"blocked","program":"sh","timeout_ms":1000,"args":["-c","SYNTHETIC_ARGUMENT_SECRET"]}),
+        ],
+        permissions(&[], &[], &["sh"]),
+    );
+    let plan = skilltape_verify::policy_plan(&fixture.package).expect("plan");
+    assert!(!plan.allowed);
+    assert!(!plan.checks[0].decision.allowed);
+    assert!(!serde_json::to_string(&plan)
+        .unwrap()
+        .contains("SYNTHETIC_ARGUMENT_SECRET"));
+    let mut oversized = fixture.package;
+    oversized.workflow.steps = vec![oversized.workflow.steps[0].clone(); 1001];
+    assert!(skilltape_verify::policy_plan(&oversized).is_err());
+    let fixture = package(
+        vec![
+            json!({"action":"file","id":"escape","operation":"copy","from":"../outside","to":"outputs/a"}),
+        ],
+        permissions(&["inputs/**"], &["outputs/**"], &[]),
+    );
+    let plan = skilltape_verify::policy_plan(&fixture.package).unwrap();
+    assert!(plan
+        .checks
+        .iter()
+        .any(|item| item.decision.code == "PKG007" && !item.decision.allowed));
+}
+
+#[tokio::test]
 async fn verifies_files_hashes_text_and_policy_decisions_without_raw_output() {
     let root = tempdir().expect("root");
     let input = input_root(root.path());
