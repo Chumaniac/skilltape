@@ -1,11 +1,17 @@
 {
   "schema": "skilltape.dev/permissions/v1",
   "filesystem": {
-    "read": [],
-    "write": ["fixtures/output/message.txt"]
+    "read": [
+      "scripts/write-message.pl"
+    ],
+    "write": [
+      "fixtures/output/message.txt"
+    ]
   },
   "process": {
-    "executables": ["printf"],
+    "executables": [
+      "/usr/bin/perl"
+    ],
     "max_processes": 1,
     "default_timeout_ms": 120000
   },

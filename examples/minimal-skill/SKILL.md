@@ -1,4 +1,5 @@
 # minimal-skill
 
-This valid example declares a `printf` workflow step that writes a small text
-output to `fixtures/output/message.txt` in the workspace.
+Runs the locked `scripts/write-message.pl` through `/usr/bin/perl` to create
+`fixtures/output/message.txt` with `hello from SkillTape\n` in the isolated
+workspace. Network and environment secrets remain disabled.

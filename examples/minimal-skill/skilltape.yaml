@@ -1,7 +1,7 @@
 schema: skilltape.dev/skill/v1
 name: minimal-skill
 version: 0.1.0
-description: A valid minimal SkillTape package demonstrating a declared printf step.
+description: A valid minimal SkillTape package with an explicit file-producing Perl script.
 engine:
   min_version: 0.1.0
 entrypoint:

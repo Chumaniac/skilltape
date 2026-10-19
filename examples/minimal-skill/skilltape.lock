@@ -1,6 +1,18 @@
 {
   "schema": "skilltape.dev/lock/v1",
-  "engine": { "version": "0.1.0" },
-  "tools": [{ "program": "printf", "version": "system" }],
-  "scripts": []
+  "engine": {
+    "version": "0.1.0"
+  },
+  "tools": [
+    {
+      "program": "/usr/bin/perl",
+      "version": "system"
+    }
+  ],
+  "scripts": [
+    {
+      "path": "scripts/write-message.pl",
+      "sha256": "1a67843e7d3210875599dcf0a8a1150de0c60d91c98210cec8ce90d148092624"
+    }
+  ]
 }

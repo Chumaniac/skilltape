@@ -2,9 +2,9 @@ schema: skilltape.dev/workflow/v1
 steps:
   - id: write-message
     action: exec
-    program: printf
+    program: /usr/bin/perl
     args:
-      - "hello from SkillTape\n"
+      - scripts/write-message.pl
     timeout_ms: 1000
     outputs:
       - path: fixtures/output/message.txt

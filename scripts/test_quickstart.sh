@@ -46,4 +46,17 @@ assert (root / "skill" / "SKILL.md").is_file()
 assert (root / "skill" / "workflow.yaml").is_file()
 PY
 
-echo "quickstart journey passed"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+"$skilltape_bin" lint "$repo_root/examples/minimal-skill" --strict --json > "$demo_root/example-lint.json"
+"$skilltape_bin" verify "$repo_root/examples/minimal-skill" \
+  --expect-file fixtures/output/message.txt \
+  --expect-sha256 fixtures/output/message.txt=175b4d68597accf8585303fd6b9e7ab588a23a0f9a2d9cdb1647c3130ed63a67 \
+  --json > "$demo_root/example-receipt.json"
+python3 - "$demo_root/example-receipt.json" <<'CHECK'
+import json, sys
+receipt = json.load(open(sys.argv[1]))
+assert receipt['status'] == 'succeeded'
+assert all(row['passed'] for row in receipt['assertions'])
+CHECK
+
+echo "quickstart and declared output example journeys passed"
