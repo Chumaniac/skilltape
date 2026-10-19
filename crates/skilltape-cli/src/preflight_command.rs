@@ -35,7 +35,7 @@ pub(crate) fn run(path: PathBuf, json: bool) -> ExitCode {
         }
         for check in &plan.checks {
             println!(
-                "{} {}: {} — {}",
+                "{} {:?}: {} — {}",
                 check.ordinal, check.step_id, check.decision.code, check.decision.reason
             );
         }

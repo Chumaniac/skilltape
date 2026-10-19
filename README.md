@@ -9,15 +9,15 @@ configuration file.
 
 ![Terminal output from SkillTape Capture, Compile, Lint, and Verify](docs/assets/quickstart-terminal.svg)
 
-[Watch the 30-second terminal demo](docs/assets/quickstart-terminal.txt) · [Download v0.4.0](https://github.com/Chumaniac/skilltape/releases/tag/v0.4.0)
+[Watch the 30-second terminal demo](docs/assets/quickstart-terminal.txt) · [Download v0.4.1](https://github.com/Chumaniac/skilltape/releases/tag/v0.4.1)
 
-## Version 0.4.0
+## Version 0.4.1
 
 Inspect a Skill before running it with `skilltape preflight SKILL --json`, or open the Console Permissions page. The bounded, read-only plan shows declared-policy denials without executing steps or producing a Receipt. [Preflight limits and usage](docs/policy-preflight.md).
 
 The Receipt view names the recorded result, shows the next review action, and jumps to failed checks with keyboard focus. Execution-only Receipts remain explicit about missing checks.
 
-[Download SkillTape v0.4.0](https://github.com/Chumaniac/skilltape/releases/tag/v0.4.0)
+[Download SkillTape v0.4.1](https://github.com/Chumaniac/skilltape/releases/tag/v0.4.1)
 for Linux x86_64, Intel Mac, Apple Silicon Mac, or Windows x86_64. Packages
 contain the native CLI, read-only Console API, and Console UI. The Release
 workflow builds all four targets, publishes checksums and attestations, and
@@ -38,13 +38,13 @@ and their dated verification evidence remain available.
 
 ## Get a verified Skill in five minutes
 
-Install the fixed public v0.4.0 release without piping a download into a shell.
+Install the fixed public v0.4.1 release without piping a download into a shell.
 The installer below is fetched from commit
 `9f6bec579258baa63234139af0fae650d9efdbd2`, and the release base URL stays
 explicit.
 
 ```bash
-SKILLTAPE_VERSION="0.4.0"
+SKILLTAPE_VERSION="0.4.1"
 SKILLTAPE_RELEASE_BASE_URL="https://github.com/Chumaniac/skilltape/releases/download"
 installer_path="$(mktemp)"
 curl --fail --location --silent --show-error --output "$installer_path" \

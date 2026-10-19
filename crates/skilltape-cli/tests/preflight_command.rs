@@ -51,3 +51,26 @@ fn preflight_has_distinct_allowed_and_invalid_exit_codes() {
         .code(2)
         .stdout("");
 }
+
+#[test]
+fn human_preflight_escapes_untrusted_terminal_control_labels() {
+    for label in ["bad\u{1b}[2J\nFORGED", "bad\u{202e}FORGED"] {
+        let temp = tempdir().unwrap();
+        let skill = temp.path().join("skill");
+        create_skill_template(&skill, "control-probe").unwrap();
+        fs::write(skill.join("workflow.yaml"), serde_json::to_vec(&json!({"schema":"skilltape.dev/workflow/v1","steps":[{"action":"exec","id":label,"program":"echo","args":["synthetic"],"timeout_ms":1000}]})).unwrap()).unwrap();
+        let output = cargo_bin_cmd!("skilltape")
+            .arg("preflight")
+            .arg(&skill)
+            .assert()
+            .code(3)
+            .get_output()
+            .stdout
+            .clone();
+        let text = String::from_utf8(output).unwrap();
+        assert!(!text.contains('\u{1b}'));
+        assert!(!text.contains('\u{202e}'));
+        assert!(!text.contains("\nFORGED"));
+        assert!(text.contains("FORGED"));
+    }
+}
