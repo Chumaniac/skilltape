@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.1] - 2026-10-19
+
+- Replace the Receipt slogan and oversized metric cards with a recorded-result summary, compact run details and a next review action.
+- Jump directly to failed checks or execution results with keyboard focus; reset filters when opening another saved run.
+- Distinguish completed runs without explicit assertions. Original Receipts, policy decisions and output fingerprints stay unchanged.
+
 ## [0.3.0] - 2026-10-19
 
 - Package exact output digest requirements and the saved-Receipt review workbench

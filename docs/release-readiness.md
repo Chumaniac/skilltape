@@ -1,5 +1,10 @@
 # Release Readiness
 
+## Version 0.3.1 distribution candidate
+
+A frontend-only review workflow change plus matching CLI/API/UI package versions. Native main and release gates remain required. Baseline screenshot and failing old-version next-action check were recorded before implementation; the new browser flow verifies focus, failure filtering and selection reset. Preserve previous releases and existing successful artifacts.
+
+
 Date: 2026-10-19. Historical release evidence retains its original scope.
 
 ## Version 0.3.0 distribution candidate

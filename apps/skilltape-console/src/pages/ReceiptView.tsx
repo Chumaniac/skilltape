@@ -45,6 +45,7 @@ export function ReceiptViewPage({ receiptId = 'run-a' }: ReceiptViewProps) {
     const controller = new AbortController()
     setLoading(true)
     setError('')
+    setFailedOnly(false)
     getReceipt(receiptId, controller.signal)
       .then((stored) => { if (!controller.signal.aborted) setReceipt(stored.document) })
       .catch((reason: unknown) => {
@@ -71,36 +72,45 @@ export function ReceiptViewPage({ receiptId = 'run-a' }: ReceiptViewProps) {
   const failed = receipt.assertions.filter(assertion => !assertion.passed)
   const visible = failedOnly ? failed : receipt.assertions
   const statusTone = receipt.status === 'succeeded' ? 'good' : receipt.status === 'assertion_failed' ? 'warn' : 'danger'
+  const reviewChecks = failed.length > 0 || (receipt.status === 'succeeded' && receipt.assertions.length > 0)
+  const nextStep = failed.length > 0
+    ? { title: `${formatNumber(failed.length)} ${failed.length === 1 ? 'check needs' : 'checks need'} attention`,
+      detail: 'Compare the failed targets with the expected outputs before verifying again.', action: 'Review failed checks' }
+    : receipt.status === 'succeeded' && receipt.assertions.length > 0
+      ? { title: 'This run completed', detail: 'Review the saved checks and permissions for this Skill version.', action: 'Review saved checks' }
+      : receipt.status === 'succeeded'
+        ? { title: 'Run completed without explicit checks', detail: 'Review the execution and policy decisions before reusing this Skill.', action: 'Review step results' }
+      : { title: 'Review the execution result', detail: 'Read the step outcomes and policy decisions before changing the Skill.', action: 'Review step results' }
+  function openReview() {
+    setFailedOnly(failed.length > 0)
+    const heading = document.getElementById(reviewChecks ? 'receipt-checks-heading' : 'receipt-steps-heading')
+    heading?.focus({ preventScroll: true })
+    heading?.scrollIntoView({ block: 'start' })
+  }
   return (
     <>{picker}<section className="page-section receipt-review">
       <header className="page-heading">
         <div>
-          <p className="eyebrow">Verify run</p>
-          <h1>Evidence you can inspect, not just trust</h1>
+          <p className="eyebrow">Saved run</p>
+          <h1>Verification receipt</h1>
           <p className="page-description">
-            This Receipt contains hashes and bounded summaries instead of raw command output or secrets.
+            Step outcomes, output checks and policy decisions recorded for this run.
           </p>
         </div>
         <StatusBadge tone={statusTone}>{titleCase(receipt.status)}</StatusBadge>
       </header>
 
-      <div className="metric-grid">
-        <div className="metric metric-accent">
-          <span className="metric-label">Run ID</span>
-          <strong>{receipt.run_id}</strong>
-        </div>
-        <div className="metric">
-          <span className="metric-label">Steps</span>
-          <strong>{formatNumber(receipt.steps.length)}</strong>
-        </div>
-        <div className="metric">
-          <span className="metric-label">Assertions</span>
-          <strong>{formatNumber(receipt.assertions.length)}</strong>
-        </div>
-        <div className="metric">
-          <span className="metric-label">Policy decisions</span>
-          <strong>{formatNumber(receipt.policy_decisions.length)}</strong>
-        </div>
+      <section className="receipt-verdict" aria-label="What to review next">
+        <div><h2>{nextStep.title}</h2><p>{nextStep.detail}</p></div>
+        <button className="button" type="button" onClick={openReview}>{nextStep.action}</button>
+      </section>
+      <div className="receipt-run-details">
+        <p className="receipt-run-id"><span>Run ID</span><code>{receipt.run_id}</code></p>
+        <dl className="receipt-facts">
+          <div><dt>Steps</dt><dd>{formatNumber(receipt.steps.length)}</dd></div>
+          <div><dt>Checks</dt><dd>{formatNumber(receipt.assertions.length)}</dd></div>
+          <div><dt>Policy decisions</dt><dd>{formatNumber(receipt.policy_decisions.length)}</dd></div>
+        </dl>
       </div>
 
       <div className="review-grid">
@@ -108,9 +118,9 @@ export function ReceiptViewPage({ receiptId = 'run-a' }: ReceiptViewProps) {
           <div className="panel-heading">
             <div>
               <p className="eyebrow">Execution trace</p>
-              <h2>Step status</h2>
+              <h2 id="receipt-steps-heading" tabIndex={-1}>Step outcomes</h2>
             </div>
-            <span className="panel-note">Output redacted</span>
+            <span className="panel-note">Output digests and byte counts</span>
           </div>
           {receipt.steps.length > 0 ? (
             <div className="table-wrap">
@@ -146,7 +156,7 @@ export function ReceiptViewPage({ receiptId = 'run-a' }: ReceiptViewProps) {
           <div className="panel-heading">
             <div>
               <p className="eyebrow">Assertions</p>
-              <h2>Expected outcomes</h2>
+              <h2 id="receipt-checks-heading" tabIndex={-1}>Checks against expected results</h2>
             </div>
           </div>
           <p role="status">{receipt.assertions.length - failed.length} passed · {failed.length} failed</p>
