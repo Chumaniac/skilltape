@@ -48,9 +48,9 @@ PY
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 "$skilltape_bin" lint "$repo_root/examples/minimal-skill" --strict --json > "$demo_root/example-lint.json"
-"$skilltape_bin" verify "$repo_root/examples/minimal-skill" \
-  --expect-file fixtures/output/message.txt \
-  --expect-sha256 fixtures/output/message.txt=175b4d68597accf8585303fd6b9e7ab588a23a0f9a2d9cdb1647c3130ed63a67 \
+"$skilltape_bin" verify "$repo_root/examples/minimal-skill" --input "$repo_root/examples/minimal-skill/fixtures/input" \
+  --expect-file message.txt \
+  --expect-sha256 message.txt=175b4d68597accf8585303fd6b9e7ab588a23a0f9a2d9cdb1647c3130ed63a67 \
   --json > "$demo_root/example-receipt.json"
 python3 - "$demo_root/example-receipt.json" <<'CHECK'
 import json, sys

@@ -5,14 +5,9 @@
   },
   "tools": [
     {
-      "program": "/usr/bin/perl",
+      "program": "/bin/cp",
       "version": "system"
     }
   ],
-  "scripts": [
-    {
-      "path": "scripts/write-message.pl",
-      "sha256": "1a67843e7d3210875599dcf0a8a1150de0c60d91c98210cec8ce90d148092624"
-    }
-  ]
+  "scripts": []
 }
