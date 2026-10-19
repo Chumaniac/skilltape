@@ -58,7 +58,7 @@ platform default.
 Unix shells:
 
 ```bash
-export SKILLTAPE_VERSION="0.2.3"
+export SKILLTAPE_VERSION="0.3.0"
 export SKILLTAPE_RELEASE_BASE_URL="https://github.com/Chumaniac/skilltape/releases/download"
 export SKILLTAPE_INSTALL_DIR="$HOME/.local/bin"
 export SKILLTAPE_TARGET="x86_64-unknown-linux-gnu"
@@ -69,7 +69,7 @@ export SKILLTAPE_CONSOLE_UI_DIST="/absolute/path/to/console"
 PowerShell:
 
 ```powershell
-$env:SKILLTAPE_VERSION = "0.2.3"
+$env:SKILLTAPE_VERSION = "0.3.0"
 $env:SKILLTAPE_RELEASE_BASE_URL = "https://github.com/Chumaniac/skilltape/releases/download"
 $env:SKILLTAPE_INSTALL_DIR = "$env:LOCALAPPDATA\SkillTape\bin"
 $env:SKILLTAPE_TARGET = "x86_64-pc-windows-msvc"
