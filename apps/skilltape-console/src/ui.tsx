@@ -21,7 +21,7 @@ export function SkillPicker({ skillId, onOpen }: { skillId: string; onOpen: (id:
           aria-describedby="skill-picker-help skill-picker-error" aria-invalid={error ? true : undefined} />
         <button className="button" type="submit">Open Skill</button>
       </div>
-      <p id="skill-picker-help" className="muted">Enter a directory name from skills/. Opening a package reads its saved files; it does not run the Skill.</p>
+      <p id="skill-picker-help" className="muted">Enter a name from skills/. Opening it does not run the Skill.</p>
       <p id="skill-picker-error" role="alert">{error}</p>
     </form>
   )

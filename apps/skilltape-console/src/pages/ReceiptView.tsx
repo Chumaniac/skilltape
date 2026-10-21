@@ -28,7 +28,7 @@ function ReceiptPicker({ receiptId, onOpen }: { receiptId: string; onOpen: (id: 
           onInput={() => setError('')} autoComplete="off" spellCheck={false} />
         <button className="button" type="submit">Open Receipt</button>
       </div>
-      <p id="receipt-picker-help" className="muted">Enter a filename from .skilltape/receipts, with or without .json. This viewer only reads saved evidence.</p>
+      <p id="receipt-picker-help" className="muted">Use a filename from .skilltape/receipts; .json is optional.</p>
       <p id="receipt-picker-error" role="alert">{error}</p>
     </form>
   )

@@ -54,10 +54,7 @@ export function CompileReviewPage({ skillId = '' }: CompileReviewProps) {
       <header className="page-heading">
         <div>
           <p className="eyebrow">Compile review</p>
-          <h1>Inspect what the compiler produced</h1>
-          <p className="page-description">
-            Review the executable Workflow, package evidence, and lint diagnostics before sharing a Skill.
-          </p>
+          <h1>Compiled package</h1>
         </div>
         <StatusBadge tone={lintTone}>
           {skill.lint.errors.length === 0 ? 'Lint clean' : skill.lint.errors.length + ' errors'}
