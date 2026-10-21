@@ -202,8 +202,17 @@ fn resolve_api_binary() -> Result<PathBuf, ConsoleError> {
 }
 
 fn validate_api_binary(path: PathBuf) -> Result<PathBuf, ConsoleError> {
-    if !path.is_file() {
+    let metadata = fs::metadata(&path).map_err(|_| ConsoleError::InvalidApiBinary(path.clone()))?;
+    if !metadata.is_file() {
         return Err(ConsoleError::InvalidApiBinary(path));
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        if metadata.permissions().mode() & 0o111 == 0 {
+            return Err(ConsoleError::InvalidApiBinary(path));
+        }
     }
     Ok(path)
 }

@@ -122,6 +122,44 @@ async fn workspace_and_tape_routes_return_bounded_read_models() {
 }
 
 #[tokio::test]
+async fn tape_listing_uses_the_storage_id_for_event_links_and_keeps_recorded_identity() {
+    let (_temp, root) = fixture();
+    fs::rename(
+        root.join(".skilltape/tapes/tape-a"),
+        root.join(".skilltape/tapes/friendly-name"),
+    )
+    .expect("rename storage directory without changing the recording");
+
+    let (status, _body, tapes) = request(&root, "/api/v1/workspaces/default/tapes", &[]).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(tapes["items"][0]["id"], "friendly-name");
+    assert_eq!(tapes["items"][0]["recorded_id"], "tape-a");
+
+    let (status, _body, events) = request(&root, "/api/v1/tapes/friendly-name/events", &[]).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(events["tape_id"], "friendly-name");
+    assert_eq!(events["events"][0]["sequence"], 0);
+    let saved: Value = serde_json::from_slice(
+        &fs::read(root.join(".skilltape/tapes/friendly-name/manifest.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(saved["id"], "tape-a");
+}
+
+#[tokio::test]
+async fn tape_listing_rejects_an_oversized_manifest_before_reading_it() {
+    let (_temp, root) = fixture();
+    let manifest = root.join(".skilltape/tapes/tape-a/manifest.json");
+    let mut document: Value = serde_json::from_slice(&fs::read(&manifest).unwrap()).unwrap();
+    document["workspace_root"] = Value::String("x".repeat(65 * 1024));
+    fs::write(&manifest, serde_json::to_vec(&document).unwrap()).unwrap();
+
+    let (status, _body, response) = request(&root, "/api/v1/workspaces/default/tapes", &[]).await;
+    assert_ne!(status, StatusCode::OK);
+    assert_eq!(response["error"]["code"], "invalid_document");
+}
+
+#[tokio::test]
 async fn tape_events_preserve_redaction_and_support_pagination() {
     let (_temp, root) = fixture();
     let (status, _body, events) = request(&root, "/api/v1/tapes/tape-a/events?limit=1", &[]).await;

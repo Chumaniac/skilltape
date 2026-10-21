@@ -18,6 +18,7 @@ const DEFAULT_PAGE_SIZE: usize = 50;
 const MAX_PAGE_SIZE: usize = 100;
 const MAX_EVENT_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_TAPE_EVENTS: u64 = 100_000;
+const MAX_TAPE_MANIFEST_BYTES: u64 = 64 * 1024;
 const REQUIRED_PACKAGE_FILES: [&str; 6] = [
     "skilltape.yaml",
     "workflow.yaml",
@@ -72,7 +73,9 @@ pub struct WorkspaceSummary {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct TapeSummary {
+    // Address the stored directory without rewriting the Tape's recorded identity.
     pub id: String,
+    pub recorded_id: String,
     pub schema: String,
     pub started_at_ms: u64,
     pub finished_at_ms: Option<u64>,
@@ -214,7 +217,7 @@ impl ConsoleReadModel {
         let tape_path = self.storage_child("tapes")?.join(tape_id);
         self.ensure_safe_path(&tape_path)?;
         reject_symlink_tree(&tape_path)?;
-        if fs::metadata(tape_path.join("manifest.json"))?.len() > 64 * 1024 {
+        if fs::metadata(tape_path.join("manifest.json"))?.len() > MAX_TAPE_MANIFEST_BYTES {
             return Err(ReadModelError::InvalidDocument);
         }
         let store = TapeStore::open(&tape_path).map_err(map_tape_error)?;
@@ -472,10 +475,14 @@ impl ConsoleReadModel {
         let path = self.storage_child("tapes")?.join(id);
         self.ensure_safe_path(&path)?;
         reject_symlink_tree(&path)?;
+        if fs::metadata(path.join("manifest.json"))?.len() > MAX_TAPE_MANIFEST_BYTES {
+            return Err(ReadModelError::InvalidDocument);
+        }
         let store = TapeStore::open(path).map_err(map_tape_error)?;
         let manifest = store.read_manifest().map_err(map_tape_error)?;
         Ok(TapeSummary {
-            id: manifest.id.clone(),
+            id: id.to_owned(),
+            recorded_id: manifest.id.clone(),
             schema: manifest.schema,
             started_at_ms: manifest.started_at_ms,
             finished_at_ms: manifest.finished_at_ms,
