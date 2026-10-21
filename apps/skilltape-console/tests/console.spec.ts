@@ -326,6 +326,18 @@ test('receipt view shows bounded evidence and policy decisions', async ({ page }
   await expect(page.locator('.result-list').getByText('File Exists', { exact: true })).toBeVisible()
 })
 
+test('receipt step table can be focused and scrolled with the keyboard on mobile', async ({ page }) => {
+  await mockApi(page)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/#receipt?run=run-a')
+  const region = page.getByRole('region', { name: 'Step outcomes', exact: true })
+  await region.focus()
+  await expect(region).toBeFocused()
+  expect(await region.evaluate(element => element.scrollWidth > element.clientWidth)).toBe(true)
+  await region.press('ArrowRight')
+  await expect.poll(() => region.evaluate(element => element.scrollLeft)).toBeGreaterThan(0)
+})
+
 test('receipt review filters failed output checks and keeps the complete outcome visible', async ({ page }, testInfo) => {
   await mockApi(page, 'normal', {
     ...receipt, status: 'assertion_failed', assertions: [
