@@ -103,6 +103,9 @@ enum Command {
         input: Option<PathBuf>,
         #[arg(long)]
         receipt: Option<PathBuf>,
+        /// Optional JSON run context; use RECEIPT.json.context for Console discovery.
+        #[arg(long)]
+        context: Option<PathBuf>,
         #[arg(long, conflicts_with = "receipt")]
         delivery_dir: Option<PathBuf>,
         /// Require a regular file relative to the output root; repeat up to 64 times.
@@ -200,6 +203,7 @@ pub fn run() -> ExitCode {
             skill_path,
             input,
             receipt,
+            context,
             delivery_dir,
             expected_files,
             expected_hashes,
@@ -208,6 +212,7 @@ pub fn run() -> ExitCode {
             skill_path,
             input,
             receipt,
+            context,
             delivery_dir,
             expected_files,
             expected_hashes,

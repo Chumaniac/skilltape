@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 use std::fs;
-use std::io::{self, BufRead, BufReader};
+use std::io::{self, BufRead, BufReader, Read};
 use std::path::{Component, Path, PathBuf};
 
 use serde::Serialize;
@@ -295,6 +295,54 @@ impl ConsoleReadModel {
             .storage_child("receipts")?
             .join(format!("{receipt_id}.json"));
         self.read_document(&path, receipt_id, "receipt")
+    }
+
+    pub fn receipt_context(&self, id: &str) -> Result<Value, ReadModelError> {
+        validate_id(id)?;
+        let root = self.storage_child("receipts")?;
+        let receipt =
+            self.bounded_context_file(&root.join(format!("{id}.json")), 8 * 1024 * 1024)?;
+        let review = |status: &str, context: Option<skilltape_verify::RunContext>| {
+            serde_json::json!({
+                "schema": "skilltape.dev/context-review/v1", "id": id, "status": status,
+                "context": context, "provenance": "not-authenticated"
+            })
+        };
+        let bytes = match self.bounded_context_file(&root.join(format!("{id}.json.context")), 4096)
+        {
+            Ok(bytes) => bytes,
+            Err(ReadModelError::NotFound) => return Ok(review("unrecorded", None)),
+            Err(ReadModelError::InvalidDocument) => return Ok(review("invalid", None)),
+            Err(error) => return Err(error),
+        };
+        match serde_json::from_slice::<skilltape_verify::RunContext>(&bytes) {
+            Ok(context) if context.binds_receipt(&receipt) => Ok(review("recorded", Some(context))),
+            _ => Ok(review("invalid", None)),
+        }
+    }
+
+    fn bounded_context_file(&self, path: &Path, limit: u64) -> Result<Vec<u8>, ReadModelError> {
+        self.ensure_safe_path(path)?;
+        let mut options = fs::OpenOptions::new();
+        options.read(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.custom_flags(libc::O_NOFOLLOW);
+        }
+        let file = options.open(path).map_err(|error| match error.kind() {
+            io::ErrorKind::NotFound => ReadModelError::NotFound,
+            _ => ReadModelError::UnsafePath,
+        })?;
+        if !file.metadata()?.is_file() || file.metadata()?.len() > limit {
+            return Err(ReadModelError::InvalidDocument);
+        }
+        let mut bytes = Vec::new();
+        file.take(limit + 1).read_to_end(&mut bytes)?;
+        if bytes.len() as u64 > limit {
+            return Err(ReadModelError::InvalidDocument);
+        }
+        Ok(bytes)
     }
 
     pub fn run_events(

@@ -13,8 +13,8 @@ use skilltape_runner::{
     RunStatus, RunSummary, StepStatus,
 };
 use skilltape_verify::{
-    validate_assertions, verify_run_with_cancel, Assertion, Receipt, ReceiptStatus, VerifyError,
-    VerifyRequest,
+    validate_assertions, verify_run_with_context, Assertion, Receipt, ReceiptStatus, RunContext,
+    VerifyError, VerifyRequest,
 };
 use tempfile::{Builder, TempDir};
 use thiserror::Error;
@@ -43,6 +43,7 @@ pub(crate) struct VerifyConfig {
     pub skill_path: PathBuf,
     pub input: Option<PathBuf>,
     pub receipt: Option<PathBuf>,
+    pub context: Option<PathBuf>,
     pub delivery_dir: Option<PathBuf>,
     pub expected_files: Vec<String>,
     pub expected_hashes: Vec<String>,
@@ -154,8 +155,22 @@ pub(crate) fn replay(config: ReplayConfig) -> ExitCode {
 pub(crate) fn verify(config: VerifyConfig) -> ExitCode {
     let json = config.json;
     let receipt_path = config.receipt.clone();
+    let context_path = config.context.clone();
+    for path in [receipt_path.as_ref(), context_path.as_ref()]
+        .into_iter()
+        .flatten()
+    {
+        if let Err(error) = preflight_receipt(path) {
+            eprintln!("{error}");
+            return error_exit_code(&error);
+        }
+    }
+    if receipt_path.is_some() && receipt_path == context_path {
+        eprintln!("Receipt and context must use different files.");
+        return ExitCode::from(2);
+    }
     match execute_verify(config) {
-        Ok(receipt) => {
+        Ok((receipt, context)) => {
             let document = match serde_json::to_string(&receipt) {
                 Ok(document) => document,
                 Err(error) => {
@@ -165,6 +180,19 @@ pub(crate) fn verify(config: VerifyConfig) -> ExitCode {
             };
             if let Some(path) = receipt_path {
                 if let Err(error) = write_receipt(&path, &document) {
+                    eprintln!("{error}");
+                    return error_exit_code(&error);
+                }
+            }
+            if let Some(path) = context_path {
+                let output = match serde_json::to_string(&context) {
+                    Ok(v) => v,
+                    Err(error) => {
+                        eprintln!("{error}");
+                        return ExitCode::from(4);
+                    }
+                };
+                if let Err(error) = write_receipt(&path, &output) {
                     eprintln!("{error}");
                     return error_exit_code(&error);
                 }
@@ -204,7 +232,7 @@ fn execute_replay(config: ReplayConfig) -> Result<RunSummary, RunCommandError> {
     ))
 }
 
-fn execute_verify(config: VerifyConfig) -> Result<Receipt, RunCommandError> {
+fn execute_verify(config: VerifyConfig) -> Result<(Receipt, RunContext), RunCommandError> {
     if config.expected_files.len() + config.expected_hashes.len() > 64
         || config.expected_files.iter().any(|path| path.len() > 1024)
     {
@@ -259,9 +287,9 @@ fn execute_verify(config: VerifyConfig) -> Result<Receipt, RunCommandError> {
         .build()
         .map_err(|error| RunCommandError::Task(error.to_string()))?;
     let cancel = CancellationToken::new();
-    let receipt = runtime
+    let (receipt, context) = runtime
         .block_on(crate::interrupt::cancellable(
-            verify_run_with_cancel(
+            verify_run_with_context(
                 VerifyRequest {
                     package,
                     input_root: roots.input,
@@ -279,7 +307,7 @@ fn execute_verify(config: VerifyConfig) -> Result<Receipt, RunCommandError> {
             delivery.finish(&receipt)?;
         }
     }
-    Ok(receipt)
+    Ok((receipt, context))
 }
 
 async fn run_package(
@@ -504,6 +532,22 @@ fn runner_error_code(error: &RunError) -> u8 {
         RunError::Workspace { .. }
         | RunError::Materialization { .. }
         | RunError::EventChannelClosed => RUNTIME_ERROR_EXIT_CODE,
+    }
+}
+
+fn preflight_receipt(path: &Path) -> Result<(), RunCommandError> {
+    let path = absolute_path(path).map_err(|_| RunCommandError::UnsafeReceipt(path.to_owned()))?;
+    if path
+        .components()
+        .any(|c| matches!(c, std::path::Component::ParentDir))
+    {
+        return Err(RunCommandError::UnsafeReceipt(path));
+    }
+    ensure_safe_ancestors(&path)?;
+    match fs::symlink_metadata(&path) {
+        Ok(_) => Err(RunCommandError::ReceiptExists(path)),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(source) => Err(RunCommandError::ReceiptIo { path, source }),
     }
 }
 

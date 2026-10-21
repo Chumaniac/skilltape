@@ -603,3 +603,48 @@ fn verify_expected_hashes_share_the_requirement_budget() {
         .code(2)
         .stderr(predicates::str::contains("64-file"));
 }
+
+#[test]
+fn optional_context_binds_receipt_without_raw_inputs_or_overwrite() {
+    use sha2::{Digest, Sha256};
+    let (temp, skill, input) = file_package();
+    let receipt = temp.path().join("receipt.json");
+    let context = temp.path().join("receipt.json.context");
+    Command::cargo_bin("skilltape")
+        .expect("binary")
+        .arg("verify")
+        .arg(&skill)
+        .arg("--input")
+        .arg(&input)
+        .arg("--receipt")
+        .arg(&receipt)
+        .arg("--context")
+        .arg(&context)
+        .arg("--expect-file")
+        .arg("result.txt")
+        .assert()
+        .success();
+    let original = fs::read(&receipt).unwrap();
+    let metadata: skilltape_verify::RunContext =
+        serde_json::from_slice(&fs::read(&context).unwrap()).unwrap();
+    assert!(metadata.binds_receipt(&original));
+    assert_eq!(
+        metadata.input_set_sha256,
+        skilltape_runner::digest_input_tree(&input).unwrap()
+    );
+    assert!(!fs::read_to_string(&context)
+        .unwrap()
+        .contains("secret-cli-value"));
+    let digest = Sha256::digest(&original);
+    Command::cargo_bin("skilltape")
+        .unwrap()
+        .args(["verify", "missing-package", "--context"])
+        .arg(&context)
+        .assert()
+        .code(2)
+        .stderr(predicates::str::contains("already exists"));
+    assert_eq!(Sha256::digest(fs::read(&receipt).unwrap()), digest);
+    let mut tampered = metadata;
+    tampered.receipt_sha256 = "0".repeat(64);
+    assert!(!tampered.binds_receipt(&original));
+}

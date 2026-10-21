@@ -120,6 +120,10 @@ pub(crate) fn run_event_document(event: &RunEvent) -> Value {
     })
 }
 
+pub(crate) fn validate_receipt_value(value: &Value) -> Result<(), ReceiptError> {
+    validate_schema(include_str!("../../../schemas/receipt/v1.json"), value)
+}
+
 pub(crate) fn validate_run_event(event: &RunEvent) -> Result<(), ReceiptError> {
     validate_schema(
         include_str!("../../../schemas/run/v1.json"),

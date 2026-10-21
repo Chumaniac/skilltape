@@ -1,3 +1,4 @@
+import { validContextReview } from './run-context'
 import type {
   Collection,
   DeliveryReview,
@@ -162,4 +163,10 @@ export function formatNumber(value: number): string {
 
 export function apiBaseLabel(): string {
   return API_BASE
+}
+
+export async function getRunContext(receiptId: string, signal?: AbortSignal) {
+  const value = await get<unknown>('/receipts/' + encodeURIComponent(receiptId) + '/context', signal)
+  if (!validContextReview(value, receiptId)) throw new ApiError('Run context is invalid or unsupported.', 502, 'invalid_context')
+  return value
 }
