@@ -60,17 +60,14 @@ export function PermissionReviewPage({ skillId = '' }: PermissionReviewProps) {
       <header className="page-heading">
         <div>
           <p className="eyebrow">Permission review</p>
-          <h1>Know what the Skill is allowed to touch</h1>
-          <p className="page-description">
-            Permissions are explicit, inspectable, and separate from the prose in SKILL.md.
-          </p>
+          <h1>Skill permissions</h1>
         </div>
         <StatusBadge tone={risk.tone}>{risk.label}</StatusBadge>
       </header>
 
       <article className="panel" aria-labelledby="policy-preflight-title">
         <h2 id="policy-preflight-title">Execution policy preflight</h2>
-        <p>Checks declared steps with the replay policy. No steps have run and no Receipt is created. Input data, sandbox availability and runtime results remain unverified.</p>
+        <p>Checks declared policy without running steps or creating a Receipt. Inputs, sandbox availability and runtime remain unverified.</p>
         {skill.policy_plan ? <>
           <StatusBadge tone={skill.policy_plan.allowed ? 'good' : 'danger'}>{skill.policy_plan.allowed ? 'Allowed by declared policy' : 'Blocked — review package'}</StatusBadge>
           {skill.policy_plan.package_error_codes.length > 0 && <p>Package findings: {skill.policy_plan.package_error_codes.join(', ')}</p>}
@@ -90,7 +87,7 @@ export function PermissionReviewPage({ skillId = '' }: PermissionReviewProps) {
                 <button className="button button-secondary" type="button" disabled={checkOffset + 32 >= matchingChecks.length} onClick={() => setCheckPage(value => value + 1)}>Next checks</button>
               </nav>}
             </>}
-            <p>Filtering changes this view only. Use <code>skilltape preflight SKILL --json</code> for the full bounded plan.</p>
+            <p>Full plan: <code>skilltape preflight SKILL --json</code></p>
           </details>
         </> : <p>Preflight is unavailable for this package. Use the current CLI and keep the plan within 1,000 steps and checks.</p>}
       </article>

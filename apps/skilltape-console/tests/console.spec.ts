@@ -252,12 +252,12 @@ test('timeline pages through tapes and events without accumulating earlier pages
 test('navigation opens compile and permission review pages', async ({ page }) => {
   await mockApi(page)
   await page.goto('/#compile?skill=demo')
-  await expect(page.getByRole('heading', { name: 'Inspect what the compiler produced' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Compiled package' })).toBeVisible()
   await expect(page.getByText('Lint clean')).toBeVisible()
   await expect(page.getByText('format', { exact: true })).toBeVisible()
 
   await page.getByRole('link', { name: 'Permissions' }).click()
-  await expect(page.getByRole('heading', { name: 'Know what the Skill is allowed to touch' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Skill permissions' })).toBeVisible()
   await expect(page.getByText('Environment variables are not available.')).toBeVisible()
   await expect(page.getByText('Scoped access', { exact: true })).toBeVisible()
 })
@@ -282,7 +282,7 @@ test('review navigation asks for saved evidence and keeps the selected Skill', a
   await expect(page.getByText('Lint clean')).toBeVisible()
   await page.getByRole('link', { name: 'Permissions', exact: true }).click()
   await expect(page.getByLabel('Saved Skill ID', { exact: true })).toHaveValue('release #1')
-  await expect(page.getByRole('heading', { name: 'Know what the Skill is allowed to touch' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Skill permissions' })).toBeVisible()
   await page.reload()
   await expect(page.getByLabel('Saved Skill ID', { exact: true })).toHaveValue('release #1')
   expect(requests).toHaveLength(3)
@@ -311,7 +311,7 @@ test('invalid Skill identifiers stay local and a missing package can be correcte
   await expect(page.getByRole('alert')).toContainText('Saved Skill not found.')
   await page.getByLabel('Saved Skill ID', { exact: true }).fill('demo')
   await page.getByRole('button', { name: 'Open Skill', exact: true }).click()
-  await expect(page.getByRole('heading', { name: 'Know what the Skill is allowed to touch' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Skill permissions' })).toBeVisible()
   expect(requested).toHaveLength(2)
 })
 
