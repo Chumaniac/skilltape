@@ -129,7 +129,7 @@ export function ReceiptViewPage({ receiptId = '' }: ReceiptViewProps) {
             <span className="panel-note">Output digests and byte counts</span>
           </div>
           {receipt.steps.length > 0 ? (
-            <div className="table-wrap">
+            <div className="table-wrap" role="region" aria-labelledby="receipt-steps-heading" tabIndex={0}>
               <table>
                 <thead>
                   <tr>

@@ -2,6 +2,8 @@
 
 ## Unreleased source - 2026-10-21
 
+- Let keyboard users focus and horizontally scroll the Receipt step table on
+  narrow screens, with an accessible name from its existing heading.
 - Open real Capture timelines when their recorded identity differs from the
   saved directory name. API links use the storage ID and retain `recorded_id`;
   saved Tape manifests and events are unchanged.
