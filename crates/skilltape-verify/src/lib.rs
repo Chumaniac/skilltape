@@ -15,6 +15,8 @@ use thiserror::Error;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
+mod context;
+pub use context::RunContext;
 mod assertions;
 mod policy_plan;
 mod receipt;
@@ -70,6 +72,17 @@ pub async fn verify_run_with_cancel(
     request: VerifyRequest,
     cancel: CancellationToken,
 ) -> Result<Receipt, VerifyError> {
+    verify_run_with_context(request, cancel)
+        .await
+        .map(|(receipt, _)| receipt)
+}
+
+/// Reuse the existing input digest; no additional input traversal or raw metadata.
+pub async fn verify_run_with_context(
+    request: VerifyRequest,
+    cancel: CancellationToken,
+) -> Result<(Receipt, RunContext), VerifyError> {
+    let context_limits = request.limits.clone();
     validate_assertions(&request.assertions)?;
     ensure_directory(&request.input_root).map_err(|_| VerifyError::InvalidInputRoot)?;
     preflight_input_capacity(&request.input_root)?;
@@ -124,7 +137,8 @@ pub async fn verify_run_with_cancel(
     receipt::validate_receipt(&receipt).map_err(|error| VerifyError::ReceiptSchema {
         message: error.to_string(),
     })?;
-    Ok(receipt)
+    let context = RunContext::new(&receipt, input_hash, &context_limits)?;
+    Ok((receipt, context))
 }
 
 fn ensure_directory(path: &Path) -> io::Result<()> {

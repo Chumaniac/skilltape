@@ -132,6 +132,7 @@ pub fn router_with_static(model: ConsoleReadModel, static_root: Option<PathBuf>)
         .route("/api/v1/skills/{id}/diff", get(skill_diff))
         .route("/api/v1/runs/{id}", get(run_document))
         .route("/api/v1/receipts/{id}", get(receipt_document))
+        .route("/api/v1/receipts/{id}/context", get(receipt_context))
         .route("/api/v1/runs/{id}/events", get(run_events))
         .route("/", get(index))
         .route("/{*path}", get(static_asset))
@@ -247,6 +248,15 @@ async fn receipt_document(
     Path(receipt_id): Path<String>,
 ) -> Result<Json<StoredDocument>, ApiError> {
     Ok(Json(state.model.receipt(&receipt_id)?))
+}
+
+async fn receipt_context(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let permit = inspection_permit(&state)?;
+    let (review, _permit) = inspect(permit, move || state.model.receipt_context(&id)).await?;
+    Ok(Json(review))
 }
 
 async fn run_events(

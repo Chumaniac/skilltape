@@ -151,6 +151,10 @@ async function mockApi(page: import('@playwright/test').Page, mode: 'normal' | '
       await route.fulfill({ contentType: 'application/json', body: JSON.stringify(skill) })
       return
     }
+    if (url.pathname.endsWith('/context')) {
+      await route.fulfill({json:{schema:'skilltape.dev/context-review/v1',id:url.pathname.split('/').at(-2),status:'unrecorded',context:null,provenance:'not-authenticated'}})
+      return
+    }
     if (url.pathname.includes('/receipts/')) {
       if (!url.pathname.endsWith('/receipts/run-a')) {
         await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: { message: 'Saved Receipt not found.' } }) })

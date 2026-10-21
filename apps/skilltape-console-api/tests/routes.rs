@@ -377,3 +377,37 @@ async fn static_console_assets_are_read_only_and_path_bounded() {
         .expect("escape response");
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
+
+#[tokio::test]
+async fn receipt_context_is_optional_bound_bounded_and_rejects_untrusted_fields() {
+    use sha2::{Digest, Sha256};
+    let (_temp, root) = fixture();
+    let receipt = serde_json::to_vec(&json!({"schema":"skilltape.dev/receipt/v1", "run_id":"a".repeat(64),
+        "skill_hash":"b".repeat(64), "status":"succeeded", "steps":[], "assertions":[], "policy_decisions":[]})).unwrap();
+    let folder = root.join(".skilltape/receipts");
+    fs::write(folder.join("run-a.json"), &receipt).unwrap();
+    let uri = "/api/v1/receipts/run-a/context";
+    assert_eq!(request(&root, uri, &[]).await.2["status"], "unrecorded");
+    let hash: String = Sha256::digest(&receipt)
+        .iter()
+        .map(|v| format!("{v:02x}"))
+        .collect();
+    let mut context = json!({"schema":"skilltape.dev/run-context/v1", "receipt_sha256":hash,
+        "run_id":"a".repeat(64), "skill_hash":"b".repeat(64), "input_set_sha256":"c".repeat(64),
+        "input_observation":"bounded-before-run", "executor":"skilltape-runner/sequential-local-v1", "executor_version":"0.1.0",
+        "os":"macos", "arch":"aarch64", "max_processes":1, "step_timeout_ms":1000, "max_output_bytes":65536});
+    let sidecar = folder.join("run-a.json.context");
+    fs::write(&sidecar, serde_json::to_vec(&context).unwrap()).unwrap();
+    assert_eq!(request(&root, uri, &[]).await.2["status"], "recorded");
+    context["receipt_sha256"] = json!("0".repeat(64));
+    fs::write(&sidecar, serde_json::to_vec(&context).unwrap()).unwrap();
+    assert_eq!(request(&root, uri, &[]).await.2["status"], "invalid");
+    context["private_raw_input"] = json!("SYNTHETIC_MUST_NOT_BE_RETURNED");
+    fs::write(&sidecar, serde_json::to_vec(&context).unwrap()).unwrap();
+    let (_, body, document) = request(&root, uri, &[]).await;
+    assert_eq!(document["context"], Value::Null);
+    assert!(!body.contains("SYNTHETIC_MUST_NOT_BE_RETURNED"));
+    fs::write(&sidecar, vec![b'a'; 4097]).unwrap();
+    assert_eq!(request(&root, uri, &[]).await.2["status"], "invalid");
+    assert_eq!(fs::read(folder.join("run-a.json")).unwrap(), receipt);
+}

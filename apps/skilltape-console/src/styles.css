@@ -1260,3 +1260,5 @@ tbody code {
   .delivery-workbench .page-heading { flex-wrap: wrap; }
   .delivery-workbench .panel-heading { flex-wrap: wrap; gap: 12px; }
 }
+
+.context-digest { overflow-wrap: anywhere; word-break: break-word; }

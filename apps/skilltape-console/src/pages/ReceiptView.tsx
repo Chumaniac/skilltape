@@ -1,3 +1,5 @@
+import { RunConditions } from './RunConditions'
+
 import { useEffect, useState } from 'react'
 
 import { formatNumber, getReceipt, isSavedEvidenceId } from '../api'
@@ -119,6 +121,7 @@ export function ReceiptViewPage({ receiptId = '' }: ReceiptViewProps) {
         </dl>
       </div>
 
+      <RunConditions receiptId={receiptId} />
       <div className="review-grid">
         <article className="panel panel-span-2">
           <div className="panel-heading">

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased - 2026-10-21
+
+- Record optional run-condition sidecars from the existing bounded input digest,
+  binding receipt bytes, package, executor/platform and configured limits.
+- Review and compare saved conditions in Console; old and invalid metadata stay
+  distinct. Preserve Receipt v1 and existing delivery layouts and output review.
+- Refuse existing receipt/context destinations before execution, preserving
+  successful evidence and avoiding a repeat run for a known output conflict.
+
 ## Unreleased source - 2026-10-21
 
 - Let keyboard users focus and horizontally scroll the Receipt step table on

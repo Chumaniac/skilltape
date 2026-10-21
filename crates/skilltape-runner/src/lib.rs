@@ -29,6 +29,8 @@ pub use publication::publish_directory_noreplace;
 
 use workspace::{copy_path, make_directory, move_path, ReplayWorkspace, WorkspaceError};
 
+pub const RUNNER_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 const RUN_STEP_ID: &str = "__run__";
 
 /// The inputs and limits for one isolated replay.

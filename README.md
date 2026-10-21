@@ -148,3 +148,19 @@ unpublished. It shares the 64-requirement budget with `--expect-file` and retain
 the existing sandbox. See the [output digest guide](docs/guides/output-digests.md)
 for an example, limits and failure cases. This feature is not in the published
 v0.2.3 archives.
+
+### Recorded run conditions
+
+Add `--context .skilltape/receipts/check.json.context` when saving a new
+verification with `--receipt .skilltape/receipts/check.json`. Open `check` in
+Console to review the input snapshot, Skill digest, executor/platform and limits,
+then compare with another saved receipt ID. A context can also be written beside
+a new delivery with an explicit path; the original three-member delivery format
+remains unchanged.
+
+Context v1 is an optional JSON sidecar, bound to the exact receipt bytes. It
+reuses the existing bounded pre-run input digest, contains no raw inputs or
+environment values, and cannot authenticate execution or freeze mutable inputs.
+Old receipts show **Not recorded**; invalid or mismatched contexts are withheld.
+The viewer reads at most 4 KiB of context and 8 MiB of receipt, with two bounded
+inspections at a time. Existing output-file comparison remains available.
