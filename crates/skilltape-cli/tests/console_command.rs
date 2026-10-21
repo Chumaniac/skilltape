@@ -35,6 +35,36 @@ fn console_rejects_missing_workspace_without_starting_a_child() {
     assert!(String::from_utf8_lossy(&output.stderr).contains("workspace is not a directory"));
 }
 
+#[cfg(unix)]
+#[test]
+fn console_explains_when_the_os_denies_executing_the_api() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = TempDir::new().expect("temporary directory");
+    let workspace = temp.path().join("workspace");
+    fs::create_dir(&workspace).expect("workspace");
+    let dist = temp.path().join("dist");
+    fs::create_dir(&dist).expect("dist");
+    fs::write(dist.join("index.html"), "<main>Console</main>").expect("index");
+    let api = temp.path().join("api.sh");
+    fs::write(&api, "#!/bin/sh\nexit 0\n").expect("API fixture");
+    fs::set_permissions(&api, fs::Permissions::from_mode(0o644)).expect("permissions");
+
+    let output = skilltape()
+        .args(["console", "--workspace"])
+        .arg(&workspace)
+        .args(["--port", "0"])
+        .env("SKILLTAPE_CONSOLE_API_BIN", &api)
+        .env("SKILLTAPE_CONSOLE_UI_DIST", &dist)
+        .output()
+        .expect("run console");
+
+    assert_eq!(output.status.code(), Some(2));
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(error.contains("console API binary is not executable"));
+    assert!(!error.contains("failed to start console API"));
+}
+
 #[test]
 fn console_rejects_an_occupied_localhost_port_before_spawning() {
     let temp = TempDir::new().expect("temporary directory");

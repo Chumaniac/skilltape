@@ -237,7 +237,14 @@ fn spawn_api(
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .spawn()
-        .map_err(ConsoleError::Spawn)
+        .map_err(|error| {
+            // The OS decides executability at launch, including ACLs and mount policy.
+            if error.kind() == std::io::ErrorKind::PermissionDenied {
+                ConsoleError::InvalidApiBinary(binary.to_owned())
+            } else {
+                ConsoleError::Spawn(error)
+            }
+        })
 }
 
 fn wait_until_ready(child: &mut Child) -> Result<String, ConsoleError> {

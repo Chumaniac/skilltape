@@ -20,6 +20,7 @@ export interface WorkspaceSummary {
 
 export interface TapeSummary {
   id: string
+  recorded_id?: string
   schema: string
   started_at_ms: number
   finished_at_ms: number | null
