@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 
-import { apiBaseLabel } from './api'
+import { apiBaseLabel, isSavedEvidenceId } from './api'
 import { CompileReviewPage } from './pages/CompileReview'
 import { ExportTargetsPage } from './pages/ExportTargets'
 import { PermissionReviewPage } from './pages/PermissionReview'
@@ -51,6 +51,7 @@ function readRoute(): RouteState {
 
 function App() {
   const [route, setRoute] = useState<RouteState>(readRoute)
+  const skillQuery = route.skillId && isSavedEvidenceId(route.skillId) ? '?skill=' + encodeURIComponent(route.skillId) : ''
 
   useEffect(() => {
     const handleHashChange = () => setRoute(readRoute())
@@ -77,9 +78,9 @@ function App() {
           <p className="nav-label">Inspect</p>
           <NavLink href="#deliveries" active={route.page === 'deliveries'} label="Delivery workbench" icon="▤" />
           <NavLink href="#timeline" active={route.page === 'timeline'} label="Capture timeline" icon="◌" />
-          <NavLink href="#compile?skill=demo" active={route.page === 'compile'} label="Compile review" icon="⌁" />
-          <NavLink href="#permissions?skill=demo" active={route.page === 'permissions'} label="Permissions" icon="⊙" />
-          <NavLink href="#receipt?run=run-a" active={route.page === 'receipt'} label="Verify Receipt" icon="✓" />
+          <NavLink href={'#compile' + skillQuery} active={route.page === 'compile'} label="Compile review" icon="⌁" />
+          <NavLink href={'#permissions' + skillQuery} active={route.page === 'permissions'} label="Permissions" icon="⊙" />
+          <NavLink href="#receipt" active={route.page === 'receipt'} label="Verify Receipt" icon="✓" />
           <p className="nav-label" style={{ marginTop: 16 }}>Export</p>
           <NavLink href="#export" active={route.page === 'export'} label="Export targets" icon="⧉" />
         </nav>
@@ -111,9 +112,9 @@ function App() {
         <main id="main-content" className="main-content">
           {route.page === 'deliveries' ? <DeliveriesPage deliveryId={route.deliveryId} offset={route.deliveryOffset} /> : null}
           {route.page === 'timeline' ? <TimelinePage tapeId={route.tapeId} tapeOffset={route.tapeOffset} eventOffset={route.eventOffset} /> : null}
-          {route.page === 'compile' ? <CompileReviewPage skillId={route.skillId} /> : null}
-          {route.page === 'permissions' ? <PermissionReviewPage skillId={route.skillId} /> : null}
-          {route.page === 'receipt' ? <ReceiptViewPage key={route.receiptId ?? 'run-a'} receiptId={route.receiptId} /> : null}
+          {route.page === 'compile' ? <CompileReviewPage key={route.skillId ?? ''} skillId={route.skillId} /> : null}
+          {route.page === 'permissions' ? <PermissionReviewPage key={route.skillId ?? ''} skillId={route.skillId} /> : null}
+          {route.page === 'receipt' ? <ReceiptViewPage key={route.receiptId ?? ''} receiptId={route.receiptId} /> : null}
           {route.page === 'export' ? <ExportTargetsPage /> : null}
         </main>
 

@@ -1,25 +1,26 @@
 import { useEffect, useState } from 'react'
 
-import { formatNumber, getSkillDiff } from '../api'
+import { formatNumber, getSkillDiff, isSavedEvidenceId } from '../api'
 import type { SkillDiff } from '../types'
-import { CodeBlock, EmptyState, JsonDisclosure, Metric, PageError, PageLoading, StatusBadge } from '../ui'
+import { CodeBlock, EmptyState, JsonDisclosure, Metric, PageError, PageLoading, SkillPicker, StatusBadge } from '../ui'
 
 interface CompileReviewProps {
   skillId?: string
 }
 
-export function CompileReviewPage({ skillId = 'demo' }: CompileReviewProps) {
+export function CompileReviewPage({ skillId = '' }: CompileReviewProps) {
   const [skill, setSkill] = useState<SkillDiff | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [reload, setReload] = useState(0)
 
   useEffect(() => {
+    if (!isSavedEvidenceId(skillId)) return
     const controller = new AbortController()
     setLoading(true)
     setError('')
     getSkillDiff(skillId, controller.signal)
-      .then(setSkill)
+      .then(value => { if (!controller.signal.aborted) setSkill(value) })
       .catch((reason: unknown) => {
         if (!controller.signal.aborted) {
           setError(reason instanceof Error ? reason.message : 'Could not read the Skill package.')
@@ -31,21 +32,25 @@ export function CompileReviewPage({ skillId = 'demo' }: CompileReviewProps) {
     return () => controller.abort()
   }, [reload, skillId])
 
-  if (loading) return <PageLoading label="Loading compile review…" />
-  if (error) return <PageError message={error} onRetry={() => setReload((value) => value + 1)} />
+  const picker = <SkillPicker key={skillId} skillId={skillId} onOpen={id => {
+    if (id === skillId) setReload(value => value + 1)
+    else window.location.hash = 'compile?skill=' + encodeURIComponent(id)
+  }} />
+  if (isSavedEvidenceId(skillId) && loading) return <>{picker}<PageLoading label="Loading compile review…" /></>
+  if (error) return <>{picker}<PageError message={error} onRetry={() => setReload((value) => value + 1)} /></>
   if (!skill) {
     return (
-      <EmptyState
+      <>{picker}<EmptyState
         title="No Skill selected"
-        message="Choose a compiled Skill package to inspect its provenance and lint result."
-      />
+        message="Open a saved package to review its workflow, files and lint results."
+      /></>
     )
   }
 
   const stepCount = skill.workflow.steps?.length ?? 0
   const lintTone = skill.lint.errors.length === 0 ? 'good' : 'danger'
   return (
-    <section className="page-section">
+    <>{picker}<section className="page-section">
       <header className="page-heading">
         <div>
           <p className="eyebrow">Compile review</p>
@@ -154,6 +159,6 @@ export function CompileReviewPage({ skillId = 'demo' }: CompileReviewProps) {
           <JsonDisclosure label="View manifest JSON" value={skill.manifest} />
         </article>
       </div>
-    </section>
+    </section></>
   )
 }

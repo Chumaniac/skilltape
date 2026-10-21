@@ -61,6 +61,10 @@ export function getTapeEvents(tapeId: string, signal?: AbortSignal, offset = 0) 
   return get<TapeEvents>('/tapes/' + encodeURIComponent(tapeId) + '/events?limit=100&offset=' + offset, signal)
 }
 
+export function isSavedEvidenceId(id: string): boolean {
+  return id.length > 0 && id.length <= 255 && id !== '.' && id !== '..' && !/[/\\:\u0000-\u001f\u007f]/.test(id)
+}
+
 export async function getSkillDiff(skillId: string, signal?: AbortSignal) {
   const skill = await get<SkillDiff>('/skills/' + encodeURIComponent(skillId) + '/diff', signal)
   const plan = skill.policy_plan

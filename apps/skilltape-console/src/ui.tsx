@@ -1,4 +1,31 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
+import { isSavedEvidenceId } from './api'
+
+export function SkillPicker({ skillId, onOpen }: { skillId: string; onOpen: (id: string) => void }) {
+  const [error, setError] = useState(skillId && !isSavedEvidenceId(skillId) ? 'Use a package directory name, not a path.' : '')
+  return (
+    <form className="panel receipt-picker" onSubmit={event => {
+      event.preventDefault()
+      const id = String(new FormData(event.currentTarget).get('skill-id') ?? '').trim()
+      if (!isSavedEvidenceId(id)) {
+        setError('Use a package directory name, not a path.')
+        return
+      }
+      setError('')
+      onOpen(id)
+    }}>
+      <label htmlFor="skill-id">Saved Skill ID</label>
+      <div className="receipt-picker-controls">
+        <input id="skill-id" name="skill-id" defaultValue={skillId} maxLength={255} required
+          autoComplete="off" spellCheck={false} onInput={() => setError('')}
+          aria-describedby="skill-picker-help skill-picker-error" aria-invalid={error ? true : undefined} />
+        <button className="button" type="submit">Open Skill</button>
+      </div>
+      <p id="skill-picker-help" className="muted">Enter a directory name from skills/. Opening a package reads its saved files; it does not run the Skill.</p>
+      <p id="skill-picker-error" role="alert">{error}</p>
+    </form>
+  )
+}
 
 export function PageLoading({ label = 'Loading…' }: { label?: string }) {
   return (

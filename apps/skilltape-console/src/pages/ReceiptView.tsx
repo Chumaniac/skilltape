@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-import { formatNumber, getReceipt } from '../api'
+import { formatNumber, getReceipt, isSavedEvidenceId } from '../api'
 import type { Receipt } from '../types'
 import { CodeBlock, EmptyState, JsonDisclosure, PageError, PageLoading, StatusBadge, titleCase } from '../ui'
 
@@ -14,7 +14,7 @@ function ReceiptPicker({ receiptId, onOpen }: { receiptId: string; onOpen: (id: 
     <form className="panel receipt-picker" onSubmit={(event) => {
       event.preventDefault()
       const id = String(new FormData(event.currentTarget).get('receipt-id') ?? '').trim().replace(/\.json$/i, '')
-      if (!id || id === '.' || id === '..' || /[/\\:\u0000-\u001f\u007f]/.test(id)) {
+      if (!isSavedEvidenceId(id)) {
         setError('Use a saved filename, not a path.')
         return
       }
@@ -34,7 +34,7 @@ function ReceiptPicker({ receiptId, onOpen }: { receiptId: string; onOpen: (id: 
   )
 }
 
-export function ReceiptViewPage({ receiptId = 'run-a' }: ReceiptViewProps) {
+export function ReceiptViewPage({ receiptId = '' }: ReceiptViewProps) {
   const [receipt, setReceipt] = useState<Receipt | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
@@ -42,6 +42,12 @@ export function ReceiptViewPage({ receiptId = 'run-a' }: ReceiptViewProps) {
   const [failedOnly, setFailedOnly] = useState(false)
 
   useEffect(() => {
+    if (!receiptId) { setLoading(false); return }
+    if (!isSavedEvidenceId(receiptId)) {
+      setError('Use a saved filename, not a path.')
+      setLoading(false)
+      return
+    }
     const controller = new AbortController()
     setLoading(true)
     setError('')
