@@ -202,17 +202,8 @@ fn resolve_api_binary() -> Result<PathBuf, ConsoleError> {
 }
 
 fn validate_api_binary(path: PathBuf) -> Result<PathBuf, ConsoleError> {
-    let metadata = fs::metadata(&path).map_err(|_| ConsoleError::InvalidApiBinary(path.clone()))?;
-    if !metadata.is_file() {
+    if !path.is_file() {
         return Err(ConsoleError::InvalidApiBinary(path));
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-
-        if metadata.permissions().mode() & 0o111 == 0 {
-            return Err(ConsoleError::InvalidApiBinary(path));
-        }
     }
     Ok(path)
 }
@@ -246,7 +237,14 @@ fn spawn_api(
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .spawn()
-        .map_err(ConsoleError::Spawn)
+        .map_err(|error| {
+            // The OS decides executability at launch, including ACLs and mount policy.
+            if error.kind() == std::io::ErrorKind::PermissionDenied {
+                ConsoleError::InvalidApiBinary(binary.to_owned())
+            } else {
+                ConsoleError::Spawn(error)
+            }
+        })
 }
 
 fn wait_until_ready(child: &mut Child) -> Result<String, ConsoleError> {

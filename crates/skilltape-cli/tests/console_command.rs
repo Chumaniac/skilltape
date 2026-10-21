@@ -37,7 +37,7 @@ fn console_rejects_missing_workspace_without_starting_a_child() {
 
 #[cfg(unix)]
 #[test]
-fn console_rejects_a_non_executable_api_before_spawn() {
+fn console_explains_when_the_os_denies_executing_the_api() {
     use std::os::unix::fs::PermissionsExt;
 
     let temp = TempDir::new().expect("temporary directory");

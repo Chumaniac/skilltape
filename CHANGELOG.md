@@ -5,8 +5,8 @@
 - Open real Capture timelines when their recorded identity differs from the
   saved directory name. API links use the storage ID and retain `recorded_id`;
   saved Tape manifests and events are unchanged.
-- Apply the existing 64 KiB manifest guard to timeline listings and reject
-  non-executable Console API files before attempting to start them.
+- Apply the existing 64 KiB manifest guard to timeline listings and explain
+  when the operating system refuses to execute the Console API file.
 - Ask for a saved Skill or Receipt instead of requesting the `demo` and
   `run-a` example IDs from navigation. Keep the selected Skill in review URLs.
 - Correct missing packages in place, reject path input before requesting files,
