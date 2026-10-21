@@ -403,7 +403,7 @@ test('empty and unavailable states explain the next step', async ({ page }) => {
 })
 
 
-test('permission preflight is bounded, read-only and fails closed on inconsistent plans', async ({ page }) => {
+test('permission preflight is bounded, read-only and fails closed on inconsistent plans', async ({ page }, testInfo) => {
   const checks = Array.from({ length: 40 }, (_, index) => ({ ordinal: index + 1, step_id: 'step-' + index, allowed: index !== 35, code: index === 35 ? 'PKG006' : 'POLICY_ALLOWED', reason: index === 35 ? 'path is outside declared filesystem write scopes' : 'allowed', risk: index === 35 ? 'high' : 'low' }))
   let plan = { schema: 'skilltape.dev/policy-plan/v1', execution: 'not-run', allowed: false, package_valid: false, package_error_codes: ['PKG006'], checks }
   const requests: string[] = []
@@ -415,7 +415,20 @@ test('permission preflight is bounded, read-only and fails closed on inconsisten
   await expect(panel.getByText('Blocked — review package', { exact: true })).toBeVisible()
   await panel.locator('summary').click()
   await expect(panel.locator('li')).toHaveCount(32)
-  await expect(panel).toContainText('first 32 checks')
+  await expect(panel).toContainText('Showing 1–32 of 40 checks')
+  await panel.getByRole('button', { name: 'Denied only (1)', exact: true }).click()
+  await expect(panel.locator('li')).toHaveCount(1)
+  await expect(panel.locator('li')).toContainText('step-35')
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.screenshot({ path: testInfo.outputPath('preflight-denied-mobile.png'), fullPage: true })
+  await expect(panel.getByText('Blocked — review package', { exact: true })).toBeVisible()
+  await panel.getByRole('button', { name: 'All checks (40)', exact: true }).click()
+  await panel.getByRole('button', { name: 'Next checks', exact: true }).click()
+  await expect(panel.locator('li')).toHaveCount(8)
+  await expect(panel.locator('li').first()).toContainText('step-32')
+  await expect(panel.getByRole('button', { name: 'Next checks', exact: true })).toBeDisabled()
+  await panel.getByRole('button', { name: 'Previous checks', exact: true }).click()
+  await expect(panel.locator('li')).toHaveCount(32)
   await page.setViewportSize({ width: 390, height: 844 })
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   expect(requests.every(method => method === 'GET')).toBe(true)
@@ -423,4 +436,12 @@ test('permission preflight is bounded, read-only and fails closed on inconsisten
   await page.reload()
   await expect(page.getByText('The policy preflight is invalid or unsupported. No execution is approved.')).toBeVisible()
   await expect(page.getByText('Allowed by declared policy', { exact: true })).toHaveCount(0)
+  plan = { ...plan, package_valid: true, package_error_codes: [], checks: checks.map(check => ({ ...check, allowed: true, code: 'POLICY_ALLOWED', risk: 'low' })) }
+  await page.reload()
+  await panel.locator('summary').click()
+  await panel.getByRole('button', { name: 'Denied only (0)', exact: true }).click()
+  await expect(panel.getByRole('status')).toHaveText('No denied checks in this plan.')
+  await expect(panel.locator('li')).toHaveCount(0)
+  await expect(panel.getByText('Allowed by declared policy', { exact: true })).toBeVisible()
+  expect(requests.every(method => method === 'GET')).toBe(true)
 })

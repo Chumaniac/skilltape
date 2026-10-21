@@ -13,13 +13,19 @@ export function PermissionReviewPage({ skillId = 'demo' }: PermissionReviewProps
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [reload, setReload] = useState(0)
+  const [deniedOnly, setDeniedOnly] = useState(false)
+  const [checkPage, setCheckPage] = useState(0)
 
   useEffect(() => {
     const controller = new AbortController()
     setLoading(true)
     setError('')
     getSkillDiff(skillId, controller.signal)
-      .then(setSkill)
+      .then((value) => {
+        setSkill(value)
+        setDeniedOnly(false)
+        setCheckPage(0)
+      })
       .catch((reason: unknown) => {
         if (!controller.signal.aborted) {
           setError(reason instanceof Error ? reason.message : 'Could not read permissions.')
@@ -39,6 +45,10 @@ export function PermissionReviewPage({ skillId = 'demo' }: PermissionReviewProps
 
   const permissions = skill.permissions
   const risk = riskSummary(permissions)
+  const checks = skill.policy_plan?.checks ?? []
+  const deniedChecks = checks.filter((check) => !check.allowed)
+  const matchingChecks = deniedOnly ? deniedChecks : checks
+  const checkOffset = checkPage * 32
   return (
     <section className="page-section">
       <header className="page-heading">
@@ -60,10 +70,21 @@ export function PermissionReviewPage({ skillId = 'demo' }: PermissionReviewProps
           {skill.policy_plan.package_error_codes.length > 0 && <p>Package findings: {skill.policy_plan.package_error_codes.join(', ')}</p>}
           <details>
             <summary>Inspect {skill.policy_plan.checks.length} policy checks</summary>
-            <ol>{skill.policy_plan.checks.slice(0, 32).map(check => <li key={check.ordinal}>
-              <code>{check.step_id}</code> · {check.allowed ? 'Allowed' : 'Denied'} · <code>{check.code}</code><p>{check.reason}</p>
-            </li>)}</ol>
-            {skill.policy_plan.checks.length > 32 && <p>Showing the first 32 checks. Use <code>skilltape preflight SKILL --json</code> for the full bounded plan.</p>}
+            <div className="receipt-filters" role="group" aria-label="Policy check filter">
+              <button className="button button-secondary" type="button" aria-pressed={!deniedOnly} onClick={() => { setDeniedOnly(false); setCheckPage(0) }}>All checks ({checks.length})</button>
+              <button className="button button-secondary" type="button" aria-pressed={deniedOnly} onClick={() => { setDeniedOnly(true); setCheckPage(0) }}>Denied only ({deniedChecks.length})</button>
+            </div>
+            {matchingChecks.length === 0 ? <p role="status">No denied checks in this plan.</p> : <>
+              <p role="status">Showing {checkOffset + 1}–{Math.min(checkOffset + 32, matchingChecks.length)} of {matchingChecks.length} checks</p>
+              <ol start={checkOffset + 1}>{matchingChecks.slice(checkOffset, checkOffset + 32).map(check => <li key={check.ordinal}>
+                <code>{check.step_id}</code> · {check.allowed ? 'Allowed' : 'Denied'} · <code>{check.code}</code><p>{check.reason}</p>
+              </li>)}</ol>
+              {matchingChecks.length > 32 && <nav className="page-navigation" aria-label="Policy checks pagination">
+                <button className="button button-secondary" type="button" disabled={checkPage === 0} onClick={() => setCheckPage(value => Math.max(0, value - 1))}>Previous checks</button>
+                <button className="button button-secondary" type="button" disabled={checkOffset + 32 >= matchingChecks.length} onClick={() => setCheckPage(value => value + 1)}>Next checks</button>
+              </nav>}
+            </>}
+            <p>Filtering changes this view only. Use <code>skilltape preflight SKILL --json</code> for the full bounded plan.</p>
           </details>
         </> : <p>Preflight is unavailable for this package. Use the current CLI and keep the plan within 1,000 steps and checks.</p>}
       </article>
