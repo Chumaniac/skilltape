@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased source - 2026-10-21
+
+- Ask for a saved Skill or Receipt instead of requesting the `demo` and
+  `run-a` example IDs from navigation. Keep the selected Skill in review URLs.
+- Correct missing packages in place, reject path input before requesting files,
+  and cancel obsolete reviews. Opening evidence does not execute a Skill.
+
 ## [0.3.1] - 2026-10-19
 
 - Replace the Receipt slogan and oversized metric cards with a recorded-result summary, compact run details and a next review action.

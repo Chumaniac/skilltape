@@ -262,6 +262,59 @@ test('navigation opens compile and permission review pages', async ({ page }) =>
   await expect(page.getByText('Scoped access', { exact: true })).toBeVisible()
 })
 
+test('review navigation asks for saved evidence and keeps the selected Skill', async ({ page }, testInfo) => {
+  const requests: string[] = []
+  await mockApi(page)
+  await page.route('**/api/v1/skills/**/diff', async route => {
+    requests.push(route.request().url())
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ...skill, id: 'release #1' }) })
+  })
+  page.on('request', request => {
+    if (request.url().includes('/receipts/')) requests.push(request.url())
+  })
+  await page.goto('/#compile')
+  await expect(page.getByLabel('Saved Skill ID', { exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'No Skill selected' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Permissions', exact: true })).toHaveAttribute('href', '#permissions')
+  expect(requests).toEqual([])
+  await page.getByLabel('Saved Skill ID', { exact: true }).fill('release #1')
+  await page.getByRole('button', { name: 'Open Skill', exact: true }).click()
+  await expect(page.getByText('Lint clean')).toBeVisible()
+  await page.getByRole('link', { name: 'Permissions', exact: true }).click()
+  await expect(page.getByLabel('Saved Skill ID', { exact: true })).toHaveValue('release #1')
+  await expect(page.getByRole('heading', { name: 'Know what the Skill is allowed to touch' })).toBeVisible()
+  await page.reload()
+  await expect(page.getByLabel('Saved Skill ID', { exact: true })).toHaveValue('release #1')
+  expect(requests).toHaveLength(3)
+  expect(requests.every(url => url.endsWith('/skills/release%20%231/diff'))).toBe(true)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(page.getByRole('button', { name: 'Open Skill', exact: true })).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('saved-skill-mobile.png') })
+  await page.getByRole('link', { name: 'Verify Receipt', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'No Receipt selected' })).toBeVisible()
+  expect(requests).toHaveLength(3)
+})
+
+test('invalid Skill identifiers stay local and a missing package can be corrected', async ({ page }) => {
+  const requested: string[] = []
+  await mockApi(page)
+  await page.route('**/api/v1/skills/**/diff', async route => {
+    requested.push(route.request().url())
+    if (requested.length === 1) await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: { message: 'Saved Skill not found. Check the package directory name.' } }) })
+    else await route.fulfill({ contentType: 'application/json', body: JSON.stringify(skill) })
+  })
+  await page.goto('/#permissions?skill=..%2Foutside')
+  await expect(page.getByRole('alert').filter({ hasText: 'Use a package directory name, not a path.' })).toBeVisible()
+  expect(requested).toEqual([])
+  await page.getByLabel('Saved Skill ID', { exact: true }).fill('missing')
+  await page.getByRole('button', { name: 'Open Skill', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('Saved Skill not found.')
+  await page.getByLabel('Saved Skill ID', { exact: true }).fill('demo')
+  await page.getByRole('button', { name: 'Open Skill', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Know what the Skill is allowed to touch' })).toBeVisible()
+  expect(requested).toHaveLength(2)
+})
+
 test('receipt view shows bounded evidence and policy decisions', async ({ page }) => {
   await mockApi(page)
   await page.goto('/#receipt?run=run-a')

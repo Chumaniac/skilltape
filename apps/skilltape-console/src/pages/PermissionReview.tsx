@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react'
 
-import { formatNumber, getSkillDiff } from '../api'
+import { formatNumber, getSkillDiff, isSavedEvidenceId } from '../api'
 import type { Permissions, SkillDiff } from '../types'
-import { EmptyState, JsonDisclosure, Metric, PageError, PageLoading, StatusBadge } from '../ui'
+import { EmptyState, JsonDisclosure, Metric, PageError, PageLoading, SkillPicker, StatusBadge } from '../ui'
 
 interface PermissionReviewProps {
   skillId?: string
 }
 
-export function PermissionReviewPage({ skillId = 'demo' }: PermissionReviewProps) {
+export function PermissionReviewPage({ skillId = '' }: PermissionReviewProps) {
   const [skill, setSkill] = useState<SkillDiff | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
@@ -17,11 +17,13 @@ export function PermissionReviewPage({ skillId = 'demo' }: PermissionReviewProps
   const [checkPage, setCheckPage] = useState(0)
 
   useEffect(() => {
+    if (!isSavedEvidenceId(skillId)) return
     const controller = new AbortController()
     setLoading(true)
     setError('')
     getSkillDiff(skillId, controller.signal)
       .then((value) => {
+        if (controller.signal.aborted) return
         setSkill(value)
         setDeniedOnly(false)
         setCheckPage(0)
@@ -37,10 +39,14 @@ export function PermissionReviewPage({ skillId = 'demo' }: PermissionReviewProps
     return () => controller.abort()
   }, [reload, skillId])
 
-  if (loading) return <PageLoading label="Loading permission review…" />
-  if (error) return <PageError message={error} onRetry={() => setReload((value) => value + 1)} />
+  const picker = <SkillPicker key={skillId} skillId={skillId} onOpen={id => {
+    if (id === skillId) setReload(value => value + 1)
+    else window.location.hash = 'permissions?skill=' + encodeURIComponent(id)
+  }} />
+  if (isSavedEvidenceId(skillId) && loading) return <>{picker}<PageLoading label="Loading permission review…" /></>
+  if (error) return <>{picker}<PageError message={error} onRetry={() => setReload((value) => value + 1)} /></>
   if (!skill) {
-    return <EmptyState title="No Skill selected" message="Select a Skill package to inspect its permission contract." />
+    return <>{picker}<EmptyState title="No Skill selected" message="Open a saved package to check its declared permissions before running it." /></>
   }
 
   const permissions = skill.permissions
@@ -50,7 +56,7 @@ export function PermissionReviewPage({ skillId = 'demo' }: PermissionReviewProps
   const matchingChecks = deniedOnly ? deniedChecks : checks
   const checkOffset = checkPage * 32
   return (
-    <section className="page-section">
+    <>{picker}<section className="page-section">
       <header className="page-heading">
         <div>
           <p className="eyebrow">Permission review</p>
@@ -157,7 +163,7 @@ export function PermissionReviewPage({ skillId = 'demo' }: PermissionReviewProps
         </div>
         <JsonDisclosure label="View complete permission document" value={permissions} open />
       </article>
-    </section>
+    </section></>
   )
 }
 
