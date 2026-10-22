@@ -46,6 +46,7 @@ tokio-util.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+skilltape-console-api = { path = "../../apps/skilltape-console-api" }
 assert_cmd.workspace = true
 predicates.workspace = true
 serde_yaml.workspace = true

@@ -32,9 +32,12 @@ The producer is the installed SkillTape binary; keep that version available.
 There are no remote templates, shell commands, hooks, provider calls or network.
 macOS and Linux require the supported sandbox. Windows execution stays disabled.
 
-Read `deliveries/task/artifacts/report.json` for the result, and
-`deliveries/task/receipt.json` for verification evidence. Open the run with
+Read `delivery/artifacts/report.json` for the result, and
+`delivery/receipt.json` for verification evidence. Open the run with
 `skilltape console --workspace RUN_DIRECTORY --open`; Console is read-only.
+Captured Tapes and the exact Receipt index use `.skilltape/`; the completed
+delivery is a direct child of the run directory so all Console sections can
+find it. Run-condition metadata is bound to the same Receipt bytes.
 The generic export contains the Skill and Receipt, not private input files.
 
 A failed stage retains preceding results and never reports a completed delivery.

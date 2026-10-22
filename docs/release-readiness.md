@@ -1,5 +1,13 @@
 # Release Readiness
 
+## Starter Console discovery repair - 2026-10-22
+
+Installed-browser acceptance found that nested starter outputs were absent from
+the existing Console catalogs. Store Tapes and exact Receipt bytes in the
+standard metadata directory and expose the delivery as a direct child. A
+regression now passes actual starter results through the real Console read
+model; generation, hash verification and previous evidence remain unchanged.
+
 ## Practical starters source candidate - 2026-10-22
 
 Two fixed local recipes use actual Capture, deterministic Compile, strict Lint,
