@@ -1996,6 +1996,7 @@ dependencies = [
  "sha2",
  "skilltape-capture",
  "skilltape-compiler",
+ "skilltape-console-api",
  "skilltape-core",
  "skilltape-export",
  "skilltape-policy",

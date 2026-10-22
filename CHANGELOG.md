@@ -2,6 +2,8 @@
 
 ## Unreleased - 2026-10-22
 
+- Use Console-compatible starter storage, including the real Receipt and run-condition index; keep delivery artifacts directly discoverable.
+
 - Ignore watched-root metadata notifications while preserving child-file effects; make declared local executables available as one read-only file in Linux replay.
 
 - Add editable inventory and quantity reconciliation starters with explicit local execution, real Capture/Compile/Verify and Receipt-bound export. Keep Console read-only.

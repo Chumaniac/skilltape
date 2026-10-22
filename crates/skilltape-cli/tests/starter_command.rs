@@ -155,13 +155,25 @@ fn both_starters_capture_compile_verify_and_export_actual_artifacts() {
         let actual = fs::read(output.join("capture/outputs/report.json")).unwrap();
         assert_eq!(
             actual,
-            fs::read(output.join("deliveries/task/artifacts/report.json")).unwrap()
+            fs::read(output.join("delivery/artifacts/report.json")).unwrap()
         );
         let receipt: Value =
-            serde_json::from_slice(&fs::read(output.join("deliveries/task/receipt.json")).unwrap())
+            serde_json::from_slice(&fs::read(output.join("delivery/receipt.json")).unwrap())
                 .unwrap();
         assert_eq!(receipt["status"], "succeeded");
         assert!(output.join("export").is_dir());
+        let console = skilltape_console_api::ConsoleReadModel::new(&output).unwrap();
+        assert_eq!(console.tapes("default", 0, 10).unwrap().total, 1);
+        assert_eq!(console.deliveries("default", 0, 10).unwrap().total, 1);
+        assert_eq!(
+            console.receipt("task").unwrap().document["status"],
+            "succeeded"
+        );
+        assert_eq!(
+            console.receipt_context("task").unwrap()["status"],
+            "recorded"
+        );
+
         let again = temp.path().join("bad-delivery");
         cli()
             .arg("verify")
@@ -178,7 +190,7 @@ fn both_starters_capture_compile_verify_and_export_actual_artifacts() {
         // Preserve the successful delivery even when another run fails.
         assert_eq!(
             actual,
-            fs::read(output.join("deliveries/task/artifacts/report.json")).unwrap()
+            fs::read(output.join("delivery/artifacts/report.json")).unwrap()
         );
     }
 }

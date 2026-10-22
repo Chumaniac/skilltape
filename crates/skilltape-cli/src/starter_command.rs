@@ -252,13 +252,13 @@ fn pipeline(source: &Path, output: &Path, yes: bool) -> io::Result<()> {
     snapshot_inputs(&source.join("inputs"), &stage.path().join("capture/inputs")).map_err(|_| fail("inputs could not be snapshotted: reject links, changed files and capacity overflow (10,000 entries, 16 MiB/file, 64 MiB total)"))?;
     // Validate before Capture. This computes but never writes task results.
     report(recipe.scenario, &stage.path().join("capture/inputs"))?;
-    fs::create_dir(stage.path().join("tapes"))?;
+    fs::create_dir_all(stage.path().join(".skilltape/tapes"))?;
+    fs::create_dir(stage.path().join(".skilltape/receipts"))?;
     fs::create_dir(stage.path().join("skills"))?;
-    fs::create_dir(stage.path().join("deliveries"))?;
     publish_directory_noreplace(stage.path(), &target)?;
     let executable = std::env::current_exe()?.to_string_lossy().into_owned();
     let workspace = target.join("capture");
-    let tape = target.join("tapes/task");
+    let tape = target.join(".skilltape/tapes/task");
     step(
         "Capture",
         super::capture_command::run(super::capture_command::CaptureConfig {
@@ -292,20 +292,28 @@ fn pipeline(source: &Path, output: &Path, yes: bool) -> io::Result<()> {
         }),
     )?;
     step("Lint", super::lint(package.clone(), true, false))?;
-    let delivery = target.join("deliveries/task");
+    let delivery = target.join("delivery");
     step(
         "Verify",
         super::run_command::verify(super::run_command::VerifyConfig {
             skill_path: package.clone(),
             input: Some(workspace.join("inputs")),
             receipt: None,
-            context: None,
+            context: Some(target.join(".skilltape/receipts/task.json.context")),
             delivery_dir: Some(delivery.clone()),
             expected_files: vec![],
             expected_hashes: vec![format!("report.json={expected}")],
             json: false,
         }),
     )?;
+    // Console indexes the exact real Receipt in its standard storage directory.
+    // Keep the delivery's original evidence bytes unchanged.
+    let receipt_bytes = read_bounded(&delivery.join("receipt.json"))?;
+    OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(target.join(".skilltape/receipts/task.json"))?
+        .write_all(&receipt_bytes)?;
     step(
         "Export",
         super::export_command::run(super::export_command::ExportConfig {
@@ -316,7 +324,7 @@ fn pipeline(source: &Path, output: &Path, yes: bool) -> io::Result<()> {
             json: false,
         }),
     )?;
-    println!("Completed a real run. Results: deliveries/task/artifacts/report.json. Open Console with `skilltape console --workspace RUN_DIRECTORY --open`. Console is read-only.");
+    println!("Completed a real run. Results: delivery/artifacts/report.json. Open Console with `skilltape console --workspace RUN_DIRECTORY --open`. Console is read-only.");
     Ok(())
 }
 fn step(name: &str, status: ExitCode) -> io::Result<()> {

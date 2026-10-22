@@ -23,7 +23,7 @@ skilltape console --workspace inventory-run --open
 
 Use `reconcile` instead of `inventory` to compare expected and received item
 quantities. Both run Capture → Compile → Lint → Verify → Export and keep actual
-results in `deliveries/task/artifacts/report.json`. [Inputs and limits](docs/starter-inputs.md).
+results in `delivery/artifacts/report.json`. [Inputs and limits](docs/starter-inputs.md).
 These commands are available in main builds; the v0.4.1 download below is unchanged.
 
 ## Version 0.4.1
