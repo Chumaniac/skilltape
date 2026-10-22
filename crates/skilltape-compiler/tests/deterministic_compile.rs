@@ -440,3 +440,29 @@ fn write_package_file(root: &std::path::Path, relative: &str, contents: &str) {
     }
     fs::write(path, contents).expect("package file");
 }
+
+#[test]
+fn captured_outputs_are_declared_for_replay_and_delivery() {
+    let mut events = terminal_tape();
+    let next = events.last().unwrap().sequence + 1;
+    events.push(event(next, TapeEventKind::FilesystemChanged, EventSource::Filesystem,
+        json!({"kind":"created","path":"outputs/report.json","content_hash":"ab".repeat(32),"size":12})));
+    let artifact = DeterministicCompiler
+        .compile(request(events, "output-test"))
+        .unwrap();
+    let Step::Exec(step) = &artifact.workflow.steps[0] else {
+        panic!("exec")
+    };
+    assert_eq!(step.outputs.len(), 1);
+    assert_eq!(step.outputs[0].path, "outputs/report.json");
+    assert!(artifact
+        .permissions
+        .filesystem
+        .write
+        .contains(&"outputs/report.json".into()));
+    assert!(!artifact
+        .permissions
+        .filesystem
+        .write
+        .contains(&"inputs/**".into()));
+}

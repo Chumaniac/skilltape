@@ -503,6 +503,12 @@ fn adapt_events(
             )?);
         }
     }
+    // PollWatcher can report the watched directory's own mtime after a child
+    // is created. That notification has no file-relative path and must not
+    // become an artifact assertion; keep every actual child-file change.
+    changes.retain(|change| {
+        !(change.kind == FilesystemChangeKind::Modified && change.path.is_empty())
+    });
     infer_single_poll_rename(&mut changes);
 
     let structural_paths = changes
@@ -730,6 +736,33 @@ async fn send_change_with_overflow(
 mod tests {
     use super::*;
     use tempfile::TempDir;
+
+    #[test]
+    fn root_metadata_notification_does_not_become_an_empty_file_path() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        let file = root.join("report.json");
+        std::fs::write(&file, b"{}").unwrap();
+        let changes = adapt_events(
+            &root,
+            vec![
+                Event {
+                    kind: EventKind::Modify(ModifyKind::Any),
+                    paths: vec![root.clone()],
+                    attrs: Default::default(),
+                },
+                Event {
+                    kind: EventKind::Create(notify::event::CreateKind::File),
+                    paths: vec![file],
+                    attrs: Default::default(),
+                },
+            ],
+        )
+        .unwrap();
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].path, "report.json");
+        assert!(changes[0].content_hash.is_some());
+    }
 
     #[test]
     fn rename_any_does_not_pair_multiple_existing_and_missing_paths() {

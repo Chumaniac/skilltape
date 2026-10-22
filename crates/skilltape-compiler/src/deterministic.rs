@@ -47,7 +47,7 @@ impl Compiler for DeterministicCompiler {
                 read_environment: false,
             },
         };
-        let fixtures = package_support_files(&request, &executables, step_fixtures)?;
+        let fixtures = package_support_files(&request, &executables, &workflow, step_fixtures)?;
         let skill_markdown = render_skill_markdown(&request, workflow.steps.len());
 
         CompileOutput::try_new(
@@ -64,10 +64,11 @@ impl Compiler for DeterministicCompiler {
 fn package_support_files(
     request: &CompileRequest,
     executables: &std::collections::BTreeSet<String>,
+    workflow: &Workflow,
     step_fixtures: FixtureDraft,
 ) -> Result<FixtureDraft, CompileError> {
     let mut files = step_fixtures.files;
-    files.insert("skilltape.yaml".into(), render_manifest(request));
+    files.insert("skilltape.yaml".into(), render_manifest(request, workflow));
     files.insert(
         "skilltape.lock".into(),
         render_lockfile(request, executables)?,
@@ -76,13 +77,27 @@ fn package_support_files(
     Ok(FixtureDraft::new(files))
 }
 
-fn render_manifest(request: &CompileRequest) -> String {
+fn render_manifest(request: &CompileRequest, workflow: &Workflow) -> String {
+    let paths: std::collections::BTreeSet<_> = workflow
+        .steps
+        .iter()
+        .flat_map(|step| match step {
+            skilltape_schema::Step::Exec(exec) => exec
+                .outputs
+                .iter()
+                .map(|output| output.path.as_str())
+                .collect::<Vec<_>>(),
+            _ => Vec::new(),
+        })
+        .collect();
+    let outputs: Vec<_> = paths.into_iter().enumerate().map(|(index,path)| json!({"id":format!("output-{:04}", index+1),"type":"file","path":path})).collect();
     format!(
-        "schema: {}\nname: {}\nversion: {}\ndescription: Deterministic workflow compiled from SkillTape metadata.\nengine:\n  min_version: {}\nentrypoint:\n  workflow: workflow.yaml\n  permissions: permissions.json\n  lockfile: skilltape.lock\ninputs: []\noutputs: []\ntargets:\n  - {}\n",
+        "schema: {}\nname: {}\nversion: {}\ndescription: Deterministic workflow compiled from SkillTape metadata.\nengine:\n  min_version: {}\nentrypoint:\n  workflow: workflow.yaml\n  permissions: permissions.json\n  lockfile: skilltape.lock\ninputs: []\noutputs: {}\ntargets:\n  - {}\n",
         SchemaId::SkillV1.uri(),
         quote_yaml_string(&request.name),
         quote_yaml_string(&request.target.version),
         quote_yaml_string(ENGINE_VERSION),
+        serde_json::to_string(&outputs).expect("output metadata"),
         quote_yaml_string(&request.target.name),
     )
 }

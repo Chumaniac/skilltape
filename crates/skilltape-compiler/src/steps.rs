@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::Value;
-use skilltape_schema::{AssertStep, AssertionSpec, ExecStep, FileStep, Step};
+use skilltape_schema::{AssertStep, AssertionSpec, ExecStep, FileStep, Step, StepOutput};
 use skilltape_tape::{TapeEvent, TapeEventKind};
 
 use crate::{CompileError, FixtureDraft, StepProvenance, TapeSession};
@@ -326,6 +326,26 @@ fn build_compilation(operations: Vec<Operation>) -> Result<StepCompilation, Comp
                 )?);
             }
             Operation::Filesystem(operation) => {
+                // Only regular files observed under the output namespace become
+                // deliverables. Other observed paths remain assertions, not grants.
+                if matches!(
+                    operation.kind,
+                    FilesystemOperationKind::Created | FilesystemOperationKind::Modified
+                ) && operation.path.starts_with("outputs/")
+                    && operation.content_hash.is_some()
+                {
+                    if let Some(Step::Exec(step)) = steps
+                        .iter_mut()
+                        .rev()
+                        .find(|step| matches!(step, Step::Exec(_)))
+                    {
+                        step.outputs.push(StepOutput {
+                            path: operation.path.clone(),
+                            output_type: "file".into(),
+                        });
+                        write_scopes.insert(operation.path.clone());
+                    }
+                }
                 let fixture_path = format!("fixtures/changes/{step_number:04}.json");
                 fixture_files.insert(fixture_path, filesystem_fixture(&operation)?);
                 let (id, step) = match operation.kind {
@@ -524,6 +544,9 @@ fn is_absolute_path(path: &str) -> bool {
 }
 
 fn contains_input_reference(value: &str) -> bool {
+    if value.starts_with("inputs/") && safe_relative_path(0, value).is_ok() {
+        return true;
+    }
     let mut rest = value;
     while let Some(start) = rest.find("{{") {
         rest = &rest[start + 2..];

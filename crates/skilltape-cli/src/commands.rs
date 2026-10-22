@@ -18,6 +18,8 @@ mod export_command;
 mod preflight_command;
 #[path = "run_command.rs"]
 mod run_command;
+#[path = "starter_command.rs"]
+mod starter_command;
 
 const PACKAGE_ERROR_EXIT_CODE: u8 = 2;
 const POLICY_ERROR_EXIT_CODE: u8 = 3;
@@ -31,6 +33,11 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Prepare or explicitly run one of two bounded, local starter tasks.
+    Starter {
+        #[command(subcommand)]
+        command: starter_command::StarterCommand,
+    },
     /// Inspect package policy without executing steps or creating any output.
     Preflight {
         skill_path: PathBuf,
@@ -133,13 +140,14 @@ enum Command {
 pub fn run() -> ExitCode {
     let _interrupt_guard = if matches!(
         std::env::args().nth(1).as_deref(),
-        Some("capture" | "replay" | "verify")
+        Some("capture" | "replay" | "verify" | "starter")
     ) {
         Some(crate::interrupt::InterruptGuard::install())
     } else {
         None
     };
     match Cli::parse().command {
+        Command::Starter { command } => starter_command::run(command),
         Command::Preflight { skill_path, json } => preflight_command::run(skill_path, json),
         Command::Init {
             name,

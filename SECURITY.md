@@ -23,6 +23,11 @@ secret environment identifiers at the policy layer. The restricted executor
 is part of defense in depth; it must not be understood as permission to run
 arbitrary unreviewed code.
 
+On Linux, an explicitly allowed executable installed outside system paths is
+exposed as one read-only file inside the sandbox. Its parent directory, sibling
+files and user configuration remain unavailable. This does not add process
+permissions or network access.
+
 The following are not substitutes for the security boundary:
 
 - Permissions actively granted by a user may allow a Skill to read or modify

@@ -245,3 +245,19 @@ fn compile_accept_proposal_without_provider_is_a_policy_failure() {
 
     assert!(!output.exists());
 }
+
+#[test]
+fn compile_diagnostics_identify_event_without_echoing_private_payload() {
+    let temp = TempDir::new().unwrap();
+    let tape = temp.path().join("tape");
+    create_tape(&tape);
+    let events = tape.join("events.jsonl");
+    let original = fs::read_to_string(&events).unwrap();
+    let replacement = original.replace("src/main.rs", "../synthetic-private-token");
+    fs::write(&events, replacement).unwrap();
+    compile(&tape, &temp.path().join("compiled"), &[])
+        .failure()
+        .stderr(predicates::str::contains("event 0").and(predicates::str::contains("events.jsonl")))
+        .stderr(predicates::str::contains("synthetic-private-token").not());
+    assert!(!temp.path().join("compiled").exists());
+}
