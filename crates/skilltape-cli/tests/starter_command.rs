@@ -38,6 +38,7 @@ fn scaffold_is_materials_only_and_never_overwrites() {
         .stderr(predicates::str::contains("--yes"));
     assert!(!output.exists());
 }
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn producer_checks_inputs_and_reports_reconciliation_without_claiming_balance() {
     let temp = TempDir::new().unwrap();

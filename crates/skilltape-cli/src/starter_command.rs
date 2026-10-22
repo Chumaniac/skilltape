@@ -327,6 +327,11 @@ fn step(name: &str, status: ExitCode) -> io::Result<()> {
     }
 }
 fn produce(scenario: Scenario) -> io::Result<()> {
+    if !cfg!(any(target_os = "linux", target_os = "macos")) {
+        return Err(fail(
+            "starter execution requires a supported macOS or Linux sandbox",
+        ));
+    }
     let value = report(scenario, Path::new("inputs"))?;
     fs::create_dir("outputs")?;
     write_json(Path::new("outputs/report.json"), &value)

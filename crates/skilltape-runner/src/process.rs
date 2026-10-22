@@ -283,6 +283,7 @@ fn linux_sandbox_command(request: &ProcessRequest) -> Result<Command, ProcessErr
         return Err(ProcessError::SandboxUnavailable);
     }
 
+    let mut external_program = None;
     let program = if request.program == request.cwd.to_string_lossy()
         || request
             .program
@@ -292,6 +293,20 @@ fn linux_sandbox_command(request: &ProcessRequest) -> Result<Command, ProcessErr
             "/workspace{}",
             &request.program[request.cwd.as_os_str().len()..]
         )
+    } else if std::path::Path::new(&request.program).is_absolute()
+        && !["/usr", "/bin", "/lib", "/lib64", "/etc"]
+            .iter()
+            .any(|root| std::path::Path::new(&request.program).starts_with(root))
+    {
+        // Policy has already allowed this executable. Expose that one regular
+        // file read-only, never its parent or the user's installation directory.
+        let path =
+            std::fs::canonicalize(&request.program).map_err(|_| ProcessError::SpawnFailed)?;
+        if !path.is_file() {
+            return Err(ProcessError::SpawnFailed);
+        }
+        external_program = Some(path);
+        "/.skilltape-executable".to_owned()
     } else {
         request.program.clone()
     };
@@ -326,10 +341,14 @@ fn linux_sandbox_command(request: &ProcessRequest) -> Result<Command, ProcessErr
         .arg("--bind")
         .args([request.cwd.to_string_lossy().as_ref(), "/workspace"])
         .arg("--chdir")
-        .arg("/workspace")
-        .arg("--")
-        .arg(program)
-        .args(&request.args);
+        .arg("/workspace");
+    if let Some(path) = external_program {
+        command
+            .arg("--ro-bind")
+            .arg(path)
+            .arg("/.skilltape-executable");
+    }
+    command.arg("--").arg(program).args(&request.args);
     Ok(command)
 }
 
