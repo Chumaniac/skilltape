@@ -92,7 +92,6 @@ function App() {
               <span>No cloud sync</span>
             </div>
           </div>
-          <p className="sidebar-footnote">Evidence stays on this machine.</p>
         </div>
       </aside>
 

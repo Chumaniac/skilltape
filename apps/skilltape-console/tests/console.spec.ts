@@ -174,7 +174,7 @@ test('timeline displays redaction state and payload details', async ({ page }) =
   await mockApi(page)
   await page.goto('/#timeline')
 
-  await expect(page.getByRole('heading', { name: 'See the work as it happened' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Capture timeline' })).toBeVisible()
   await expect(page.getByText('Redacted', { exact: true })).toBeVisible()
   await page.getByText('Inspect event payload').click()
   await expect(page.getByText('redacted timeline payload')).toBeVisible()

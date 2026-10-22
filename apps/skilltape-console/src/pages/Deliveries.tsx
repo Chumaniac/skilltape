@@ -47,8 +47,8 @@ export function DeliveriesPage({ deliveryId, offset }: Props) {
   const visible = collection?.items.filter(item => (item.id + ' ' + (item.reported_status ?? 'invalid')).toLowerCase().includes(needle)) ?? []
   const page = (next: number) => { window.location.hash = 'deliveries?deliveryOffset=' + next }
   return <section className="page-section delivery-workbench">
-    <header className="page-heading"><div><p className="eyebrow">Retained workflow output</p><h1>Review saved deliveries</h1>
-      <p className="page-description">Choose an actual saved bundle, inspect its file integrity, then review its business requirements independently.</p></div>
+    <header className="page-heading"><div><p className="eyebrow">Saved output</p><h1>Review saved deliveries</h1>
+      <p className="page-description">Inspect file integrity, then review business requirements separately.</p></div>
       <button className="button button-secondary" type="button" disabled={listLoading} onClick={() => setListRevision(value => value + 1)}>Refresh delivery list</button></header>
     <div className="metric-grid">
       <Metric label="Saved directories" value={collection ? formatNumber(collection.total) : '—'} tone="accent" />
@@ -58,7 +58,7 @@ export function DeliveriesPage({ deliveryId, offset }: Props) {
     </div>
     {listLoading ? <PageLoading label="Discovering saved delivery metadata…" /> : listError ?
       <PageError message={listError} onRetry={() => setListRevision(value => value + 1)} /> : collection && collection.total === 0 ?
-      <EmptyState title="No saved deliveries found" message="Point Console at the parent of retained --delivery-dir folders. No demo or legacy run registry is substituted." /> : collection ? <article className="panel">
+      <EmptyState title="No saved deliveries found" message="Open Console with the parent folder of your saved --delivery-dir bundles." /> : collection ? <article className="panel">
         <div className="panel-heading"><div><p className="eyebrow">Actual local folders</p><h2>Saved delivery queue</h2></div><span className="panel-note">Metadata only until inspected</span></div>
         <label className="delivery-filter">Filter this page<input type="search" name="deliveryFilter" autoComplete="off" spellCheck={false} maxLength={128} value={filter} onChange={event => setFilter(event.target.value)} placeholder="Folder or reported status…" /></label>
         <div className="delivery-table-wrap" tabIndex={0} aria-label="Saved delivery folders"><table className="delivery-table"><thead><tr><th>Saved folder</th><th>Receipt reports</th><th>Declared files</th><th>Review</th></tr></thead><tbody>
@@ -76,9 +76,9 @@ export function DeliveriesPage({ deliveryId, offset }: Props) {
       <div className="panel-heading"><div><p className="eyebrow">Selected retained bundle</p><h2><code>{deliveryId}</code></h2></div>
         <button className="button" type="button" disabled={detailLoading} onClick={() => setDetailRevision(value => value + 1)}>Recheck selected delivery</button></div>
       {detailLoading ? <PageLoading label="Checking actual files and saved evidence…" /> : detailError ? <PageError message={detailError} onRetry={() => setDetailRevision(value => value + 1)} /> : report ? <DeliveryDetails report={report} /> : null}
-    </article> : <EmptyState title="Choose a saved delivery" message="Select a folder from the queue. Console does not run a workflow or manufacture a Receipt." />}
+    </article> : <EmptyState title="Choose a saved delivery" message="Select a folder from the queue. Inspecting it does not run the workflow." />}
     <article className="panel delivery-next-step"><p className="eyebrow">Continue the review</p><h2>Check the declared business requirements</h2>
-      <p>Intact files can still contain wrong allocations. Use a reviewed contract and the preserved delivery to create an independent SkillSync acceptance report.</p>
+      <p>File integrity does not confirm business requirements. Use a reviewed SkillSync contract for acceptance.</p>
       <CodeBlock label="Source CLI · replace the placeholders locally" value="skillsync artifacts --contract <reviewed-contract> --delivery <saved-folder> --format html" />
       <p className="panel-note">Read-only snapshot · no commands executed · provenance is not authenticated. Preserve the successful originals.</p>
     </article>

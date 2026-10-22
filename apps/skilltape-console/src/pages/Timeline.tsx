@@ -55,9 +55,9 @@ export function TimelinePage({ tapeId, tapeOffset = 0, eventOffset = 0 }: Timeli
   if (!data || data.tapes.total === 0) {
     return (
       <PageSection
-        eyebrow="Capture timeline"
-        title="See the work as it happened"
-        description="Recorded terminal, file, and permission events appear here after a capture."
+        eyebrow="Saved captures"
+        title="Capture timeline"
+        description="Inspect recorded terminal, file and permission events."
       >
         <EmptyState
           title="No captures yet"
@@ -78,9 +78,9 @@ export function TimelinePage({ tapeId, tapeOffset = 0, eventOffset = 0 }: Timeli
   }
   return (
     <PageSection
-      eyebrow="Capture timeline"
-      title="See the work as it happened"
-      description="Every event stays linked to its source and redaction state."
+      eyebrow="Saved captures"
+      title="Capture timeline"
+      description="Source and redaction status appear with each event."
       actions={
         <label className="select-control">
           <span>Tape</span>
