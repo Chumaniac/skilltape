@@ -35,8 +35,8 @@ export function DeliveryComparison({ items }: { items: DeliverySummary[] }) {
     if (baseline) setBefore(value); else setAfter(value)
   }
   return <article className="panel delivery-comparison" aria-live="polite">
-    <div className="panel-heading"><div><p className="eyebrow">Before sharing a replacement</p><h2>Compare saved deliveries</h2></div></div>
-    <p>Compare observed file hashes in two preserved bundles. Choose folders on this page; both are rechecked when you compare.</p>
+    <div className="panel-heading"><div><h2>Compare saved deliveries</h2></div></div>
+    <p>Choose two saved bundles to compare file changes. Both are rechecked.</p>
     <div className="delivery-comparison-controls">
       <label>Baseline delivery<select value={before} onChange={event => choose(event.target.value, true)}>
         <option value="">Choose baseline…</option>{items.map(item => <option key={item.id} value={item.id}>{item.id}</option>)}
@@ -59,6 +59,6 @@ export function DeliveryComparison({ items }: { items: DeliverySummary[] }) {
       </table></div>
       {result.truncated ? <p>Counts cover both bundles; only the first 100 changed rows are shown.</p> : null}
     </> : <><StatusBadge tone="warn">Comparison unavailable</StatusBadge><p>Physical evidence is incomplete or failed. Recheck the original bundles before comparing.</p></> : null}
-    <p className="panel-note">Complete matching inspections of at most 100 files per bundle are required. Separate local snapshots · no execution or author authentication · business requirements still need independent review.</p>
+    <details className="panel-note"><summary>Comparison limits</summary><p>Both bundles need complete matching inspections, with at most 100 files each. Comparing local snapshots does not execute content or authenticate authors. Review business requirements separately.</p></details>
   </article>
 }
