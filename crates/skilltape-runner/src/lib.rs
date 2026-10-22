@@ -31,6 +31,12 @@ use workspace::{copy_path, make_directory, move_path, ReplayWorkspace, Workspace
 
 pub const RUNNER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// Copy local inputs using the same bounded, no-link snapshot checks as Replay.
+/// The destination must be new; this does not execute any task.
+pub fn snapshot_inputs(source: &Path, destination: &Path) -> std::io::Result<()> {
+    input_io::copy_input_tree(source, destination).map_err(std::io::Error::other)
+}
+
 const RUN_STEP_ID: &str = "__run__";
 
 /// The inputs and limits for one isolated replay.

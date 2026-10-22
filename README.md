@@ -11,6 +11,21 @@ configuration file.
 
 [Watch the 30-second terminal demo](docs/assets/quickstart-terminal.txt) · [Download v0.4.1](https://github.com/Chumaniac/skilltape/releases/tag/v0.4.1)
 
+## Local starter tasks (main)
+
+Create materials, review the inputs, then explicitly run one fixed local task:
+
+```sh
+skilltape starter new inventory --output inventory-task
+skilltape starter run inventory-task --output inventory-run --yes
+skilltape console --workspace inventory-run --open
+```
+
+Use `reconcile` instead of `inventory` to compare expected and received item
+quantities. Both run Capture → Compile → Lint → Verify → Export and keep actual
+results in `deliveries/task/artifacts/report.json`. [Inputs and limits](docs/starter-inputs.md).
+These commands are available in main builds; the v0.4.1 download below is unchanged.
+
 ## Version 0.4.1
 
 Inspect a Skill before running it with `skilltape preflight SKILL --json`, or open the Console Permissions page. The bounded, read-only plan shows declared-policy denials without executing steps or producing a Receipt. [Preflight limits and usage](docs/policy-preflight.md).

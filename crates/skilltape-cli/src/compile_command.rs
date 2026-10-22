@@ -51,7 +51,7 @@ enum CompileCommandError {
     #[error("compiled package failed to load: {0}")]
     Package(#[from] skilltape_core::PackageError),
     #[error("compiled package failed lint with {errors} error(s)")]
-    Lint { errors: usize },
+    Lint { errors: usize, locations: String },
     #[error("compiler fixture path is unsafe: {0}")]
     UnsafeFixturePath(String),
 }
@@ -75,9 +75,22 @@ pub(crate) fn run(config: CompileConfig) -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(error) => {
-            eprintln!("{error}");
+            eprintln!("{}", diagnostic(&error));
             error.exit_code()
         }
+    }
+}
+
+fn diagnostic(error: &CompileCommandError) -> String {
+    match error {
+        CompileCommandError::Compiler(CompileError::UnsafePath { sequence, .. }) => format!("compile: unsafe path at event {sequence}. Inspect that event in events.jsonl; use workspace-relative paths and capture again."),
+        CompileCommandError::Compiler(CompileError::UnsupportedPayload { sequence, .. }) => format!("compile: unsupported payload at event {sequence}. Inspect its kind in events.jsonl; capture with this CLI version. Payload values are omitted."),
+        CompileCommandError::Compiler(CompileError::MalformedPayload { sequence, .. }) => format!("compile: malformed payload at event {sequence}. Check its required fields in events.jsonl or capture again. Payload values are omitted."),
+        CompileCommandError::Compiler(CompileError::AmbiguousTerminalGrouping { sequence, .. }) => format!("compile: incomplete terminal group at event {sequence}. Wait for Capture to finish, then compile the completed Tape."),
+        CompileCommandError::Tape(_) => "compile tape failed. Check manifest.json and events.jsonl exist, are regular files, and form a completed bounded Tape.".into(),
+        CompileCommandError::OutputExists(_) => "compile output already exists. Keep it and choose a new --output directory.".into(),
+        CompileCommandError::Lint { locations, .. } => format!("compiled package failed lint at {locations}. Review the captured command and its paths; no package was published."),
+        _ => format!("{error}"),
     }
 }
 
@@ -97,7 +110,7 @@ fn compile(config: CompileConfig) -> Result<(), CompileCommandError> {
 
     let store = TapeStore::open(&config.tape)?;
     let events = store
-        .read_events()?
+        .read_events_bounded(16 * 1024 * 1024, 100_000)?
         .collect::<Result<Vec<_>, TapeStoreError>>()?;
     let tape = TapeSession::new(events)?;
     let request = CompileRequest::new(tape, name, target.clone())?;
@@ -280,11 +293,18 @@ fn lint_staged_package(staging: &TempDir) -> Result<(), CompileCommandError> {
     } else {
         Err(CompileCommandError::Lint {
             errors: report.errors.len(),
+            locations: report
+                .errors
+                .iter()
+                .take(8)
+                .map(|error| format!("{} {} {}", error.code, error.file, error.path))
+                .collect::<Vec<_>>()
+                .join(", "),
         })
     }
 }
 
 fn publish(staging: TempDir, output: &Path) -> Result<(), CompileCommandError> {
-    fs::rename(staging.path(), output)?;
+    skilltape_runner::publish_directory_noreplace(staging.path(), output)?;
     Ok(())
 }

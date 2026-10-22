@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased - 2026-10-22
+
+- Add editable inventory and quantity reconciliation starters with explicit local execution, real Capture/Compile/Verify and Receipt-bound export. Keep Console read-only.
+- Declare captured regular output files in compiled workflows, manifests and exact write scopes; do not grant writes to other observed paths.
+- Bound compilation to 16 MiB and 100,000 events, publish without replacement, and identify failed events without echoing payload values.
+
 ## Unreleased - 2026-10-21
 
 - Record optional run-condition sidecars from the existing bounded input digest,

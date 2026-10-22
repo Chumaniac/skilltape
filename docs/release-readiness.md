@@ -1,5 +1,19 @@
 # Release Readiness
 
+## Practical starters source candidate - 2026-10-22
+
+Two fixed local recipes use actual Capture, deterministic Compile, strict Lint,
+sandboxed Verify, output hash checks and Receipt-bound export. Scaffold creation
+executes nothing. Completed and failed runs remain separate; existing outputs
+are never overwritten. The generic export omits private inputs. The compiled
+producer points to the selected installed binary, which must remain available.
+
+Focused tests cover both complete flows, mismatched output requirements, missing
+and changed inputs, links, traversal, size limits, duplicate destinations and
+explicit execution consent. Full workspace checks, hosted main checks and the
+installed-package browser flow are tracked separately. No new remote Release
+or deployment is implied by this source candidate.
+
 ## Version 0.4.1 terminal metadata repair
 
 An invalid synthetic step label reproduced raw terminal control bytes in human preflight output. Render labels through Rust string debug escaping; retain the label as data and preserve JSON output. Negative CLI cases cover ESC, newline and a directional control. Keep v0.4.0 source/tag/assets as history; the patch uses a new immutable release.
