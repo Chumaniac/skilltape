@@ -28,10 +28,13 @@ export class ApiError extends Error {
 }
 
 async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(API_BASE + path, {
-    headers: { Accept: 'application/json' },
-    signal,
-  })
+  let response: Response
+  try {
+    response = await fetch(API_BASE + path, { headers: { Accept: 'application/json' }, signal })
+  } catch (error) {
+    if (signal?.aborted) throw error
+    throw new ApiError('Connection failed. Start the local Console, then retry.', 0, 'connection_failed')
+  }
   const payload: unknown = await response.json().catch(() => null)
   if (!response.ok) {
     const error =
@@ -47,19 +50,25 @@ async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   return payload as T
 }
 
-export function getWorkspaces(signal?: AbortSignal) {
-  return get<Collection<WorkspaceSummary>>('/workspaces', signal)
+export async function getWorkspaces(signal?: AbortSignal) {
+  const value = await get<unknown>('/workspaces', signal)
+  if (!isCollection(value, 100, isWorkspace)) throw invalidTimeline()
+  return value
 }
 
-export function getTapes(workspaceId: string, signal?: AbortSignal, offset = 0) {
-  return get<Collection<TapeSummary>>(
+export async function getTapes(workspaceId: string, signal?: AbortSignal, offset = 0) {
+  const value = await get<unknown>(
     '/workspaces/' + encodeURIComponent(workspaceId) + '/tapes?limit=50&offset=' + offset,
     signal,
   )
+  if (!isCollection(value, 50, isTape)) throw invalidTimeline()
+  return value
 }
 
-export function getTapeEvents(tapeId: string, signal?: AbortSignal, offset = 0) {
-  return get<TapeEvents>('/tapes/' + encodeURIComponent(tapeId) + '/events?limit=100&offset=' + offset, signal)
+export async function getTapeEvents(tapeId: string, signal?: AbortSignal, offset = 0) {
+  const value = await get<unknown>('/tapes/' + encodeURIComponent(tapeId) + '/events?limit=100&offset=' + offset, signal)
+  if (!isTapeEvents(value, tapeId)) throw invalidTimeline()
+  return value
 }
 
 export function isSavedEvidenceId(id: string): boolean {
@@ -67,7 +76,10 @@ export function isSavedEvidenceId(id: string): boolean {
 }
 
 export async function getSkillDiff(skillId: string, signal?: AbortSignal) {
-  const skill = await get<SkillDiff>('/skills/' + encodeURIComponent(skillId) + '/diff', signal)
+  const skill = await get<unknown>('/skills/' + encodeURIComponent(skillId) + '/diff', signal)
+  if (!isSkillDiff(skill) || skill.id !== skillId) {
+    throw new ApiError('The saved Skill package is invalid or unsupported. Check it with the current CLI, then retry.', 502, 'invalid_skill')
+  }
   const plan = skill.policy_plan
   if (plan != null && (plan.schema !== 'skilltape.dev/policy-plan/v1' || plan.execution !== 'not-run' ||
     typeof plan.allowed !== 'boolean' || typeof plan.package_valid !== 'boolean' ||
@@ -97,6 +109,59 @@ export async function getReceipt(receiptId: string, signal?: AbortSignal) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+const isText = (value: unknown): value is string => typeof value === 'string'
+const isCount = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+const isTimestamp = (value: unknown): value is number => isCount(value) && Number.isFinite(new Date(value).getTime())
+const isTextList = (value: unknown) => Array.isArray(value) && value.every(isText)
+const invalidTimeline = () => new ApiError('The saved timeline is invalid or unsupported. Check the saved Tape, then retry.', 502, 'invalid_timeline')
+
+function isPage(value: Record<string, unknown>) {
+  return value.schema === 'skilltape.dev/console/v1' && isCount(value.offset) &&
+    isCount(value.limit) && value.limit > 0 && isCount(value.total) &&
+    (value.next_offset === null || (isCount(value.next_offset) && value.next_offset > value.offset && value.next_offset <= value.total))
+}
+
+function isCollection<T>(value: unknown, maximum: number, check: (item: unknown) => item is T): value is Collection<T> {
+  return isRecord(value) && isPage(value) && Array.isArray(value.items) && value.items.length <= maximum && value.items.every(check)
+}
+
+function isWorkspace(value: unknown): value is WorkspaceSummary {
+  return isRecord(value) && isText(value.id) && isSavedEvidenceId(value.id) && isText(value.name) &&
+    [value.tape_count, value.skill_count, value.run_count, value.receipt_count].every(isCount)
+}
+
+function isTape(value: unknown): value is TapeSummary {
+  return isRecord(value) && isText(value.id) && isSavedEvidenceId(value.id) && isText(value.schema) &&
+    (value.recorded_id === undefined || isText(value.recorded_id)) && isTimestamp(value.started_at_ms) &&
+    (value.finished_at_ms === null || isTimestamp(value.finished_at_ms)) && isText(value.platform) &&
+    isText(value.workspace_root) && isCount(value.event_count)
+}
+
+function isTapeEvents(value: unknown, id: string): value is TapeEvents {
+  // Match the requested page size, rather than rendering accumulated history.
+  return isRecord(value) && isPage(value) && value.tape_id === id && Array.isArray(value.events) && value.events.length <= 100 &&
+    value.events.every(event => isRecord(event) && isCount(event.sequence) && isTimestamp(event.occurred_at_ms) &&
+      isText(event.kind) && isText(event.source) && Object.hasOwn(event, 'payload') &&
+      isText(event.redaction) && ['unredacted', 'redacted', 'partially_redacted'].includes(event.redaction))
+}
+
+function isSkillDiff(value: unknown): value is SkillDiff {
+  if (!isRecord(value) || value.schema !== 'skilltape.dev/console/v1' || !isText(value.id) || !isText(value.package_path) ||
+    !isRecord(value.manifest) || !isRecord(value.workflow) || !isRecord(value.permissions) || !isRecord(value.lockfile) || !isRecord(value.lint)) return false
+  const permissions = value.permissions, lint = value.lint
+  if (!isRecord(permissions.filesystem) || !isRecord(permissions.process) || !isRecord(permissions.network) || !isRecord(permissions.secrets)) return false
+  const diagnostic = (item: unknown) => isRecord(item) && isText(item.code) && isText(item.file) && isText(item.path) &&
+    isText(item.message) && isText(item.level) && ['error', 'warning'].includes(item.level)
+  return Array.isArray(value.workflow.steps) && value.workflow.steps.every(step => isRecord(step) && isText(step.id) && isText(step.action) &&
+      ['program', 'path', 'operation'].every(field => step[field] === undefined || isText(step[field]))) &&
+    Array.isArray(value.files) && value.files.every(file => isRecord(file) && isText(file.path) && isCount(file.bytes) &&
+      isText(file.sha256) && /^[0-9a-f]{64}$/.test(file.sha256)) &&
+    isCount(lint.files_checked) && Array.isArray(lint.errors) && lint.errors.every(diagnostic) && Array.isArray(lint.warnings) && lint.warnings.every(diagnostic) &&
+    isTextList(permissions.filesystem.read) && isTextList(permissions.filesystem.write) &&
+    isTextList(permissions.process.executables) && isCount(permissions.process.max_processes) && isCount(permissions.process.default_timeout_ms) &&
+    typeof permissions.network.enabled === 'boolean' && isTextList(permissions.network.allow_hosts) && typeof permissions.secrets.read_environment === 'boolean'
 }
 
 function isReceipt(value: unknown): value is Receipt {
@@ -151,6 +216,7 @@ export function formatEventPayload(event: TapeEvent): string {
 
 export function formatDate(timestampMs: number | null): string {
   if (timestampMs === null) return 'Not finished'
+  if (!isTimestamp(timestampMs)) return 'Invalid timestamp'
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: 'medium',
     timeStyle: 'short',

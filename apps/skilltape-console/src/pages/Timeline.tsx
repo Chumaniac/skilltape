@@ -145,7 +145,7 @@ export function TimelinePage({ tapeId, tapeOffset = 0, eventOffset = 0 }: Timeli
       ) : (
         <EmptyState
           title={data.events?.total ? 'No events on this page' : 'This Tape is empty'}
-          message={data.events?.total ? 'Use Previous events to return to an earlier page.' : 'The capture exists, but no events have been persisted yet.'}
+          message={data.events?.total ? 'Use Previous events to return to an earlier page.' : 'This Tape has no saved events.'}
         />
       )}
     </PageSection>

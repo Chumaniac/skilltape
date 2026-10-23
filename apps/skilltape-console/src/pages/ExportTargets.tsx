@@ -7,8 +7,8 @@ export function ExportTargetsPage() {
   ]
   return (
     <div className="page">
-      <h1 className="page-title">Export targets</h1>
-      <p className="page-subtitle">Export the same Skill in a target layout. Each export is linted before writing.</p>
+      <h1 className="page-title">Export guide</h1>
+      <p className="page-subtitle">Run a command below to export a saved Skill. The CLI checks the package before writing files.</p>
       <div className="card-grid">
         {targets.map((t) => (
           <div key={t.id} className="card">

@@ -82,7 +82,7 @@ function App() {
           <NavLink href={'#permissions' + skillQuery} active={route.page === 'permissions'} label="Permissions" icon="⊙" />
           <NavLink href="#receipt" active={route.page === 'receipt'} label="Verify Receipt" icon="✓" />
           <p className="nav-label" style={{ marginTop: 16 }}>Export</p>
-          <NavLink href="#export" active={route.page === 'export'} label="Export targets" icon="⧉" />
+          <NavLink href="#export" active={route.page === 'export'} label="Export guide" icon="⧉" />
         </nav>
         <div className="sidebar-bottom">
           <div className="local-card">
@@ -119,7 +119,7 @@ function App() {
 
         <footer className="app-footer">
           <span>SkillTape Console <span translate="no">v{metadata.version}</span></span>
-          <span>Read-only evidence surface</span>
+          <span>Read-only · no commands run</span>
         </footer>
       </div>
     </div>
@@ -150,7 +150,7 @@ function pageLabel(page: PageKey): string {
   if (page === 'compile') return 'Compile review'
   if (page === 'permissions') return 'Permission review'
   if (page === 'receipt') return 'Verify Receipt'
-  if (page === 'export') return 'Export targets'
+  if (page === 'export') return 'Export guide'
   return 'Capture timeline'
 }
 

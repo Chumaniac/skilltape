@@ -66,10 +66,10 @@ export function PermissionReviewPage({ skillId = '' }: PermissionReviewProps) {
       </header>
 
       <article className="panel" aria-labelledby="policy-preflight-title">
-        <h2 id="policy-preflight-title">Execution policy preflight</h2>
+        <h2 id="policy-preflight-title">Declared policy check</h2>
         <p>Checks declared policy without running steps or creating a Receipt. Inputs, sandbox availability and runtime remain unverified.</p>
         {skill.policy_plan ? <>
-          <StatusBadge tone={skill.policy_plan.allowed ? 'good' : 'danger'}>{skill.policy_plan.allowed ? 'Allowed by declared policy' : 'Blocked — review package'}</StatusBadge>
+          <StatusBadge tone={skill.policy_plan.allowed ? 'good' : 'danger'}>{skill.policy_plan.allowed ? 'Allowed by declared policy' : 'Blocked: review package'}</StatusBadge>
           {skill.policy_plan.package_error_codes.length > 0 && <p>Package findings: {skill.policy_plan.package_error_codes.join(', ')}</p>}
           <details>
             <summary>Inspect {skill.policy_plan.checks.length} policy checks</summary>
@@ -77,7 +77,7 @@ export function PermissionReviewPage({ skillId = '' }: PermissionReviewProps) {
               <button className="button button-secondary" type="button" aria-pressed={!deniedOnly} onClick={() => { setDeniedOnly(false); setCheckPage(0) }}>All checks ({checks.length})</button>
               <button className="button button-secondary" type="button" aria-pressed={deniedOnly} onClick={() => { setDeniedOnly(true); setCheckPage(0) }}>Denied only ({deniedChecks.length})</button>
             </div>
-            {matchingChecks.length === 0 ? <p role="status">No denied checks in this plan.</p> : <>
+            {matchingChecks.length === 0 ? <p role="status">{deniedOnly ? 'No denied checks in this plan.' : 'No policy checks are recorded in this plan.'}</p> : <>
               <p role="status">Showing {checkOffset + 1}–{Math.min(checkOffset + 32, matchingChecks.length)} of {matchingChecks.length} checks</p>
               <ol start={checkOffset + 1}>{matchingChecks.slice(checkOffset, checkOffset + 32).map(check => <li key={check.ordinal}>
                 <code>{check.step_id}</code> · {check.allowed ? 'Allowed' : 'Denied'} · <code>{check.code}</code><p>{check.reason}</p>

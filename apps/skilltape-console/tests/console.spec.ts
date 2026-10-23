@@ -480,8 +480,8 @@ test('permission preflight is bounded, read-only and fails closed on inconsisten
   await mockApi(page)
   await page.route('**/api/v1/skills/demo/diff', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ...skill, policy_plan: plan }) }))
   await page.goto('/#permissions?skill=demo')
-  const panel = page.getByRole('article').filter({ has: page.getByRole('heading', { name: 'Execution policy preflight' }) })
-  await expect(panel.getByText('Blocked — review package', { exact: true })).toBeVisible()
+  const panel = page.getByRole('article').filter({ has: page.getByRole('heading', { name: 'Declared policy check' }) })
+  await expect(panel.getByText('Blocked: review package', { exact: true })).toBeVisible()
   await panel.locator('summary').click()
   await expect(panel.locator('li')).toHaveCount(32)
   await expect(panel).toContainText('Showing 1–32 of 40 checks')
@@ -490,7 +490,7 @@ test('permission preflight is bounded, read-only and fails closed on inconsisten
   await expect(panel.locator('li')).toContainText('step-35')
   await page.setViewportSize({ width: 390, height: 844 })
   await page.screenshot({ path: testInfo.outputPath('preflight-denied-mobile.png'), fullPage: true })
-  await expect(panel.getByText('Blocked — review package', { exact: true })).toBeVisible()
+  await expect(panel.getByText('Blocked: review package', { exact: true })).toBeVisible()
   await panel.getByRole('button', { name: 'All checks (40)', exact: true }).click()
   await panel.getByRole('button', { name: 'Next checks', exact: true }).click()
   await expect(panel.locator('li')).toHaveCount(8)
@@ -513,4 +513,54 @@ test('permission preflight is bounded, read-only and fails closed on inconsisten
   await expect(panel.locator('li')).toHaveCount(0)
   await expect(panel.getByText('Allowed by declared policy', { exact: true })).toBeVisible()
   expect(requests.every(method => method === 'GET')).toBe(true)
+})
+
+
+test('invalid timeline timestamps show a recoverable error instead of crashing', async ({ page }) => {
+  await mockApi(page)
+  await page.route('**/api/v1/tapes/tape-a/events*', route => route.fulfill({json: {
+    schema: 'skilltape.dev/console/v1', tape_id: 'tape-a', offset: 0, limit: 100, total: 1, next_offset: null,
+    events: [{sequence: 0, occurred_at_ms: 9e18, kind: 'terminal_command', source: 'shell', payload: {}, redaction: 'redacted'}],
+  }}), {times: 1})
+  await page.goto('/#timeline')
+  await expect(page.getByRole('alert')).toContainText('The saved timeline is invalid or unsupported.')
+  await page.getByRole('button', {name: 'Retry request'}).click()
+  await expect(page.getByRole('heading', {name: 'Capture timeline', exact: true})).toBeVisible()
+  await expect(page.getByText('Redacted', {exact: true})).toBeVisible()
+})
+
+for (const broken of ['null step', 'invalid permissions', 'invalid file', 'invalid display field'] as const) {
+  test(`malformed package ${broken} keeps compile review recoverable`, async ({ page }) => {
+    await mockApi(page)
+    const payload = broken === 'null step' ? {...skill, workflow: {...skill.workflow, steps: [null]}} :
+      broken === 'invalid display field' ? {...skill, workflow: {...skill.workflow, steps: [{id: 'bad', action: 'exec', program: {toString: 'not callable'}}]}} :
+      broken === 'invalid permissions' ? {...skill, permissions: {...permissions, filesystem: {read: [null], write: []}}} :
+      {...skill, files: [{path: 'workflow.yaml', bytes: 10, sha256: null}]}
+    await page.route('**/api/v1/skills/demo/diff', route => route.fulfill({json: payload}), {times: 1})
+    await page.goto('/#compile?skill=demo')
+    await expect(page.getByRole('alert')).toContainText('The saved Skill package is invalid or unsupported.')
+    await page.getByRole('button', {name: 'Retry request'}).click()
+    await expect(page.getByRole('heading', {name: 'Compiled package', exact: true})).toBeVisible()
+  })
+}
+
+test('an empty policy plan does not imply that checks passed', async ({ page }) => {
+  await mockApi(page)
+  await page.route('**/api/v1/skills/demo/diff', route => route.fulfill({json: {...skill, policy_plan: {
+    schema: 'skilltape.dev/policy-plan/v1', execution: 'not-run', allowed: false, package_valid: false,
+    package_error_codes: ['EMPTY_WORKFLOW'], checks: [],
+  }}}))
+  await page.goto('/#permissions?skill=demo')
+  await page.getByText('Inspect 0 policy checks', {exact: true}).click()
+  await expect(page.getByRole('status')).toHaveText('No policy checks are recorded in this plan.')
+})
+
+
+test('a disconnected Console gives a connection recovery step', async ({ page }) => {
+  await mockApi(page)
+  await page.route('**/api/v1/workspaces', route => route.abort('failed'), {times: 1})
+  await page.goto('/#timeline')
+  await expect(page.getByRole('alert')).toContainText('Start the local Console, then retry.')
+  await page.getByRole('button', {name: 'Retry request'}).click()
+  await expect(page.getByRole('heading', {name: 'Capture timeline', exact: true})).toBeVisible()
 })
