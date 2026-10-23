@@ -1,8 +1,8 @@
 # SkillTape expansion and deep optimization roadmap
 
-Date: 2026-10-09. Status: active source implementation plan. Baseline:
-`4cfc4e3790f947fbd0ec1fb40aafb9863b1e6119`. This document owns the current
-expansion priorities; historical design documents retain their original dates.
+Date: 2026-10-09. Status: historical source plan; the described source work is implemented. Baseline:
+`4cfc4e3790f947fbd0ec1fb40aafb9863b1e6119`. This document records that planning baseline. Current capabilities and distribution
+are owned by [README](../README.md); dated design evidence is retained.
 
 ## Product position and evidence
 
@@ -11,12 +11,12 @@ Receipt. Its distinctive value is the connection between a captured workflow,
 an isolated local replay, retained deliveries and a reviewable export. SkillSync
 is an independent consumer of delivery files, not a replacement runtime.
 
-The published baseline is GitHub v0.2.1. New work in this plan is source work
+The published baseline at the plan date was GitHub v0.2.1. New work in this plan is source work
 until its own release assets and provenance are independently verified. Linux
 Replay/Verify require Bubblewrap and user namespaces; macOS requires
 sandbox-exec. Windows Replay/Verify remain unavailable and fail closed.
 
-## Current distribution and gaps
+## Distribution and gaps at the planning baseline
 
 | Area | Existing owner | Gap to address |
 | --- | --- | --- |
