@@ -1,33 +1,35 @@
 //! Guarded replay execution for loaded SkillTape packages.
 
 use std::collections::BTreeSet;
-use std::fs;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use sha2::{Digest, Sha256};
 use skilltape_core::LoadedSkillPackage;
-use skilltape_policy::{FileAccess, PolicyDecision, PolicyEngine};
+use skilltape_policy::{PolicyDecision, PolicyEngine};
 use skilltape_schema::Step;
 use thiserror::Error;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
+mod execution;
 mod input_io;
+mod policy_checks;
 mod process;
 mod publication;
 #[cfg(any(target_os = "windows", test))]
 mod windows;
 mod workspace;
 
+pub use policy_checks::preview_policy;
 pub use process::{
     ProcessAdapter, ProcessError, ProcessFuture, ProcessOutput, ProcessRequest, ProcessStatus,
     TokioProcessAdapter,
 };
 pub use publication::publish_directory_noreplace;
 
-use workspace::{copy_path, make_directory, move_path, ReplayWorkspace, WorkspaceError};
+use execution::execute_step;
+use policy_checks::{policy_checks, record_decisions};
+use workspace::{ReplayWorkspace, WorkspaceError};
 
 pub const RUNNER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -395,367 +397,6 @@ where
     Ok(summary)
 }
 
-#[derive(Debug)]
-struct StepExecution {
-    status: StepStatus,
-    exit_code: Option<i32>,
-    stdout: Vec<u8>,
-    stderr: Vec<u8>,
-    stdout_truncated: bool,
-    stderr_truncated: bool,
-    failure: Option<RunFailure>,
-}
-
-struct ProcessInvocation {
-    step_id: String,
-    program: String,
-    args: Vec<String>,
-    timeout_ms: u64,
-}
-
-async fn execute_step<A>(
-    step: &Step,
-    workspace: &ReplayWorkspace,
-    limits: &ResourceLimits,
-    adapter: &A,
-    cancel: CancellationToken,
-) -> StepExecution
-where
-    A: ProcessAdapter + ?Sized,
-{
-    match step {
-        Step::Exec(step) => {
-            execute_process(
-                ProcessInvocation {
-                    step_id: step.id.clone(),
-                    program: step.program.clone(),
-                    args: step.args.clone(),
-                    timeout_ms: step.timeout_ms,
-                },
-                workspace,
-                limits,
-                adapter,
-                cancel,
-            )
-            .await
-        }
-        Step::Script(step) => {
-            let program = match workspace.resolve(&step.path) {
-                Ok(path) => path.to_string_lossy().into_owned(),
-                Err(error) => return failed_action(&step.id, error.to_string()),
-            };
-            execute_process(
-                ProcessInvocation {
-                    step_id: step.id.clone(),
-                    program,
-                    args: step.args.clone(),
-                    timeout_ms: step.timeout_ms,
-                },
-                workspace,
-                limits,
-                adapter,
-                cancel,
-            )
-            .await
-        }
-        Step::File(step) => execute_file(step, workspace),
-        Step::Assert(step) => execute_assert(step, workspace),
-    }
-}
-
-async fn execute_process<A>(
-    invocation: ProcessInvocation,
-    workspace: &ReplayWorkspace,
-    limits: &ResourceLimits,
-    adapter: &A,
-    cancel: CancellationToken,
-) -> StepExecution
-where
-    A: ProcessAdapter + ?Sized,
-{
-    let timeout = Duration::from_millis(invocation.timeout_ms).min(limits.step_timeout);
-    let request = ProcessRequest {
-        program: invocation.program,
-        args: invocation.args,
-        cwd: workspace.root().to_path_buf(),
-        timeout,
-        max_output_bytes: limits.max_output_bytes,
-    };
-
-    match adapter.run(request, cancel).await {
-        Ok(output) => process_output(invocation.step_id, output, limits.max_output_bytes),
-        Err(error) => StepExecution {
-            status: StepStatus::SpawnFailed,
-            exit_code: None,
-            stdout: Vec::new(),
-            stderr: error.to_string().into_bytes(),
-            stdout_truncated: false,
-            stderr_truncated: false,
-            failure: Some(RunFailure::Step {
-                step_id: invocation.step_id,
-                status: StepStatus::SpawnFailed,
-                message: error.to_string(),
-            }),
-        },
-    }
-}
-
-fn process_output(step_id: String, output: ProcessOutput, limit: usize) -> StepExecution {
-    let (stdout, stdout_truncated) = bound_output(output.stdout, limit);
-    let (stderr, stderr_truncated) = bound_output(output.stderr, limit);
-    let status = match output.status {
-        ProcessStatus::Exited if output.exit_code == Some(0) => StepStatus::Succeeded,
-        ProcessStatus::Exited => StepStatus::Failed,
-        ProcessStatus::TimedOut => StepStatus::TimedOut,
-        ProcessStatus::Cancelled => StepStatus::Cancelled,
-    };
-    let failure = (status != StepStatus::Succeeded).then(|| RunFailure::Step {
-        step_id,
-        status,
-        message: match status {
-            StepStatus::Failed => format!("process exited with code {:?}", output.exit_code),
-            StepStatus::TimedOut => "process exceeded its timeout".into(),
-            StepStatus::Cancelled => "process was cancelled".into(),
-            _ => "process failed".into(),
-        },
-    });
-    StepExecution {
-        status,
-        exit_code: output.exit_code,
-        stdout,
-        stderr,
-        stdout_truncated: stdout_truncated || output.stdout_truncated,
-        stderr_truncated: stderr_truncated || output.stderr_truncated,
-        failure,
-    }
-}
-
-fn execute_file(step: &skilltape_schema::FileStep, workspace: &ReplayWorkspace) -> StepExecution {
-    let result = (|| {
-        let to = workspace.resolve(&step.to_path)?;
-        match step.operation.as_str() {
-            "copy" => {
-                let from = workspace.resolve(&step.from_path)?;
-                copy_path(&from, &to)
-            }
-            "move" => {
-                let from = workspace.resolve(&step.from_path)?;
-                move_path(&from, &to)
-            }
-            "mkdir" => make_directory(&to),
-            operation => Err(WorkspaceError::UnsafePath {
-                path: format!("unsupported file operation `{operation}`"),
-            }),
-        }
-    })();
-    match result {
-        Ok(()) => succeeded_action(),
-        Err(error) => failed_action(&step.id, error.to_string()),
-    }
-}
-
-fn execute_assert(
-    step: &skilltape_schema::AssertStep,
-    workspace: &ReplayWorkspace,
-) -> StepExecution {
-    let result = (|| {
-        let relative = step
-            .assertion
-            .path
-            .as_deref()
-            .ok_or_else(|| "assertion requires a path".to_owned())?;
-        let path = workspace
-            .resolve(relative)
-            .map_err(|error| error.to_string())?;
-        workspace
-            .ensure_safe_path(&path)
-            .map_err(|error| error.to_string())?;
-        let metadata = match fs::symlink_metadata(&path) {
-            Ok(metadata) => Some(metadata),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-            Err(error) => return Err(error.to_string()),
-        };
-        match step.assertion.assertion_type.as_str() {
-            "file_exists" | "exists" => {
-                if metadata.is_some() {
-                    Ok(())
-                } else {
-                    Err(format!("expected `{relative}` to exist"))
-                }
-            }
-            "file_absent" | "absent" => {
-                if metadata.is_none() {
-                    Ok(())
-                } else {
-                    Err(format!("expected `{relative}` to be absent"))
-                }
-            }
-            "file_hash" | "hash" => {
-                let expected = step
-                    .assertion
-                    .hash
-                    .as_deref()
-                    .ok_or_else(|| "file_hash assertion requires a hash".to_owned())?;
-                let mut file = fs::File::open(&path).map_err(|error| error.to_string())?;
-                let mut hasher = Sha256::new();
-                let mut buffer = [0_u8; 8192];
-                loop {
-                    let bytes_read = match file.read(&mut buffer) {
-                        Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
-                        result => result.map_err(|error| error.to_string())?,
-                    };
-                    if bytes_read == 0 {
-                        break;
-                    }
-                    hasher.update(&buffer[..bytes_read]);
-                }
-                let actual = hasher
-                    .finalize()
-                    .iter()
-                    .map(|byte| format!("{byte:02x}"))
-                    .collect::<String>();
-                if actual.eq_ignore_ascii_case(expected) {
-                    Ok(())
-                } else {
-                    Err(format!(
-                        "sha256 mismatch: expected {expected}, got {actual}"
-                    ))
-                }
-            }
-            assertion_type => Err(format!("unsupported assertion type `{assertion_type}`")),
-        }
-    })();
-    match result {
-        Ok(()) => succeeded_action(),
-        Err(error) => failed_action(&step.id, error),
-    }
-}
-
-fn succeeded_action() -> StepExecution {
-    StepExecution {
-        status: StepStatus::Succeeded,
-        exit_code: None,
-        stdout: Vec::new(),
-        stderr: Vec::new(),
-        stdout_truncated: false,
-        stderr_truncated: false,
-        failure: None,
-    }
-}
-
-fn failed_action(step_id: &str, message: String) -> StepExecution {
-    StepExecution {
-        status: StepStatus::Failed,
-        exit_code: None,
-        stdout: Vec::new(),
-        stderr: message.clone().into_bytes(),
-        stdout_truncated: false,
-        stderr_truncated: false,
-        failure: Some(RunFailure::Step {
-            step_id: step_id.to_owned(),
-            status: StepStatus::Failed,
-            message,
-        }),
-    }
-}
-
-/// Preview the same declared-capability decisions used by replay, without any I/O.
-/// This is not input, sandbox, output, or successful-execution verification.
-pub fn preview_policy(
-    package: &LoadedSkillPackage,
-    policy: &PolicyEngine,
-) -> Result<Vec<PolicyDecisionRecord>, RunError> {
-    const MAX_CHECKS: usize = 1000;
-    if package.workflow.steps.len() > MAX_CHECKS {
-        return Err(RunError::InvalidLimits {
-            message: "policy preview exceeds 1000 steps or checks".into(),
-        });
-    }
-    let mut records = Vec::new();
-    for step in &package.workflow.steps {
-        let count = match step {
-            Step::Exec(step) => 1 + step.outputs.len(),
-            Step::Script(step) => 2 + step.outputs.len(),
-            Step::File(step) => {
-                if step.operation == "mkdir" {
-                    1
-                } else {
-                    2
-                }
-            }
-            Step::Assert(_) => 1,
-        };
-        if count > MAX_CHECKS - records.len() {
-            return Err(RunError::InvalidLimits {
-                message: "policy preview exceeds 1000 steps or checks".into(),
-            });
-        }
-        record_decisions(
-            &mut records,
-            step_id(step),
-            PolicyPhase::Before,
-            &policy_checks(policy, step, package),
-        );
-    }
-    Ok(records)
-}
-
-fn policy_checks(
-    policy: &PolicyEngine,
-    step: &Step,
-    package: &LoadedSkillPackage,
-) -> Vec<PolicyDecision> {
-    let mut decisions = Vec::new();
-    let permissions = &package.permissions;
-    match step {
-        Step::Exec(step) => {
-            decisions.push(policy.check_command(&step.program, &step.args, permissions));
-            for output in &step.outputs {
-                decisions.push(policy.check_path(&output.path, FileAccess::Write, permissions));
-            }
-        }
-        Step::Script(step) => {
-            decisions.push(policy.check_path(&step.path, FileAccess::Read, permissions));
-            decisions.push(policy.check_command(&step.path, &step.args, permissions));
-            for output in &step.outputs {
-                decisions.push(policy.check_path(&output.path, FileAccess::Write, permissions));
-            }
-        }
-        Step::File(step) => {
-            if step.operation != "mkdir" {
-                decisions.push(policy.check_path(&step.from_path, FileAccess::Read, permissions));
-            }
-            decisions.push(policy.check_path(&step.to_path, FileAccess::Write, permissions));
-        }
-        Step::Assert(step) => {
-            decisions.push(policy.check_path(
-                step.assertion.path.as_deref().unwrap_or_default(),
-                FileAccess::Read,
-                permissions,
-            ));
-        }
-    }
-    decisions
-}
-
-fn record_decisions(
-    records: &mut Vec<PolicyDecisionRecord>,
-    step_id: &str,
-    phase: PolicyPhase,
-    decisions: &[PolicyDecision],
-) {
-    records.extend(
-        decisions
-            .iter()
-            .cloned()
-            .map(|decision| PolicyDecisionRecord {
-                step_id: step_id.to_owned(),
-                phase,
-                decision,
-            }),
-    );
-}
-
 fn declared_output_paths(package: &LoadedSkillPackage) -> Vec<String> {
     let mut paths = BTreeSet::new();
     paths.extend(
@@ -811,14 +452,6 @@ async fn emit_event(
         .send(event)
         .await
         .map_err(|_| RunError::EventChannelClosed)
-}
-
-fn bound_output(mut output: Vec<u8>, limit: usize) -> (Vec<u8>, bool) {
-    let truncated = output.len() > limit;
-    if truncated {
-        output.truncate(limit);
-    }
-    (output, truncated)
 }
 
 fn bytes_to_string(bytes: &[u8]) -> String {

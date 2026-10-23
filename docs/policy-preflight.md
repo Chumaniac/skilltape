@@ -13,3 +13,7 @@ Method references from the 2026-10-19 Trending review: [OpenShell's layered capa
 Human output quotes step labels and escapes terminal control and directional characters, including labels from invalid packages. JSON retains its existing serialization contract.
 
 The 2026-10-21 review rechecked [OpenShell policy visibility](https://github.com/NVIDIA/OpenShell/blob/837fdfdc5138aecd856842048efa18ab4106d862/README.md). Only the inspection method is used; no upstream code or runtime is added.
+
+## Runtime source ownership
+
+`skilltape-runner/src/lib.rs` owns the public API, lifecycle ordering and output publication. `policy_checks.rs` owns the same pure checks used by preflight and replay; `execution.rs` owns one process/file/assert step. Process isolation, input snapshots and output publication keep their existing dedicated modules. These internal boundaries do not change the crate's public API, event sequence, cancellation, resource ceilings or receipt format.

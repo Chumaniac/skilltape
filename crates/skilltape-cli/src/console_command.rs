@@ -33,7 +33,7 @@ enum ConsoleError {
     SymlinkWorkspace(PathBuf),
     #[error("console UI dist is unavailable: {0}")]
     InvalidUiDist(PathBuf),
-    #[error("console UI dist is unavailable; run `npm install && npm run build` in apps/skilltape-console or set {UI_DIST_ENV}")]
+    #[error("console UI dist is unavailable; run `npm ci && npm run build` in apps/skilltape-console or set {UI_DIST_ENV}")]
     MissingUiDist,
     #[error(
         "console API binary was not found; build skilltape-console-api or set {API_BINARY_ENV}"
