@@ -103,3 +103,9 @@ These controls are included in the v0.2.3 packages.
 
 Return to the [installation guide](installation.md) for supported targets and
 updates, or the [Quickstart](quickstart.md) to create your first Skill.
+
+### Console read errors and recovery
+
+The Console checks the fields it renders from saved timelines and compiled packages. Out-of-range timestamps, malformed workflow steps, permission shapes and file metadata show an error with a retry action. Check the saved Tape or package with the current CLI before retrying. If the connection fails, start the local Console again.
+
+An empty policy plan is labelled as having no recorded checks; a filter with no denials remains a separate state. The Export guide lists CLI commands, and the Console remains read-only. The 2026-10-23 frontend check covered 34 Console cases plus a production build. Existing saved Tapes, packages, receipts, two delivery bundles and their run-condition records were reread without replay. Twenty navigation changes retained one document, with heap samples of 8,212,728 / 7,535,948 / 7,935,608 bytes; this is a bounded local observation, not a long-duration load result.

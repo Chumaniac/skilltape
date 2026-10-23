@@ -49,7 +49,7 @@ export function PageError({
         !
       </span>
       <div>
-        <h2>Local API unavailable</h2>
+        <h2>Could not load this view</h2>
         <p>{message}</p>
         <button className="button button-secondary" type="button" onClick={onRetry}>
           Retry request
