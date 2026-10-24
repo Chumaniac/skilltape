@@ -199,12 +199,23 @@ export async function getDeliveries(offset = 0, signal?: AbortSignal) {
   return payload
 }
 
+function isDeliveryReview(value: unknown, id: string): value is DeliveryReview {
+  const text = (item: unknown) => isText(item) && item.length <= 4096
+  const optionalText = (item: unknown) => item === null || text(item)
+  return isRecord(value) && value.schema === 'skilltape.dev/delivery-review/v1' && value.id === id &&
+    (value.status === 'passed' || value.status === 'failed') && value.requirement_validation === 'not-run' &&
+    value.provenance === 'not-authenticated' && (value.receipt_binding === 'verified' || value.receipt_binding === 'failed') &&
+    optionalText(value.reported_status) && optionalText(value.run_id) &&
+    (value.declared_files === null || isCount(value.declared_files)) && (value.declared_bytes === null || isCount(value.declared_bytes)) &&
+    isCount(value.checked_files) && isCount(value.checked_bytes) && typeof value.files_truncated === 'boolean' && typeof value.findings_truncated === 'boolean' &&
+    Array.isArray(value.files) && value.files.length <= 100 && value.files.every(file => isRecord(file) && text(file.path) &&
+      isCount(file.bytes) && isText(file.sha256) && /^[0-9a-f]{64}$/.test(file.sha256)) &&
+    Array.isArray(value.findings) && value.findings.length <= 64 && value.findings.every(finding => isRecord(finding) && text(finding.code) && optionalText(finding.path))
+}
+
 export async function getDelivery(id: string, signal?: AbortSignal) {
-  const payload = await get<DeliveryReview>('/deliveries/' + encodeURIComponent(id), signal)
-  if (!payload || payload.schema !== 'skilltape.dev/delivery-review/v1' || payload.id !== id ||
-    !['passed', 'failed'].includes(payload.status) || payload.requirement_validation !== 'not-run' ||
-    payload.provenance !== 'not-authenticated' || !Array.isArray(payload.files) || payload.files.length > 100 ||
-    !Array.isArray(payload.findings) || payload.findings.length > 64) {
+  const payload = await get<unknown>('/deliveries/' + encodeURIComponent(id), signal)
+  if (!isDeliveryReview(payload, id)) {
     throw new ApiError('The saved-delivery inspection is invalid or unsupported. No file acceptance is established.', 502, 'invalid_response')
   }
   return payload

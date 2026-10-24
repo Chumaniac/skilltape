@@ -90,3 +90,22 @@ test('malformed successful responses do not become empty or accepted evidence', 
   await expect(page.getByRole('heading', { name: 'No saved deliveries found' })).toHaveCount(0)
   await expect(page.getByText('Physical files match', { exact: true })).toHaveCount(0)
 })
+
+for (const broken of [
+  { files: [null] }, { findings: [null] }, { files: [{ path: {}, bytes: 100, sha256: 'b'.repeat(64) }] },
+  { checked_files: {} }, { reported_status: {} }, { receipt_binding: 'unknown' },
+]) test('malformed delivery detail stays recoverable: ' + JSON.stringify(broken), async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  let invalid = true
+  await page.route('**/api/v1/**', route => {
+    const path = new URL(route.request().url()).pathname
+    return route.fulfill({ json: path.endsWith('/deliveries') ? { schema: 'skilltape.dev/console/v1', items: [summary('saved-order')], total: 1, offset: 0, limit: 50, next_offset: null } : invalid ? { ...review('saved-order'), ...broken } : review('saved-order') })
+  })
+  await page.goto('/#deliveries?delivery=saved-order')
+  await expect(page.locator('.delivery-selected').getByRole('alert')).toContainText('invalid or unsupported')
+  expect(errors).toEqual([])
+  invalid = false
+  await page.getByRole('button', { name: 'Recheck selected delivery' }).click()
+  await expect(page.getByText('Physical files match', { exact: true })).toBeVisible()
+})

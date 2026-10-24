@@ -80,3 +80,7 @@ link, not a signature or authenticated producer identity. The independent
 contract checks declared requirements, not input truth or general business
 correctness. The current runtime proof uses a macOS restricted process and
 synthetic data. Linux requires Bubblewrap; other runtime acceptance is separate.
+
+## Recheck an unreadable inspection
+
+If the local API returns incomplete file metadata, findings or counts, Console shows an inspection error. Recheck the selected delivery after the API is available again. An unreadable response does not establish file acceptance; retain the saved bundle and its original Receipt.
