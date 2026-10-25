@@ -190,13 +190,18 @@ function isReceipt(value: unknown): value is Receipt {
 }
 
 export async function getDeliveries(offset = 0, signal?: AbortSignal) {
-  const payload = await get<Collection<DeliverySummary>>('/workspaces/default/deliveries?limit=50&offset=' + offset, signal)
-  if (!payload || !Array.isArray(payload.items) || payload.items.length > 50 ||
-    !Number.isSafeInteger(payload.total) || payload.total < 0 || payload.total > 1000 ||
-    !payload.items.every(item => item && typeof item.id === 'string' && typeof item.metadata_valid === 'boolean')) {
-    throw new ApiError('The saved-delivery response is invalid or unsupported. Use the current source API.', 502, 'invalid_response')
+  const payload = await get<unknown>('/workspaces/default/deliveries?limit=50&offset=' + offset, signal)
+  if (!isCollection(payload, 50, isDeliverySummary) || payload.total > 1000 || payload.offset !== offset || payload.limit !== 50) {
+    throw new ApiError('The saved-delivery response is invalid or unsupported. Check the local Console service, then refresh the list.', 502, 'invalid_response')
   }
   return payload
+}
+
+function isDeliverySummary(value: unknown): value is DeliverySummary {
+  const text = (item: unknown) => item === null || (isText(item) && item.length <= 4096)
+  return isRecord(value) && isText(value.id) && value.id.length > 0 && value.id.length <= 4096 &&
+    typeof value.metadata_valid === 'boolean' && text(value.reported_status) && text(value.run_id) &&
+    (value.declared_files === null || isCount(value.declared_files)) && (value.declared_bytes === null || isCount(value.declared_bytes))
 }
 
 function isDeliveryReview(value: unknown, id: string): value is DeliveryReview {
