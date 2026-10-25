@@ -16,7 +16,7 @@ test('saved deliveries can be selected and rechecked without pretending requirem
     if (path.endsWith('/deliveries')) return route.fulfill({ json: { schema: 'skilltape.dev/console/v1',
       items: [summary('saved-order')], total: 1, offset: 0, limit: 50, next_offset: null } })
     if (path.endsWith('/deliveries/saved-order')) return route.fulfill({ json: review('saved-order', ++checks > 1) })
-    return route.fulfill({ json: { items: [], total: 0, offset: 0, limit: 50, next_offset: null } })
+    return route.fulfill({ json: { schema: 'skilltape.dev/console/v1', items: [], total: 0, offset: 0, limit: 50, next_offset: null } })
   })
   await page.goto('/#deliveries')
   await expect(page.getByRole('heading', { name: 'Review saved deliveries' })).toBeVisible()
@@ -52,7 +52,7 @@ test('empty and unavailable roots show actions without demo fallback', async ({ 
   let unavailable = false
   await page.route('**/api/v1/**', async route => {
     if (unavailable) return route.fulfill({ status: 503, json: { error: { message: 'Synthetic inspection unavailable.' } } })
-    return route.fulfill({ json: { items: [], total: 0, offset: 0, limit: 50, next_offset: null } })
+    return route.fulfill({ json: { schema: 'skilltape.dev/console/v1', items: [], total: 0, offset: 0, limit: 50, next_offset: null } })
   })
   await page.goto('/#deliveries')
   await expect(page.getByRole('heading', { name: 'No saved deliveries found' })).toBeVisible()
@@ -108,4 +108,20 @@ for (const broken of [
   invalid = false
   await page.getByRole('button', { name: 'Recheck selected delivery' }).click()
   await expect(page.getByText('Physical files match', { exact: true })).toBeVisible()
+})
+
+for (const broken of [
+  { item: { reported_status: {} } }, { item: { run_id: {} } }, { item: { declared_files: {} } },
+  { item: { declared_bytes: -1 } }, { page: { next_offset: 0 } }, { page: { offset: 50 } }, { page: { limit: 0 } },
+]) test('malformed delivery list stays recoverable: ' + JSON.stringify(broken), async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message)); let invalid = true
+  await page.route('**/api/v1/**', route => route.fulfill({ json: {
+    schema: 'skilltape.dev/console/v1', total: 1, offset: 0, limit: 50, next_offset: null,
+    ...(invalid ? broken.page : {}), items: [{ ...summary('saved-order'), ...(invalid ? broken.item : {}) }],
+  } }))
+  await page.goto('/#deliveries')
+  await expect(page.getByRole('alert')).toContainText('invalid or unsupported'); expect(errors).toEqual([])
+  await expect(page.locator('[data-delivery-row]')).toHaveCount(0)
+  invalid = false; await page.getByRole('button', { name: 'Refresh delivery list' }).click()
+  await expect(page.getByRole('link', { name: 'Inspect saved-order' })).toBeVisible()
 })

@@ -37,7 +37,7 @@ test('comparison summaries are bounded without hiding full counts', () => {
 test('an operator compares real response metadata and changing selection clears the result', async ({ page }) => {
   await page.route('**/api/v1/**', route => {
     const path = new URL(route.request().url()).pathname
-    if (path.endsWith('/deliveries')) return route.fulfill({ json: { items: ['before', 'after', 'incomplete'].map(id => ({ id, metadata_valid: true })), total: 3, offset: 0, next_offset: null } })
+    if (path.endsWith('/deliveries')) return route.fulfill({ json: { schema: 'skilltape.dev/console/v1', items: ['before', 'after', 'incomplete'].map(id => ({ id, metadata_valid: true, reported_status: 'succeeded', run_id: 'a'.repeat(64), declared_files: 3, declared_bytes: 30 })), total: 3, offset: 0, limit: 50, next_offset: null } })
     const id = path.split('/').pop()!
     const r = review(id, id === 'before' ? [file('same'), file('changed'), file('removed')] : [file('same'), file('changed', 'b'.repeat(64)), file('added')])
     if (id === 'incomplete') r.files_truncated = true
@@ -65,7 +65,7 @@ test('an operator compares real response metadata and changing selection clears 
 test('obsolete comparison replies do not replace a later selection', async ({ page }) => {
   await page.route('**/api/v1/**', async route => {
     const id = new URL(route.request().url()).pathname.split('/').pop()!
-    if (id === 'deliveries') return route.fulfill({ json: { items: ['baseline', 'slow', 'current'].map(id => ({ id, metadata_valid: true })), total: 3, offset: 0, next_offset: null } })
+    if (id === 'deliveries') return route.fulfill({ json: { schema: 'skilltape.dev/console/v1', items: ['baseline', 'slow', 'current'].map(id => ({ id, metadata_valid: true, reported_status: 'succeeded', run_id: 'a'.repeat(64), declared_files: 1, declared_bytes: 10 })), total: 3, offset: 0, limit: 50, next_offset: null } })
     if (id === 'slow') await new Promise(resolve => setTimeout(resolve, 300))
     return route.fulfill({ json: review(id, [file(id === 'slow' ? 'obsolete' : 'same')]) }).catch(() => undefined)
   })
