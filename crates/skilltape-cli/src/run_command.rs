@@ -51,7 +51,7 @@ pub(crate) struct VerifyConfig {
 }
 
 #[derive(Debug, Error)]
-enum RunCommandError {
+pub(super) enum RunCommandError {
     #[error("skill package failed to load: {0}")]
     Package(#[from] PackageError),
     #[error("input root is invalid: {0}")]
@@ -232,7 +232,9 @@ fn execute_replay(config: ReplayConfig) -> Result<RunSummary, RunCommandError> {
     ))
 }
 
-fn execute_verify(config: VerifyConfig) -> Result<(Receipt, RunContext), RunCommandError> {
+pub(super) fn execute_verify(
+    config: VerifyConfig,
+) -> Result<(Receipt, RunContext), RunCommandError> {
     if config.expected_files.len() + config.expected_hashes.len() > 64
         || config.expected_files.iter().any(|path| path.len() > 1024)
     {
@@ -551,7 +553,7 @@ fn preflight_receipt(path: &Path) -> Result<(), RunCommandError> {
     }
 }
 
-fn write_receipt(path: &Path, document: &str) -> Result<(), RunCommandError> {
+pub(super) fn write_receipt(path: &Path, document: &str) -> Result<(), RunCommandError> {
     let path = absolute_path(path).map_err(|_| RunCommandError::UnsafeReceipt(path.to_owned()))?;
     ensure_safe_ancestors(&path)?;
     match fs::symlink_metadata(&path) {
@@ -612,7 +614,7 @@ fn ensure_safe_ancestors(path: &Path) -> Result<(), RunCommandError> {
     Ok(())
 }
 
-fn ancestors_are_safe(path: &Path) -> bool {
+pub(super) fn ancestors_are_safe(path: &Path) -> bool {
     let mut current = PathBuf::new();
     for component in path.components() {
         current.push(component);

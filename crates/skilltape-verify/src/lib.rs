@@ -152,6 +152,11 @@ fn ensure_directory(path: &Path) -> io::Result<()> {
     Ok(())
 }
 
+/// Compute the same package fingerprint used by Receipt v1 without executing it.
+pub fn package_fingerprint(package: &LoadedSkillPackage) -> io::Result<String> {
+    digest_tree(&package.root)
+}
+
 fn digest_tree(root: &Path) -> io::Result<String> {
     ensure_directory(root)?;
     let mut files = Vec::new();

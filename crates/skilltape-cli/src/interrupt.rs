@@ -59,6 +59,17 @@ pub(crate) async fn wait_for_interrupt() {
     std::future::pending::<()>().await;
 }
 
+pub(crate) fn is_interrupted() -> bool {
+    #[cfg(unix)]
+    {
+        INTERRUPTED.load(Ordering::Acquire)
+    }
+    #[cfg(not(unix))]
+    {
+        false
+    }
+}
+
 pub(crate) async fn cancellable<T>(
     future: impl Future<Output = T>,
     cancel: CancellationToken,

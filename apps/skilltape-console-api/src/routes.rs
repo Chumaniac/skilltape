@@ -125,6 +125,7 @@ struct AppState {
 pub fn router_with_static(model: ConsoleReadModel, static_root: Option<PathBuf>) -> Router {
     Router::new()
         .route("/api/v1/workspaces", get(list_workspaces))
+        .route("/api/v1/batch", get(batch_review))
         .route("/api/v1/workspaces/{id}/tapes", get(list_tapes))
         .route("/api/v1/workspaces/{id}/deliveries", get(list_deliveries))
         .route("/api/v1/deliveries/{id}", get(delivery_review))
@@ -151,6 +152,14 @@ fn inspection_permit(state: &AppState) -> Result<tokio::sync::OwnedSemaphorePerm
             code: "inspection_busy",
             message: "Two inspections are active. Retry after they finish.",
         })
+}
+
+async fn batch_review(
+    State(state): State<AppState>,
+) -> Result<Json<skilltape_core::batch::BatchReview>, ApiError> {
+    let permit = inspection_permit(&state)?;
+    let (report, _permit) = inspect(permit, move || state.model.batch_review()).await?;
+    Ok(Json(report))
 }
 
 async fn inspect<T, F>(

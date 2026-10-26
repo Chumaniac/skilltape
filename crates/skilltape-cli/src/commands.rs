@@ -6,6 +6,8 @@ use skilltape_core::{create_skill_template, Diagnostic, LintReport, SkillPackage
 
 use crate::output;
 
+#[path = "batch_command.rs"]
+mod batch_command;
 #[path = "capture_command.rs"]
 mod capture_command;
 #[path = "compile_command.rs"]
@@ -33,6 +35,11 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Prepare, execute and resume a bounded set of local verification cases.
+    Batch {
+        #[command(subcommand)]
+        command: batch_command::BatchCommand,
+    },
     /// Prepare or explicitly run one of two bounded, local starter tasks.
     Starter {
         #[command(subcommand)]
@@ -140,13 +147,14 @@ enum Command {
 pub fn run() -> ExitCode {
     let _interrupt_guard = if matches!(
         std::env::args().nth(1).as_deref(),
-        Some("capture" | "replay" | "verify" | "starter")
+        Some("capture" | "replay" | "verify" | "starter" | "batch")
     ) {
         Some(crate::interrupt::InterruptGuard::install())
     } else {
         None
     };
     match Cli::parse().command {
+        Command::Batch { command } => batch_command::run(command),
         Command::Starter { command } => starter_command::run(command),
         Command::Preflight { skill_path, json } => preflight_command::run(skill_path, json),
         Command::Init {

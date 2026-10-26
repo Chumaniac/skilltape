@@ -8,10 +8,11 @@ import { PermissionReviewPage } from './pages/PermissionReview'
 import { ReceiptViewPage } from './pages/ReceiptView'
 import { TimelinePage } from './pages/Timeline'
 import { DeliveriesPage } from './pages/Deliveries'
+import { BatchReviewPage } from './pages/BatchReview'
 import metadata from '../package.json'
 import './styles.css'
 
-type PageKey = 'timeline' | 'compile' | 'permissions' | 'receipt' | 'export' | 'deliveries'
+type PageKey = 'timeline' | 'compile' | 'permissions' | 'receipt' | 'export' | 'deliveries' | 'batch'
 
 interface RouteState {
   page: PageKey
@@ -33,7 +34,7 @@ function readRoute(): RouteState {
   const hash = window.location.hash.replace(/^#/, '') || 'timeline'
   const [pageValue, query] = hash.split('?')
   const page: PageKey =
-    pageValue === 'compile' || pageValue === 'permissions' || pageValue === 'receipt' || pageValue === 'export' || pageValue === 'deliveries'
+    pageValue === 'compile' || pageValue === 'permissions' || pageValue === 'receipt' || pageValue === 'export' || pageValue === 'deliveries' || pageValue === 'batch'
       ? pageValue
       : 'timeline'
   const params = new URLSearchParams(query)
@@ -76,6 +77,7 @@ function App() {
         <div className="sidebar-rule" />
         <nav aria-label="Console sections">
           <p className="nav-label">Inspect</p>
+          <NavLink href="#batch" active={route.page === 'batch'} label="Verification batch" icon="▦" />
           <NavLink href="#deliveries" active={route.page === 'deliveries'} label="Delivery workbench" icon="▤" />
           <NavLink href="#timeline" active={route.page === 'timeline'} label="Capture timeline" icon="◌" />
           <NavLink href={'#compile' + skillQuery} active={route.page === 'compile'} label="Compile review" icon="⌁" />
@@ -109,6 +111,7 @@ function App() {
         </header>
 
         <main id="main-content" className="main-content">
+          {route.page === 'batch' ? <BatchReviewPage /> : null}
           {route.page === 'deliveries' ? <DeliveriesPage deliveryId={route.deliveryId} offset={route.deliveryOffset} /> : null}
           {route.page === 'timeline' ? <TimelinePage tapeId={route.tapeId} tapeOffset={route.tapeOffset} eventOffset={route.eventOffset} /> : null}
           {route.page === 'compile' ? <CompileReviewPage key={route.skillId ?? ''} skillId={route.skillId} /> : null}
@@ -146,6 +149,7 @@ function NavLink({
 }
 
 function pageLabel(page: PageKey): string {
+  if (page === 'batch') return 'Verification batch'
   if (page === 'deliveries') return 'Delivery workbench'
   if (page === 'compile') return 'Compile review'
   if (page === 'permissions') return 'Permission review'
