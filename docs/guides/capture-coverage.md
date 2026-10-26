@@ -15,3 +15,5 @@ A stable finished capture is labelled a finished snapshot. Open captures may con
 The same Tape path, manifest, JSONL, event-count and sequence checks apply to the event view and coverage view. The scan uses the existing 16 MiB and 100,000-event budgets. Invalid or oversized recordings return an error rather than partial success. Two concurrent inspection slots bound active work even when an HTTP caller disconnects.
 
 The read-only resource is `GET /api/v1/tapes/{id}/coverage`, with schema `skilltape.dev/tape-coverage/v1`. Counters and bounded sequence references describe the observed capture only; they do not authorize a workflow replay or confirm business requirements.
+
+Both event-page and coverage reads resolve the checked Tape path and confirm it stays under the chosen workspace's Tape directory before shared manifest or stream access. Existing no-symlink and single-component identifier checks still apply; safe dotted identifiers remain supported.

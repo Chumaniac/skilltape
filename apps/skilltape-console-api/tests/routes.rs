@@ -517,3 +517,39 @@ async fn tape_coverage_keeps_storage_budget_and_identifier_guards() {
     let (status, _, _) = request(&root, "/api/v1/tapes/..%2Foutside/coverage", &[]).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test]
+async fn tape_reads_keep_safe_dotted_identifiers_and_reject_encoded_escape_paths() {
+    let (_temp, root) = fixture();
+    fs::rename(
+        root.join(".skilltape/tapes/tape-a"),
+        root.join(".skilltape/tapes/tape..saved"),
+    )
+    .unwrap();
+    for resource in ["coverage", "events"] {
+        let (status, _, _) =
+            request(&root, &format!("/api/v1/tapes/tape..saved/{resource}"), &[]).await;
+        assert_eq!(status, StatusCode::OK);
+        for id in ["..%2Foutside", "..%5Coutside", "%2Fabsolute", "C%3Aother"] {
+            let (status, _, _) =
+                request(&root, &format!("/api/v1/tapes/{id}/{resource}"), &[]).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST);
+        }
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn coverage_rejects_linked_tape_roots_and_members() {
+    use std::os::unix::fs::symlink;
+    let (_temp, root) = fixture();
+    let original = root.join(".skilltape/tapes/tape-a");
+    symlink(&original, root.join(".skilltape/tapes/linked")).unwrap();
+    let (status, _, _) = request(&root, "/api/v1/tapes/linked/coverage", &[]).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    let events = original.join("events.jsonl");
+    fs::rename(&events, original.join("retained-events.jsonl")).unwrap();
+    symlink(original.join("retained-events.jsonl"), &events).unwrap();
+    let (status, _, _) = request(&root, "/api/v1/tapes/tape-a/coverage", &[]).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}

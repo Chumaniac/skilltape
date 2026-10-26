@@ -243,9 +243,16 @@ impl ConsoleReadModel {
 
     fn checked_tape(&self, tape_id: &str) -> Result<TapeStore, ReadModelError> {
         validate_id(tape_id)?;
-        let tape_path = self.storage_child("tapes")?.join(tape_id);
+        let storage = self.storage_child("tapes")?;
+        let tape_path = storage.join(tape_id);
         self.ensure_safe_path(&tape_path)?;
         reject_symlink_tree(&tape_path)?;
+        // Check containment on the resolved path before passing it to shared I/O.
+        // Keep the earlier no-symlink checks and valid single-component IDs.
+        let tape_path = tape_path.canonicalize()?;
+        if !tape_path.starts_with(&storage) {
+            return Err(ReadModelError::UnsafePath);
+        }
         if fs::metadata(tape_path.join("manifest.json"))?.len() > MAX_TAPE_MANIFEST_BYTES {
             return Err(ReadModelError::InvalidDocument);
         }
