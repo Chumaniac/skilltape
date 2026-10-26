@@ -19,6 +19,9 @@ const MAX_PAGE_SIZE: usize = 100;
 const MAX_EVENT_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_TAPE_EVENTS: u64 = 100_000;
 const MAX_TAPE_MANIFEST_BYTES: u64 = 64 * 1024;
+// Match the existing Receipt-context budget; larger saved documents need a
+// paginated format before Console can safely inspect them.
+const MAX_STORED_DOCUMENT_BYTES: u64 = 8 * 1024 * 1024;
 const REQUIRED_PACKAGE_FILES: [&str; 6] = [
     "skilltape.yaml",
     "workflow.yaml",
@@ -338,15 +341,14 @@ impl ConsoleReadModel {
         validate_id(id)?;
         let root = self.storage_child("receipts")?;
         let receipt =
-            self.bounded_context_file(&root.join(format!("{id}.json")), 8 * 1024 * 1024)?;
+            self.bounded_stored_file(&root.join(format!("{id}.json")), MAX_STORED_DOCUMENT_BYTES)?;
         let review = |status: &str, context: Option<skilltape_verify::RunContext>| {
             serde_json::json!({
                 "schema": "skilltape.dev/context-review/v1", "id": id, "status": status,
                 "context": context, "provenance": "not-authenticated"
             })
         };
-        let bytes = match self.bounded_context_file(&root.join(format!("{id}.json.context")), 4096)
-        {
+        let bytes = match self.bounded_stored_file(&root.join(format!("{id}.json.context")), 4096) {
             Ok(bytes) => bytes,
             Err(ReadModelError::NotFound) => return Ok(review("unrecorded", None)),
             Err(ReadModelError::InvalidDocument) => return Ok(review("invalid", None)),
@@ -358,20 +360,21 @@ impl ConsoleReadModel {
         }
     }
 
-    fn bounded_context_file(&self, path: &Path, limit: u64) -> Result<Vec<u8>, ReadModelError> {
+    fn bounded_stored_file(&self, path: &Path, limit: u64) -> Result<Vec<u8>, ReadModelError> {
         self.ensure_safe_path(path)?;
         let mut options = fs::OpenOptions::new();
         options.read(true);
         #[cfg(unix)]
         {
             use std::os::unix::fs::OpenOptionsExt;
-            options.custom_flags(libc::O_NOFOLLOW);
+            options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
         }
         let file = options.open(path).map_err(|error| match error.kind() {
             io::ErrorKind::NotFound => ReadModelError::NotFound,
             _ => ReadModelError::UnsafePath,
         })?;
-        if !file.metadata()?.is_file() || file.metadata()?.len() > limit {
+        let metadata = file.metadata()?;
+        if !metadata.is_file() || metadata.len() > limit {
             return Err(ReadModelError::InvalidDocument);
         }
         let mut bytes = Vec::new();
@@ -630,10 +633,7 @@ impl ConsoleReadModel {
         if metadata.file_type().is_symlink() || !metadata.is_file() {
             return Err(ReadModelError::UnsafePath);
         }
-        let bytes = fs::read(path).map_err(|error| match error.kind() {
-            io::ErrorKind::NotFound => ReadModelError::NotFound,
-            _ => ReadModelError::Io(error),
-        })?;
+        let bytes = self.bounded_stored_file(path, MAX_STORED_DOCUMENT_BYTES)?;
         let document =
             serde_json::from_slice(&bytes).map_err(|_| ReadModelError::InvalidDocument)?;
         let schema = match kind {
