@@ -129,6 +129,7 @@ pub fn router_with_static(model: ConsoleReadModel, static_root: Option<PathBuf>)
         .route("/api/v1/workspaces/{id}/deliveries", get(list_deliveries))
         .route("/api/v1/deliveries/{id}", get(delivery_review))
         .route("/api/v1/tapes/{id}/events", get(tape_events))
+        .route("/api/v1/tapes/{id}/coverage", get(tape_coverage))
         .route("/api/v1/skills/{id}/diff", get(skill_diff))
         .route("/api/v1/runs/{id}", get(run_document))
         .route("/api/v1/receipts/{id}", get(receipt_document))
@@ -227,6 +228,15 @@ async fn tape_events(
 ) -> Result<Json<TapeEvents>, ApiError> {
     let (offset, limit) = page(&query)?;
     Ok(Json(state.model.tape_events(&tape_id, offset, limit)?))
+}
+
+async fn tape_coverage(
+    State(state): State<AppState>,
+    Path(tape_id): Path<String>,
+) -> Result<Json<crate::coverage::TapeCoverage>, ApiError> {
+    let permit = inspection_permit(&state)?;
+    let (report, _permit) = inspect(permit, move || state.model.tape_coverage(&tape_id)).await?;
+    Ok(Json(report))
 }
 
 async fn skill_diff(
