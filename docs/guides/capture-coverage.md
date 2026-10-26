@@ -17,3 +17,5 @@ The same Tape path, manifest, JSONL, event-count and sequence checks apply to th
 The read-only resource is `GET /api/v1/tapes/{id}/coverage`, with schema `skilltape.dev/tape-coverage/v1`. Counters and bounded sequence references describe the observed capture only; they do not authorize a workflow replay or confirm business requirements.
 
 Both event-page and coverage reads resolve the checked Tape path and confirm it stays under the chosen workspace's Tape directory before shared manifest or stream access. Existing no-symlink and single-component identifier checks still apply; safe dotted identifiers remain supported.
+
+A manifest must be a regular file. Missing manifests keep their not-found response; invalid types and unreadable metadata produce a bounded invalid-document response without forwarding filesystem error objects into the selected store.

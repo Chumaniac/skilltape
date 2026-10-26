@@ -538,6 +538,20 @@ async fn tape_reads_keep_safe_dotted_identifiers_and_reject_encoded_escape_paths
     }
 }
 
+#[tokio::test]
+async fn tape_reads_reject_a_manifest_directory_as_an_invalid_document() {
+    let (_temp, root) = fixture();
+    let manifest = root.join(".skilltape/tapes/tape-a/manifest.json");
+    fs::remove_file(&manifest).unwrap();
+    fs::create_dir(&manifest).unwrap();
+    for resource in ["coverage", "events"] {
+        let (status, _, value) =
+            request(&root, &format!("/api/v1/tapes/tape-a/{resource}"), &[]).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(value["error"]["code"], "invalid_document");
+    }
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn coverage_rejects_linked_tape_roots_and_members() {

@@ -253,7 +253,14 @@ impl ConsoleReadModel {
         if !tape_path.starts_with(&storage) {
             return Err(ReadModelError::UnsafePath);
         }
-        if fs::metadata(tape_path.join("manifest.json"))?.len() > MAX_TAPE_MANIFEST_BYTES {
+        let manifest_metadata = match fs::symlink_metadata(tape_path.join("manifest.json")) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                return Err(ReadModelError::NotFound);
+            }
+            Err(_) => return Err(ReadModelError::InvalidDocument),
+        };
+        if !manifest_metadata.is_file() || manifest_metadata.len() > MAX_TAPE_MANIFEST_BYTES {
             return Err(ReadModelError::InvalidDocument);
         }
         TapeStore::open(&tape_path).map_err(map_tape_error)
