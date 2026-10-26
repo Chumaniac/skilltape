@@ -360,6 +360,83 @@ impl ConsoleReadModel {
         }
     }
 
+    pub fn batch_review(&self) -> Result<skilltape_core::batch::BatchReview, ReadModelError> {
+        use skilltape_core::batch::{BatchPlan, BatchState, BatchStatus, MAX_BATCH_METADATA_BYTES};
+        let metadata = self.storage_child("batch.json")?;
+        let bytes = self.bounded_stored_file(&metadata, MAX_BATCH_METADATA_BYTES)?;
+        let state: BatchState =
+            serde_json::from_slice(&bytes).map_err(|_| ReadModelError::InvalidDocument)?;
+        state
+            .validate()
+            .map_err(|_| ReadModelError::InvalidDocument)?;
+        let plan = self.bounded_stored_file(
+            &self.storage_child("batch-plan.json")?,
+            MAX_BATCH_METADATA_BYTES,
+        )?;
+        let parsed: BatchPlan =
+            serde_json::from_slice(&plan).map_err(|_| ReadModelError::InvalidDocument)?;
+        parsed
+            .validate()
+            .map_err(|_| ReadModelError::InvalidDocument)?;
+        if sha256(&plan) != state.plan_sha256
+            || parsed.cases.len() != state.cases.len()
+            || parsed
+                .cases
+                .iter()
+                .zip(&state.cases)
+                .any(|(plan, case)| plan.id != case.id)
+        {
+            return Err(ReadModelError::InvalidDocument);
+        }
+        let mut report = state.review();
+        for (index, case) in state.cases.iter().enumerate() {
+            let Some(attempt) = case.attempts.last() else {
+                continue;
+            };
+            if !matches!(
+                attempt.status,
+                BatchStatus::Succeeded | BatchStatus::Failed | BatchStatus::Cancelled
+            ) {
+                continue;
+            }
+            let valid = (|| -> Result<bool, ReadModelError> {
+                let id = format!("{}-a{}", case.id, attempt.number);
+                validate_id(&id)?;
+                let folder = self.storage_child("receipts")?;
+                let receipt =
+                    self.bounded_stored_file(&folder.join(format!("{id}.json")), 1024 * 1024)?;
+                let context =
+                    self.bounded_stored_file(&folder.join(format!("{id}.json.context")), 4096)?;
+                let parsed: skilltape_verify::RunContext = serde_json::from_slice(&context)
+                    .map_err(|_| ReadModelError::InvalidDocument)?;
+                let document: Value = serde_json::from_slice(&receipt)
+                    .map_err(|_| ReadModelError::InvalidDocument)?;
+                let recorded_status = match document["status"].as_str() {
+                    Some("succeeded") => BatchStatus::Succeeded,
+                    Some("cancelled") => BatchStatus::Cancelled,
+                    Some("run_failed" | "assertion_failed") => BatchStatus::Failed,
+                    _ => return Ok(false),
+                };
+                Ok(
+                    attempt.receipt_sha256.as_deref() == Some(sha256(&receipt).as_str())
+                        && attempt.context_sha256.as_deref() == Some(sha256(&context).as_str())
+                        && parsed.binds_receipt(&receipt)
+                        && recorded_status == attempt.status
+                        && parsed.skill_hash == state.package_sha256
+                        && parsed.input_set_sha256 == attempt.input_sha256,
+                )
+            })()
+            .unwrap_or(false);
+            if !valid {
+                report.status = "unconfirmed";
+                report.cases[index].status = BatchStatus::Unconfirmed;
+                report.cases[index].evidence = "changed";
+                report.cases[index].error_code = Some("evidence-changed".into());
+            }
+        }
+        Ok(report)
+    }
+
     fn bounded_stored_file(&self, path: &Path, limit: u64) -> Result<Vec<u8>, ReadModelError> {
         self.ensure_safe_path(path)?;
         let mut options = fs::OpenOptions::new();

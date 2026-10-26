@@ -285,6 +285,46 @@ async fn run_and_receipt_routes_return_stored_documents() {
 }
 
 #[tokio::test]
+async fn batch_review_reads_only_bounded_case_metadata_and_rejects_tampering() {
+    use sha2::{Digest, Sha256};
+    let (_temp, root) = fixture();
+    let plan = serde_json::to_vec(&json!({"schema":"skilltape.dev/batch-plan/v1","skill":"private-source-skill","cases":[{"id":"north","input":"private-input-folder"}]})).unwrap();
+    fs::write(root.join(".skilltape/batch-plan.json"), &plan).unwrap();
+    let digest: String = Sha256::digest(&plan)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    let mut state = json!({"schema":"skilltape.dev/batch-state/v1","plan_sha256":digest,"package_sha256":"a".repeat(64),"revision":1,"cases":[{"id":"north","input_sha256":"b".repeat(64),"generation":0,"attempts":[]}]});
+    fs::write(
+        root.join(".skilltape/batch.json"),
+        serde_json::to_vec(&state).unwrap(),
+    )
+    .unwrap();
+    let (status, body, report) = request(&root, "/api/v1/batch", &[]).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(report["status"], "pending");
+    assert_eq!(report["cases"][0]["id"], "north");
+    assert_eq!(report["max_cases"], 16);
+    for private in [
+        "private-source-skill",
+        "private-input-folder",
+        root.to_str().unwrap(),
+    ] {
+        assert!(!body.contains(private));
+    }
+    state["cases"][0]["id"] = json!("../outside");
+    fs::write(
+        root.join(".skilltape/batch.json"),
+        serde_json::to_vec(&state).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        request(&root, "/api/v1/batch", &[]).await.0,
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+}
+
+#[tokio::test]
 async fn run_events_are_replayable_sse_with_resume_and_terminal_event() {
     let (_temp, root) = fixture();
     let (status, body, _) = request(&root, "/api/v1/runs/run-a/events", &[]).await;

@@ -1,4 +1,5 @@
 import { validContextReview } from './run-context'
+import { validBatchReview } from './batch'
 import type {
   Collection,
   DeliveryReview,
@@ -54,6 +55,12 @@ async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
 export async function getWorkspaces(signal?: AbortSignal) {
   const value = await get<unknown>('/workspaces', signal)
   if (!isCollection(value, 100, isWorkspace)) throw invalidTimeline()
+  return value
+}
+
+export async function getBatchReview(signal?: AbortSignal) {
+  const value=await get<unknown>('/batch',signal)
+  if(!validBatchReview(value)) throw new ApiError('Batch progress is invalid or unsupported. Inspect the saved workspace before continuing.',502,'invalid_batch')
   return value
 }
 

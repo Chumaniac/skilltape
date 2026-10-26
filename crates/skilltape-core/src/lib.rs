@@ -1,3 +1,4 @@
+pub mod batch;
 mod diagnostic;
 mod package;
 mod template;

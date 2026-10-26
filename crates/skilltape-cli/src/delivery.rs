@@ -15,7 +15,7 @@ const MAX_TOTAL_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_METADATA_BYTES: usize = 1024 * 1024;
 
 #[derive(Debug, Error)]
-pub(super) enum DeliveryError {
+pub(crate) enum DeliveryError {
     #[error("destination must be a new safe directory outside the input and package")]
     InvalidDestination,
     #[error("destination already exists")]

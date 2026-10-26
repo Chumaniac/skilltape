@@ -13,6 +13,8 @@ configuration file.
 
 ## Local starter tasks (main)
 
+Source builds also support [resumable verification batches](docs/verification-batches.md): freeze a reviewed Skill and multiple input sets, run cases sequentially, explicitly retry failed cases with corrected snapshots, and review current/earlier Receipts in Console. Successful attempts remain unchanged; unknown outcomes do not automatically rerun. Preparation executes nothing, and this feature is not in the unchanged v0.4.1 download.
+
 Create materials, review the inputs, then explicitly run one fixed local task:
 
 ```sh
