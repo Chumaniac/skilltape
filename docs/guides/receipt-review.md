@@ -36,8 +36,15 @@ the supported document shape before rendering, rejects unknown fields, and
 shows an actionable error instead of treating malformed data as a success.
 Each steps/assertions/policy collection is limited to 1,000 entries; displayed
 text fields are limited to 4,096 characters. Larger documents remain outside
-this view. These are display limits after JSON decoding, not an API file-read
-or process-memory ceiling.
+this view. These display limits apply after JSON decoding.
+
+Current source builds also limit each saved Run or Receipt JSON file to 8 MiB,
+matching the existing Receipt-context limit. The API checks the opened file's
+size and reads at most the limit plus one byte before decoding. An oversized
+file returns `422 invalid_document`; Console leaves the original untouched so
+you can select another record. Files exactly at the limit remain readable,
+subject to the existing document-shape and display checks. This bounds input
+reads, not total process memory. The published v0.4.1 packages are unchanged.
 
 The viewer only issues read requests. It does not execute a Skill, rerun
 verification, alter a saved Receipt, authenticate its author, or establish

@@ -215,6 +215,64 @@ async fn skill_diff_exposes_hashes_and_lint_without_absolute_paths() {
 }
 
 #[tokio::test]
+async fn saved_document_routes_enforce_the_read_budget_without_changing_files() {
+    let (_temp, root) = fixture();
+    for (relative, uri) in [
+        (".skilltape/runs/run-a/run.json", "/api/v1/runs/run-a"),
+        (".skilltape/receipts/run-a.json", "/api/v1/receipts/run-a"),
+    ] {
+        let path = root.join(relative);
+        let original = fs::read(&path).unwrap();
+        // JSON whitespace exercises the input budget without a huge response body.
+        let mut bytes = original.clone();
+        bytes.resize(8 * 1024 * 1024, b' ');
+        fs::write(&path, &bytes).unwrap();
+        let (status, _, _) = request(&root, uri, &[]).await;
+        assert_eq!(
+            status,
+            StatusCode::OK,
+            "document exactly at the limit: {uri}"
+        );
+
+        bytes.push(b' ');
+        fs::write(&path, &bytes).unwrap();
+        let (status, body, response) = request(&root, uri, &[]).await;
+        assert_eq!(
+            status,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "oversized document: {uri}"
+        );
+        assert_eq!(response["error"]["code"], "invalid_document");
+        assert!(!body.contains(root.to_string_lossy().as_ref()));
+        assert_eq!(fs::read(&path).unwrap(), bytes);
+
+        fs::write(&path, &original).unwrap();
+        assert_eq!(request(&root, uri, &[]).await.0, StatusCode::OK);
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn saved_document_routes_reject_symlinks_and_directories() {
+    let (_temp, root) = fixture();
+    let outside = root.join("outside.json");
+    fs::write(&outside, b"{}").unwrap();
+    for (relative, uri) in [
+        (".skilltape/runs/run-a/run.json", "/api/v1/runs/run-a"),
+        (".skilltape/receipts/run-a.json", "/api/v1/receipts/run-a"),
+    ] {
+        let path = root.join(relative);
+        fs::remove_file(&path).unwrap();
+        std::os::unix::fs::symlink(&outside, &path).unwrap();
+        assert_eq!(request(&root, uri, &[]).await.0, StatusCode::FORBIDDEN);
+        fs::remove_file(&path).unwrap();
+        fs::create_dir(&path).unwrap();
+        assert_eq!(request(&root, uri, &[]).await.0, StatusCode::FORBIDDEN);
+    }
+    assert_eq!(fs::read(outside).unwrap(), b"{}");
+}
+
+#[tokio::test]
 async fn run_and_receipt_routes_return_stored_documents() {
     let (_temp, root) = fixture();
     let (status, _body, run) = request(&root, "/api/v1/runs/run-a", &[]).await;
