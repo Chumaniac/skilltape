@@ -411,3 +411,109 @@ async fn receipt_context_is_optional_bound_bounded_and_rejects_untrusted_fields(
     assert_eq!(request(&root, uri, &[]).await.2["status"], "invalid");
     assert_eq!(fs::read(folder.join("run-a.json")).unwrap(), receipt);
 }
+
+#[tokio::test]
+async fn tape_coverage_reports_the_whole_capture_without_payloads() {
+    let (_temp, root) = fixture();
+    let store = TapeStore::create(
+        root.join(".skilltape/tapes/coverage"),
+        TapeManifest {
+            schema: TAPE_SCHEMA_V1.to_owned(),
+            id: "coverage".to_owned(),
+            started_at_ms: 100,
+            finished_at_ms: None,
+            platform: "synthetic".to_owned(),
+            workspace_root: "private-workspace-sentinel".to_owned(),
+            event_count: 0,
+        },
+    )
+    .unwrap();
+    for sequence in 0..130 {
+        let warning = sequence % 17 == 0;
+        store
+            .append(&TapeEvent {
+                sequence,
+                occurred_at_ms: 100 + sequence,
+                kind: if warning {
+                    TapeEventKind::CaptureWarning
+                } else {
+                    TapeEventKind::TerminalCommand
+                },
+                source: if warning {
+                    EventSource::System
+                } else {
+                    EventSource::Shell
+                },
+                payload: json!({"secret":"SYNTHETIC_COVERAGE_PAYLOAD_SENTINEL"}),
+                redaction: match sequence % 3 {
+                    0 => RedactionState::Unredacted,
+                    1 => RedactionState::PartiallyRedacted,
+                    _ => RedactionState::Redacted,
+                },
+            })
+            .unwrap();
+    }
+    store.finish(300).unwrap();
+    let (status, body, value) = request(&root, "/api/v1/tapes/coverage/coverage", &[]).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(value["schema"], "skilltape.dev/tape-coverage/v1");
+    assert_eq!(value["total_events"], 130);
+    assert_eq!(value["state"], "complete");
+    assert_eq!(value["redaction"]["redacted"], 43);
+    assert_eq!(value["redaction"]["partially_redacted"], 43);
+    assert_eq!(value["redaction"]["unredacted"], 44);
+    assert_eq!(value["capture_warnings"], 8);
+    assert_eq!(value["by_source"]["system"], 8);
+    assert_eq!(value["samples"].as_array().unwrap().len(), 32);
+    assert_eq!(value["samples_truncated"], true);
+    assert!(!body.contains("SYNTHETIC_COVERAGE_PAYLOAD_SENTINEL"));
+    assert!(!body.contains("private-workspace-sentinel"));
+    assert!(!body.contains("\"payload\""));
+}
+
+#[tokio::test]
+async fn tape_coverage_handles_empty_open_and_invalid_captures() {
+    let (_temp, root) = fixture();
+    TapeStore::create(
+        root.join(".skilltape/tapes/empty"),
+        TapeManifest {
+            schema: TAPE_SCHEMA_V1.to_owned(),
+            id: "empty".to_owned(),
+            started_at_ms: 1,
+            finished_at_ms: None,
+            platform: "test".to_owned(),
+            workspace_root: "relative".to_owned(),
+            event_count: 0,
+        },
+    )
+    .unwrap();
+    let (status, _, value) = request(&root, "/api/v1/tapes/empty/coverage", &[]).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(value["total_events"], 0);
+    assert_eq!(value["state"], "open");
+    assert_eq!(value["first_event_at_ms"], Value::Null);
+    fs::write(
+        root.join(".skilltape/tapes/tape-a/events.jsonl"),
+        b"{invalid json}\n",
+    )
+    .unwrap();
+    let (status, _, value) = request(&root, "/api/v1/tapes/tape-a/coverage", &[]).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(value["error"]["code"], "invalid_document");
+}
+
+#[tokio::test]
+async fn tape_coverage_keeps_storage_budget_and_identifier_guards() {
+    let (_temp, root) = fixture();
+    fs::OpenOptions::new()
+        .write(true)
+        .open(root.join(".skilltape/tapes/tape-a/events.jsonl"))
+        .unwrap()
+        .set_len(16 * 1024 * 1024 + 1)
+        .unwrap();
+    let (status, _, value) = request(&root, "/api/v1/tapes/tape-a/coverage", &[]).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(value["error"]["code"], "invalid_document");
+    let (status, _, _) = request(&root, "/api/v1/tapes/..%2Foutside/coverage", &[]).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}

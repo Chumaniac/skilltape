@@ -184,3 +184,20 @@ export interface DeliveryReview {
   findings: Array<{ code: string; path: string | null }>
   findings_truncated: boolean
 }
+
+export interface TapeCoverage {
+  schema: 'skilltape.dev/tape-coverage/v1'
+  tape_id: string
+  state: 'complete' | 'open' | 'changed'
+  total_events: number
+  redaction: Record<RedactionState, number>
+  by_kind: Record<string, number>
+  by_source: Record<string, number>
+  capture_warnings: number
+  first_event_at_ms: number | null
+  last_event_at_ms: number | null
+  samples: Array<{ sequence: number; redaction: RedactionState; capture_warning: boolean }>
+  sample_total: number
+  samples_truncated: boolean
+  limits: { max_events: number; max_bytes: number; sample_limit: number }
+}

@@ -213,14 +213,7 @@ impl ConsoleReadModel {
         offset: usize,
         limit: usize,
     ) -> Result<TapeEvents, ReadModelError> {
-        validate_id(tape_id)?;
-        let tape_path = self.storage_child("tapes")?.join(tape_id);
-        self.ensure_safe_path(&tape_path)?;
-        reject_symlink_tree(&tape_path)?;
-        if fs::metadata(tape_path.join("manifest.json"))?.len() > MAX_TAPE_MANIFEST_BYTES {
-            return Err(ReadModelError::InvalidDocument);
-        }
-        let store = TapeStore::open(&tape_path).map_err(map_tape_error)?;
+        let store = self.checked_tape(tape_id)?;
         let limit = limit.clamp(1, MAX_PAGE_SIZE);
         let mut page = Vec::new();
         let mut total = 0;
@@ -246,6 +239,36 @@ impl ConsoleReadModel {
             total,
             next_offset,
         })
+    }
+
+    fn checked_tape(&self, tape_id: &str) -> Result<TapeStore, ReadModelError> {
+        validate_id(tape_id)?;
+        let tape_path = self.storage_child("tapes")?.join(tape_id);
+        self.ensure_safe_path(&tape_path)?;
+        reject_symlink_tree(&tape_path)?;
+        if fs::metadata(tape_path.join("manifest.json"))?.len() > MAX_TAPE_MANIFEST_BYTES {
+            return Err(ReadModelError::InvalidDocument);
+        }
+        TapeStore::open(&tape_path).map_err(map_tape_error)
+    }
+
+    pub fn tape_coverage(
+        &self,
+        tape_id: &str,
+    ) -> Result<crate::coverage::TapeCoverage, ReadModelError> {
+        let store = self.checked_tape(tape_id)?;
+        let before = store.read_manifest().map_err(map_tape_error)?;
+        let events = store
+            .read_events_bounded(MAX_EVENT_BYTES, MAX_TAPE_EVENTS)
+            .map_err(map_tape_error)?;
+        let mut report =
+            crate::coverage::summarize(tape_id, &before, events, MAX_EVENT_BYTES, MAX_TAPE_EVENTS)
+                .map_err(map_tape_error)?;
+        let after = store.read_manifest().map_err(map_tape_error)?;
+        if before != after {
+            report.state = "changed";
+        }
+        Ok(report)
     }
 
     pub fn skill_diff(&self, skill_id: &str) -> Result<SkillDiff, ReadModelError> {

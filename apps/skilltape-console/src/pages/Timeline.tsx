@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { formatDate, formatEventPayload, formatNumber, getTapeEvents, getTapes, getWorkspaces } from '../api'
 import type { Collection, TapeEvent, TapeEvents, TapeSummary, WorkspaceSummary } from '../types'
+import { CaptureCoverage } from './CaptureCoverage'
 import { EmptyState, PageError, PageLoading, titleCase } from '../ui'
 
 interface TimelineProps {
@@ -69,12 +70,15 @@ export function TimelinePage({ tapeId, tapeOffset = 0, eventOffset = 0 }: Timeli
 
   const selectedTape = data.events?.tape_id ?? data.tapes.items[0]?.id
   const selectedSummary = data.tapes.items.find((tape) => tape.id === selectedTape)
-  const navigate = (nextTape: string | undefined, nextTapeOffset: number, nextEventOffset: number) => {
+  const tapeLink = (nextTape: string | undefined, nextTapeOffset: number, nextEventOffset: number) => {
     const params = new URLSearchParams()
     if (nextTape) params.set('tape', nextTape)
     if (nextTapeOffset) params.set('tapesOffset', String(nextTapeOffset))
     if (nextEventOffset) params.set('eventsOffset', String(nextEventOffset))
-    window.location.hash = '#timeline?' + params.toString()
+    return '#timeline?' + params.toString()
+  }
+  const navigate = (nextTape: string | undefined, nextTapeOffset: number, nextEventOffset: number) => {
+    window.location.hash = tapeLink(nextTape,nextTapeOffset,nextEventOffset)
   }
   return (
     <PageSection
@@ -125,6 +129,7 @@ export function TimelinePage({ tapeId, tapeOffset = 0, eventOffset = 0 }: Timeli
           <strong>{!selectedSummary ? 'Unknown' : selectedSummary.finished_at_ms !== null ? 'Finished' : 'Open'}</strong>
         </div>
       </div>
+      {selectedTape ? <CaptureCoverage key={selectedTape} tapeId={selectedTape} eventHref={sequence => tapeLink(selectedTape,tapeOffset,Math.floor(sequence/100)*100)} /> : null}
       {data.events ? (
         <PageNavigation
           label="Events"

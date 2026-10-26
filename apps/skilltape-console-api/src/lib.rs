@@ -1,9 +1,11 @@
 //! Read-only local API for the SkillTape Console.
 
+mod coverage;
 mod deliveries;
 mod read_model;
 pub mod routes;
 
+pub use coverage::TapeCoverage;
 pub use read_model::{ConsoleReadModel, ReadModelError};
 pub use routes::{router, router_with_static, ApiError};
 

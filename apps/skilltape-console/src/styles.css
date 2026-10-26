@@ -1257,3 +1257,7 @@ tbody code {
 }
 
 .context-digest { overflow-wrap: anywhere; word-break: break-word; }
+
+.coverage-breakdowns{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:var(--space-4,16px)}
+.coverage-samples{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;padding-left:24px}
+.coverage-samples li{min-width:0;overflow-wrap:anywhere}.coverage-samples span{display:block;font-size:var(--text-sm,13px);color:var(--color-text-muted,#6b7280)}

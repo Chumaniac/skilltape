@@ -6,6 +6,7 @@ import type {
   Receipt,
   SkillDiff,
   StoredDocument,
+  TapeCoverage,
   TapeEvent,
   TapeEvents,
   TapeSummary,
@@ -250,5 +251,33 @@ export function apiBaseLabel(): string {
 export async function getRunContext(receiptId: string, signal?: AbortSignal) {
   const value = await get<unknown>('/receipts/' + encodeURIComponent(receiptId) + '/context', signal)
   if (!validContextReview(value, receiptId)) throw new ApiError('Run context is invalid or unsupported.', 502, 'invalid_context')
+  return value
+}
+
+const coverageKinds = ['session_started','session_finished','terminal_command','filesystem_changed','permission_requested','permission_decided','environment_snapshot','capture_warning']
+const coverageSources = ['cli','shell','filesystem','permission','environment','system']
+function isTapeCoverage(value: unknown, id: string): value is TapeCoverage {
+  const counts = (item: unknown, allowed: string[]): item is Record<string,number> => isRecord(item) && Object.keys(item).length <= allowed.length && Object.entries(item).every(([key,count]) => allowed.includes(key) && isCount(count))
+  if (!isRecord(value) || value.schema !== 'skilltape.dev/tape-coverage/v1' || value.tape_id !== id ||
+    !isText(value.state) || !['complete','open','changed'].includes(value.state) || !isCount(value.total_events) || value.total_events > 100000 ||
+    !counts(value.redaction,['redacted','unredacted','partially_redacted']) || Object.keys(value.redaction).length !== 3 ||
+    !counts(value.by_kind,coverageKinds) || !counts(value.by_source,coverageSources) || !isCount(value.capture_warnings) ||
+    !isCount(value.sample_total) || value.sample_total > value.total_events || typeof value.samples_truncated !== 'boolean' ||
+    !isRecord(value.limits) || value.limits.max_events !== 100000 || value.limits.max_bytes !== 16777216 || value.limits.sample_limit !== 32 ||
+    !Array.isArray(value.samples) || value.samples.length !== Math.min(32,value.sample_total) || value.samples_truncated !== (value.sample_total > value.samples.length)) return false
+  const sum = (item: Record<string,unknown>) => Object.values(item).reduce<number>((total,count) => total + Number(count),0)
+  if (sum(value.redaction) !== value.total_events || sum(value.by_kind) !== value.total_events || sum(value.by_source) !== value.total_events ||
+      value.capture_warnings !== (value.by_kind.capture_warning ?? 0) ||
+      value.sample_total < Number(value.redaction.unredacted) + Number(value.redaction.partially_redacted) || value.sample_total < value.capture_warnings || value.sample_total > Math.min(value.total_events,Number(value.redaction.unredacted)+Number(value.redaction.partially_redacted)+value.capture_warnings)) return false
+  if (value.total_events === 0 ? value.first_event_at_ms !== null || value.last_event_at_ms !== null : !isTimestamp(value.first_event_at_ms) || !isTimestamp(value.last_event_at_ms)) return false
+  const total=value.total_events
+  return value.samples.every((sample,index,items) => isRecord(sample) && isCount(sample.sequence) && sample.sequence < total &&
+    (index === 0 || sample.sequence > (items[index-1] as {sequence:number}).sequence) &&
+    isText(sample.redaction) && ['redacted','unredacted','partially_redacted'].includes(sample.redaction) && typeof sample.capture_warning === 'boolean' &&
+    (sample.redaction !== 'redacted' || sample.capture_warning))
+}
+export async function getTapeCoverage(id: string, signal?: AbortSignal) {
+  const value = await get<unknown>('/tapes/' + encodeURIComponent(id) + '/coverage',signal)
+  if (!isTapeCoverage(value,id)) throw new ApiError('Capture coverage is invalid or unsupported. Check the saved Tape, then retry.',502,'invalid_coverage')
   return value
 }
