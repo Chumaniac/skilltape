@@ -81,6 +81,20 @@ fn sha(bytes: &[u8]) -> String {
         .map(|byte| format!("{byte:02x}"))
         .collect()
 }
+// Batch paths have a deliberately narrow spelling. Construct the path from the
+// checked text, so every filesystem caller receives the validated value rather
+// than the original CLI/descriptor path. Links are checked separately below.
+fn checked_path(path: &Path) -> io::Result<PathBuf> {
+    let text = path
+        .to_str()
+        .ok_or_else(|| fail("batch paths must be UTF-8"))?;
+    if text.contains("..") || text.chars().any(char::is_control) {
+        return Err(fail(
+            "batch paths cannot contain parent sequences or control characters",
+        ));
+    }
+    Ok(PathBuf::from(text))
+}
 fn safe(path: &Path) -> io::Result<()> {
     if !run_command::ancestors_are_safe(path) {
         return Err(fail("unsafe batch path or link"));
@@ -88,12 +102,13 @@ fn safe(path: &Path) -> io::Result<()> {
     Ok(())
 }
 fn directory(path: &Path) -> io::Result<PathBuf> {
-    safe(path)?;
-    let info = fs::symlink_metadata(path)?;
+    let path = checked_path(path)?;
+    safe(&path)?;
+    let info = fs::symlink_metadata(&path)?;
     if !info.is_dir() || info.file_type().is_symlink() {
         return Err(fail("batch path must be a real directory"));
     }
-    fs::canonicalize(path)
+    fs::canonicalize(&path)
 }
 // Descriptor members are resolved at the filesystem boundary, independently of
 // schema validation. Canonicalization never grants permission to leave the root.
@@ -146,8 +161,9 @@ fn same(left: &fs::Metadata, right: &fs::Metadata) -> bool {
         && left.modified().ok() == right.modified().ok()
 }
 fn opened(path: &Path, limit: u64) -> io::Result<(File, fs::Metadata)> {
-    safe(path)?;
-    let before = fs::symlink_metadata(path)?;
+    let path = checked_path(path)?;
+    safe(&path)?;
+    let before = fs::symlink_metadata(&path)?;
     if !before.is_file() || before.file_type().is_symlink() || before.len() > limit {
         return Err(fail("batch file is not a bounded regular file"));
     }
@@ -165,7 +181,8 @@ fn opened(path: &Path, limit: u64) -> io::Result<(File, fs::Metadata)> {
     Ok((file, before))
 }
 fn read(path: &Path, limit: u64) -> io::Result<Vec<u8>> {
-    let (mut file, before) = opened(path, limit)?;
+    let path = checked_path(path)?;
+    let (mut file, before) = opened(&path, limit)?;
     let mut bytes = Vec::new();
     Read::by_ref(&mut file)
         .take(limit + 1)
@@ -179,7 +196,8 @@ fn read(path: &Path, limit: u64) -> io::Result<Vec<u8>> {
     Ok(bytes)
 }
 fn hash_file(path: &Path, limit: u64) -> io::Result<String> {
-    let (mut file, before) = opened(path, limit)?;
+    let path = checked_path(path)?;
+    let (mut file, before) = opened(&path, limit)?;
     let mut digest = Sha256::new();
     let mut buffer = [0; 8192];
     let mut count = 0;
@@ -210,7 +228,8 @@ fn decode<T: DeserializeOwned>(path: &Path, limit: u64) -> io::Result<T> {
     serde_json::from_slice(&read(path, limit)?).map_err(|_| fail("invalid batch document"))
 }
 fn write_new(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    safe(path)?;
+    let path = checked_path(path)?;
+    safe(&path)?;
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
     #[cfg(unix)]
@@ -470,7 +489,9 @@ fn output_admission(root: &Path, state: &BatchState) -> io::Result<()> {
 }
 
 fn prepare(manifest: &Path, output: &Path) -> io::Result<()> {
-    let plan: BatchPlan = decode(manifest, MAX_BATCH_METADATA_BYTES)?;
+    let manifest = checked_path(manifest)?;
+    let output = checked_path(output)?;
+    let plan: BatchPlan = decode(&manifest, MAX_BATCH_METADATA_BYTES)?;
     plan.validate().map_err(fail)?;
     let base = directory(
         manifest
@@ -480,8 +501,8 @@ fn prepare(manifest: &Path, output: &Path) -> io::Result<()> {
     )?;
     let package = directory(&relative_member(&base, &plan.skill)?)?;
     SkillPackage::load(&package).map_err(|_| fail("Skill package cannot be loaded"))?;
-    safe(output)?;
-    if fs::symlink_metadata(output).is_ok() {
+    safe(&output)?;
+    if fs::symlink_metadata(&output).is_ok() {
         return Err(fail("batch output must be a new directory"));
     }
     let parent = directory(
