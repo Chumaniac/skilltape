@@ -738,6 +738,38 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
+    fn a_single_raw_batch_sorts_paths_and_deduplicates_repeated_notifications() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        for name in ["z-last.txt", "a-first.txt"] {
+            std::fs::write(root.join(name), name).unwrap();
+        }
+        let changes = adapt_events(
+            &root,
+            vec![Event {
+                kind: EventKind::Create(notify::event::CreateKind::File),
+                paths: vec![
+                    root.join("z-last.txt"),
+                    root.join("a-first.txt"),
+                    root.join("z-last.txt"),
+                ],
+                attrs: Default::default(),
+            }],
+        )
+        .unwrap();
+        assert_eq!(
+            changes
+                .iter()
+                .map(|change| change.path.as_str())
+                .collect::<Vec<_>>(),
+            ["a-first.txt", "z-last.txt"]
+        );
+        assert!(changes
+            .iter()
+            .all(|change| change.kind == FilesystemChangeKind::Created));
+    }
+
+    #[test]
     fn root_metadata_notification_does_not_become_an_empty_file_path() {
         let temp = TempDir::new().unwrap();
         let root = temp.path().canonicalize().unwrap();

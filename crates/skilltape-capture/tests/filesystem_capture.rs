@@ -187,7 +187,7 @@ async fn normalizes_nested_paths_and_emits_each_duplicate_modify_once() {
 }
 
 #[tokio::test]
-async fn reports_stable_path_order_for_one_change_batch() {
+async fn observes_both_files_when_os_polling_can_split_the_writes() {
     let temp = TempDir::new().expect("temp directory");
     let root = temp.path().join("workspace");
     std::fs::create_dir(&root).expect("workspace");
@@ -208,7 +208,14 @@ async fn reports_stable_path_order_for_one_change_batch() {
         })
         .await;
 
-    assert_eq!([first.path, second.path], ["a-first.txt", "z-last.txt"]);
+    // A polling scan can land between the two writes, creating separate batches.
+    // Arrival across batches follows observation time; exact within-batch order
+    // is asserted against one explicit raw batch in the adapter unit test.
+    let observed = std::collections::BTreeSet::from([first.path, second.path]);
+    assert_eq!(
+        observed,
+        std::collections::BTreeSet::from(["a-first.txt".into(), "z-last.txt".into()])
+    );
     watcher.stop().await;
 }
 

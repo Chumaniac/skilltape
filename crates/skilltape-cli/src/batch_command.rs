@@ -559,7 +559,7 @@ fn prepare(manifest: &Path, output: &Path) -> io::Result<()> {
     write_new(&stage.path().join(STATE), &bytes(&state)?)?;
     publish_directory_noreplace(stage.path(), &target)?;
     #[cfg(unix)]
-    File::open(&parent)?.sync_all()?;
+    File::open(checked_path(&parent)?)?.sync_all()?;
     Ok(())
 }
 
