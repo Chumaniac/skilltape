@@ -108,7 +108,7 @@ fn directory(path: &Path) -> io::Result<PathBuf> {
     if !info.is_dir() || info.file_type().is_symlink() {
         return Err(fail("batch path must be a real directory"));
     }
-    fs::canonicalize(&path)
+    checked_path(&fs::canonicalize(&path)?)
 }
 // Descriptor members are resolved at the filesystem boundary, independently of
 // schema validation. Canonicalization never grants permission to leave the root.
@@ -249,8 +249,9 @@ fn bytes<T: Serialize>(value: &T) -> io::Result<Vec<u8>> {
     Ok(bytes)
 }
 fn save(root: &Path, state: &mut BatchState, guard: &BatchLock) -> io::Result<()> {
+    let root = checked_path(root)?;
     guard.check()?;
-    safe(root)?;
+    safe(&root)?;
     state.revision = state
         .revision
         .checked_add(1)
@@ -298,8 +299,9 @@ struct BatchLock {
 }
 impl BatchLock {
     fn check(&self) -> io::Result<()> {
-        safe(&self.root)?;
-        let current = fs::symlink_metadata(&self.root)?;
+        let root = checked_path(&self.root)?;
+        safe(&root)?;
+        let current = fs::symlink_metadata(&root)?;
         if !current.is_dir() || current.file_type().is_symlink() {
             return Err(fail("batch workspace was replaced"));
         }
@@ -316,7 +318,7 @@ impl BatchLock {
         }
         if !same(
             &self.file.metadata()?,
-            &fs::symlink_metadata(self.root.join(".skilltape/batch.lock"))?,
+            &fs::symlink_metadata(root.join(".skilltape/batch.lock"))?,
         ) {
             return Err(fail("batch lock was replaced"));
         }
@@ -324,7 +326,8 @@ impl BatchLock {
     }
 }
 fn lock(root: &Path) -> io::Result<BatchLock> {
-    let metadata = fs::symlink_metadata(root)?;
+    let root = checked_path(root)?;
+    let metadata = fs::symlink_metadata(&root)?;
     let path = root.join(".skilltape/batch.lock");
     safe(&path)?;
     let mut options = OpenOptions::new();
@@ -365,7 +368,7 @@ fn input_path(root: &Path, id: &str, generation: u8) -> io::Result<PathBuf> {
     if !path.starts_with(&parent) {
         return Err(fail("input snapshot escaped its selected root"));
     }
-    Ok(path)
+    checked_path(&path)
 }
 fn attempt_id(id: &str, number: u8) -> io::Result<String> {
     let id = single_component(id)?;
@@ -378,7 +381,7 @@ fn receipt_path(root: &Path, id: &str) -> io::Result<PathBuf> {
     if !path.starts_with(&parent) {
         return Err(fail("Receipt escaped its selected root"));
     }
-    Ok(path)
+    checked_path(&path)
 }
 fn inventory(root: &Path, max_bytes: u64) -> io::Result<BTreeMap<String, u64>> {
     fn visit(
@@ -390,15 +393,16 @@ fn inventory(root: &Path, max_bytes: u64) -> io::Result<BTreeMap<String, u64>> {
         max: u64,
         files: &mut BTreeMap<String, u64>,
     ) -> io::Result<()> {
+        let path = checked_path(path)?;
         if depth > 64 {
             return Err(fail("batch tree depth exceeded"));
         }
-        let info = fs::symlink_metadata(path)?;
+        let info = fs::symlink_metadata(&path)?;
         if info.file_type().is_symlink() {
             return Err(fail("batch tree contains a link"));
         }
         if info.is_dir() {
-            for entry in fs::read_dir(path)? {
+            for entry in fs::read_dir(&path)? {
                 *entries += 1;
                 if *entries > 10_000 {
                     return Err(fail("batch tree entry capacity exceeded"));
