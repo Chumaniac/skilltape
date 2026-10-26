@@ -401,6 +401,7 @@ impl ConsoleReadModel {
             }
             let valid = (|| -> Result<bool, ReadModelError> {
                 let id = format!("{}-a{}", case.id, attempt.number);
+                validate_id(&id)?;
                 let folder = self.storage_child("receipts")?;
                 let receipt =
                     self.bounded_stored_file(&folder.join(format!("{id}.json")), 1024 * 1024)?;

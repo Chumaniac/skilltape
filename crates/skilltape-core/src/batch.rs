@@ -110,6 +110,7 @@ pub struct BatchAttemptReview {
 
 pub fn batch_case_id(value: &str) -> bool {
     !value.is_empty()
+        && !value.contains("..")
         && value.len() <= 48
         && value.as_bytes()[0].is_ascii_alphanumeric()
         && value
@@ -126,6 +127,7 @@ pub fn batch_sha(value: &str) -> bool {
 
 fn relative(value: &str) -> bool {
     !value.is_empty()
+        && !value.contains("..")
         && value.len() <= 1024
         && !value.contains(['\\', ':'])
         && !value.chars().any(char::is_control)

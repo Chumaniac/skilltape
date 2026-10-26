@@ -15,7 +15,7 @@ the batch. Preparation copies bounded Skill/input snapshots and executes nothing
 }
 ```
 
-Paths are relative to this plan's folder and cannot contain parent traversal,
+Paths are relative to this plan's folder and cannot contain `..` sequences,
 links or absolute paths. A case may also declare `expected_hashes` with the same
 `PATH=SHA256` syntax as `verify --expect-sha256`. The output workspace must be new
 and outside the source Skill and input folders.

@@ -95,6 +95,40 @@ fn directory(path: &Path) -> io::Result<PathBuf> {
     }
     fs::canonicalize(path)
 }
+// Descriptor members are resolved at the filesystem boundary, independently of
+// schema validation. Canonicalization never grants permission to leave the root.
+fn relative_member(base: &Path, value: &str) -> io::Result<PathBuf> {
+    if value.is_empty()
+        || value.contains("..")
+        || value.contains('\\')
+        || value.contains(':')
+        || Path::new(value).is_absolute()
+    {
+        return Err(fail("batch member must be a safe relative path"));
+    }
+    let selected = base.join(value);
+    safe(&selected)?;
+    let resolved = selected.canonicalize()?;
+    if !resolved.starts_with(base) {
+        return Err(fail("batch member escaped its selected root"));
+    }
+    Ok(resolved)
+}
+fn single_component(value: &str) -> io::Result<&str> {
+    if value.is_empty()
+        || value.len() > 64
+        || value.contains("..")
+        || value.contains('/')
+        || value.contains('\\')
+        || value.contains(':')
+        || value.chars().any(char::is_control)
+    {
+        return Err(fail(
+            "batch identifiers must be single safe path components",
+        ));
+    }
+    Ok(value)
+}
 fn same(left: &fs::Metadata, right: &fs::Metadata) -> bool {
     #[cfg(unix)]
     {
@@ -297,19 +331,35 @@ fn lock(root: &Path) -> io::Result<BatchLock> {
     guard.check()?;
     Ok(guard)
 }
-fn input_path(root: &Path, id: &str, generation: u8) -> PathBuf {
-    if generation == 0 {
-        root.join("inputs").join(id)
+fn input_path(root: &Path, id: &str, generation: u8) -> io::Result<PathBuf> {
+    let id = single_component(id)?;
+    let parent = root.join(if generation == 0 {
+        "inputs"
     } else {
-        root.join("retry-inputs")
-            .join(format!("{id}-a{generation}"))
+        "retry-inputs"
+    });
+    let path = if generation == 0 {
+        parent.join(id)
+    } else {
+        parent.join(format!("{id}-a{generation}"))
+    };
+    if !path.starts_with(&parent) {
+        return Err(fail("input snapshot escaped its selected root"));
     }
+    Ok(path)
 }
-fn attempt_id(id: &str, number: u8) -> String {
-    format!("{id}-a{number}")
+fn attempt_id(id: &str, number: u8) -> io::Result<String> {
+    let id = single_component(id)?;
+    Ok(format!("{id}-a{number}"))
 }
-fn receipt_path(root: &Path, id: &str) -> PathBuf {
-    root.join(".skilltape/receipts").join(format!("{id}.json"))
+fn receipt_path(root: &Path, id: &str) -> io::Result<PathBuf> {
+    let id = single_component(id)?;
+    let parent = root.join(".skilltape/receipts");
+    let path = parent.join(format!("{id}.json"));
+    if !path.starts_with(&parent) {
+        return Err(fail("Receipt escaped its selected root"));
+    }
+    Ok(path)
 }
 fn inventory(root: &Path, max_bytes: u64) -> io::Result<BTreeMap<String, u64>> {
     fn visit(
@@ -388,7 +438,7 @@ fn materials(root: &Path, state: &BatchState) -> io::Result<()> {
         return Err(fail("frozen Skill changed; create a new batch"));
     }
     for case in &state.cases {
-        let path = input_path(root, &case.id, case.generation);
+        let path = input_path(root, &case.id, case.generation)?;
         if digest_input_tree(&path).map_err(|_| fail("frozen input is invalid"))?
             != case.input_sha256
         {
@@ -403,7 +453,7 @@ fn output_admission(root: &Path, state: &BatchState) -> io::Result<()> {
     let mut used = 0;
     for case in &state.cases {
         for attempt in &case.attempts {
-            let path = root.join(attempt_id(&case.id, attempt.number));
+            let path = root.join(attempt_id(&case.id, attempt.number)?);
             if path.try_exists()? {
                 used += inventory(&path, OUTPUT_ADMISSION_BYTES)?
                     .values()
@@ -428,7 +478,7 @@ fn prepare(manifest: &Path, output: &Path) -> io::Result<()> {
             .filter(|p| !p.as_os_str().is_empty())
             .unwrap_or(Path::new(".")),
     )?;
-    let package = directory(&base.join(&plan.skill))?;
+    let package = directory(&relative_member(&base, &plan.skill)?)?;
     SkillPackage::load(&package).map_err(|_| fail("Skill package cannot be loaded"))?;
     safe(output)?;
     if fs::symlink_metadata(output).is_ok() {
@@ -446,7 +496,7 @@ fn prepare(manifest: &Path, output: &Path) -> io::Result<()> {
             .ok_or_else(|| fail("batch output needs a name"))?,
     );
     for case in &plan.cases {
-        let input = directory(&base.join(&case.input))?;
+        let input = directory(&relative_member(&base, &case.input)?)?;
         validate_output_root(&package, &input, &target)
             .map_err(|_| fail("batch output overlaps source materials"))?;
     }
@@ -461,8 +511,8 @@ fn prepare(manifest: &Path, output: &Path) -> io::Result<()> {
         .map_err(|_| fail("copied Skill is invalid"))?;
     let mut cases = Vec::new();
     for case in &plan.cases {
-        let path = stage.path().join("inputs").join(&case.id);
-        snapshot_inputs(&base.join(&case.input), &path)?;
+        let path = input_path(stage.path(), &case.id, 0)?;
+        snapshot_inputs(&relative_member(&base, &case.input)?, &path)?;
         input_budget(stage.path())?;
         cases.push(BatchCaseState {
             id: case.id.clone(),
@@ -553,7 +603,10 @@ fn delivery_hash(
         .map(|file| (&file.path, file))
         .collect();
     for (name, file) in by_path {
-        if physical && hash_file(&path.join("artifacts").join(name), FILE_BYTES)? != file.sha256 {
+        if physical
+            && hash_file(&relative_member(&path.join("artifacts"), name)?, FILE_BYTES)?
+                != file.sha256
+        {
             return Err(fail("retained artifact changed"));
         }
         digest.update(name.as_bytes());
@@ -589,8 +642,8 @@ fn audit(
     attempt: &BatchAttempt,
     physical: bool,
 ) -> io::Result<BatchAttempt> {
-    let id = attempt_id(case_id, attempt.number);
-    let path = receipt_path(root, &id);
+    let id = attempt_id(case_id, attempt.number)?;
+    let path = receipt_path(root, &id)?;
     let raw = read(&path, RECEIPT_BYTES)?;
     let receipt: Value = serde_json::from_slice(&raw).map_err(|_| fail("invalid batch Receipt"))?;
     let context_bytes = read(&path.with_extension("json.context"), 4096)?;
@@ -689,8 +742,8 @@ fn execute(
     if number as usize > MAX_BATCH_ATTEMPTS {
         return Err(fail("case attempt capacity reached"));
     }
-    let id = attempt_id(&case.id, number);
-    let receipt = receipt_path(root, &id);
+    let id = attempt_id(&case.id, number)?;
+    let receipt = receipt_path(root, &id)?;
     let context = receipt.with_extension("json.context");
     if receipt.try_exists()? || context.try_exists()? || root.join(&id).try_exists()? {
         return Err(fail(
@@ -713,7 +766,7 @@ fn execute(
     guard.check()?;
     let result = run_command::execute_verify(VerifyConfig {
         skill_path: root.join(SKILL),
-        input: Some(input_path(root, &case.id, case.generation)),
+        input: Some(input_path(root, &case.id, case.generation)?),
         receipt: None,
         context: None,
         delivery_dir: Some(root.join(&id)),
@@ -749,7 +802,7 @@ fn retry_input(root: &Path, state: &mut BatchState, index: usize, input: &Path) 
         return Err(fail("retry inputs must be outside the batch workspace"));
     }
     let id = state.cases[index].id.clone();
-    let target = input_path(root, &id, number);
+    let target = input_path(root, &id, number)?;
     let digest = digest_input_tree(&input).map_err(|_| fail("invalid retry inputs"))?;
     if target.try_exists()? {
         if digest_input_tree(&target).map_err(|_| fail("invalid retained retry snapshot"))?
@@ -916,6 +969,33 @@ pub(super) fn run(command: BatchCommand) -> ExitCode {
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+    #[test]
+    fn descriptor_members_and_components_cannot_escape_a_selected_root() {
+        let temp = tempfile::tempdir().unwrap();
+        let base = temp.path().canonicalize().unwrap();
+        fs::create_dir(base.join("allowed")).unwrap();
+        fs::write(base.join("allowed/data.txt"), b"synthetic").unwrap();
+        assert_eq!(
+            relative_member(&base, "allowed/data.txt").unwrap(),
+            base.join("allowed/data.txt")
+        );
+        for value in [
+            "../outside",
+            "allowed/../../outside",
+            "/etc/passwd",
+            "allowed\\outside",
+            "a..b",
+            "C:outside",
+        ] {
+            assert!(relative_member(&base, value).is_err());
+        }
+        for value in ["../outside", "a/b", "a\\b", "a..b", "a:b"] {
+            assert!(single_component(value).is_err());
+        }
+        let outside = tempfile::tempdir().unwrap();
+        std::os::unix::fs::symlink(outside.path(), base.join("linked")).unwrap();
+        assert!(relative_member(&base, "linked").is_err());
+    }
     #[test]
     fn replaced_workspace_cannot_receive_a_journal_update() {
         let temp = tempfile::tempdir().unwrap();
