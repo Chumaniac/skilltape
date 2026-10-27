@@ -37,3 +37,23 @@ test('a case with a different current-input binding cannot become reviewed evide
  await page.goto('/#batch');await expect(page.getByRole('alert')).toContainText('invalid or unsupported')
  await expect(page.locator('[data-batch-case]')).toHaveCount(0)
 })
+
+
+test('case selection mounts one evidence view, moves focus and avoids retry guidance for changed evidence',async({page})=>{
+ const data=report();data.status='unconfirmed';data.cases[1].evidence='changed';data.cases[1].status='unconfirmed';data.cases[1].error_code='evidence-changed'
+ await page.route('**/api/v1/**',route=>route.fulfill({json:data}))
+ await page.goto('/#batch')
+ await expect(page.getByLabel('Selected case repair',{exact:true})).toBeVisible()
+ await expect(page.getByText('Saved evidence changed or is missing.',{exact:false})).toBeVisible()
+ await expect(page.locator('.batch-case-detail')).toContainText('skilltape batch inspect')
+ await expect(page.locator('.batch-case-detail')).not.toContainText('skilltape batch retry')
+ await page.getByRole('button',{name:'Review case accepted',exact:true}).click()
+ await expect(page.getByLabel('Selected case accepted',{exact:true})).toBeVisible()
+ await expect(page.locator('.batch-case-detail h2')).toBeFocused()
+ await expect(page.locator('.batch-case-detail')).toHaveCount(1)
+ await expect(page.getByRole('link',{name:'Open Receipt for repair',exact:true})).toHaveCount(0)
+ await page.setViewportSize({width:390,height:844})
+ await page.getByRole('button',{name:'Review case repair',exact:true}).scrollIntoViewIfNeeded()
+ await expect(page.getByRole('button',{name:'Review case repair',exact:true})).toBeInViewport()
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
+})

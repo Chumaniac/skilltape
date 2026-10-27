@@ -12,7 +12,7 @@ import { BatchReviewPage } from './pages/BatchReview'
 import metadata from '../package.json'
 import './styles.css'
 
-type PageKey = 'timeline' | 'compile' | 'permissions' | 'receipt' | 'export' | 'deliveries' | 'batch'
+type PageKey = 'timeline' | 'compile' | 'permissions' | 'receipt' | 'export' | 'deliveries' | 'batch' | 'not-found'
 
 interface RouteState {
   page: PageKey
@@ -34,9 +34,9 @@ function readRoute(): RouteState {
   const hash = window.location.hash.replace(/^#/, '') || 'timeline'
   const [pageValue, query] = hash.split('?')
   const page: PageKey =
-    pageValue === 'compile' || pageValue === 'permissions' || pageValue === 'receipt' || pageValue === 'export' || pageValue === 'deliveries' || pageValue === 'batch'
+    pageValue === 'timeline' || pageValue === 'compile' || pageValue === 'permissions' || pageValue === 'receipt' || pageValue === 'export' || pageValue === 'deliveries' || pageValue === 'batch'
       ? pageValue
-      : 'timeline'
+      : 'not-found'
   const params = new URLSearchParams(query)
   return {
     page,
@@ -61,7 +61,10 @@ function App() {
   }, [])
 
   return (
-    <div className="app-shell">
+    <><a className="skip-link" href="#main-content" onClick={event => {
+      event.preventDefault()
+      document.getElementById('main-content')?.focus()
+    }}>Skip to content</a><div className="app-shell">
       <aside className="sidebar">
         <a className="brand" href="#timeline" translate="no">
           <span className="brand-mark" aria-hidden="true">
@@ -71,27 +74,26 @@ function App() {
           </span>
           <span>
             <strong>SkillTape</strong>
-            <small>LOCAL CONSOLE</small>
+            <small>Evidence console</small>
           </span>
         </a>
         <div className="sidebar-rule" />
         <nav aria-label="Console sections">
           <p className="nav-label">Inspect</p>
-          <NavLink href="#batch" active={route.page === 'batch'} label="Verification batch" icon="▦" />
-          <NavLink href="#deliveries" active={route.page === 'deliveries'} label="Delivery workbench" icon="▤" />
-          <NavLink href="#timeline" active={route.page === 'timeline'} label="Capture timeline" icon="◌" />
-          <NavLink href={'#compile' + skillQuery} active={route.page === 'compile'} label="Compile review" icon="⌁" />
-          <NavLink href={'#permissions' + skillQuery} active={route.page === 'permissions'} label="Permissions" icon="⊙" />
-          <NavLink href="#receipt" active={route.page === 'receipt'} label="Verify Receipt" icon="✓" />
+          <NavLink href="#batch" active={route.page === 'batch'} label="Verification batch" />
+          <NavLink href="#deliveries" active={route.page === 'deliveries'} label="Delivery workbench" />
+          <NavLink href="#timeline" active={route.page === 'timeline'} label="Capture timeline" />
+          <NavLink href={'#compile' + skillQuery} active={route.page === 'compile'} label="Compile review" />
+          <NavLink href={'#permissions' + skillQuery} active={route.page === 'permissions'} label="Permissions" />
+          <NavLink href="#receipt" active={route.page === 'receipt'} label="Verify Receipt" />
           <p className="nav-label" style={{ marginTop: 16 }}>Export</p>
-          <NavLink href="#export" active={route.page === 'export'} label="Export guide" icon="⧉" />
+          <NavLink href="#export" active={route.page === 'export'} label="Export guide" />
         </nav>
         <div className="sidebar-bottom">
           <div className="local-card">
-            <span className="live-dot" aria-hidden="true" />
             <div>
-              <strong>Local only</strong>
-              <span>No cloud sync</span>
+              <strong>Saved local evidence</strong>
+              <span>Read-only inspection</span>
             </div>
           </div>
         </div>
@@ -100,17 +102,17 @@ function App() {
       <div className="main-shell">
         <header className="topbar">
           <div className="topbar-context">
-            <span className="topbar-kicker">Workspace / default</span>
+            <span className="topbar-kicker">Local evidence</span>
             <span className="topbar-separator">/</span>
             <span>{pageLabel(route.page)}</span>
           </div>
           <div className="api-status" aria-label="Local API endpoint">
-            <span className="api-status-dot" aria-hidden="true" />
-            <span>Local API {apiBaseLabel()}</span>
+            <span>Endpoint {apiBaseLabel()}</span>
           </div>
         </header>
 
-        <main id="main-content" className="main-content">
+        <main id="main-content" className="main-content" tabIndex={-1}>
+          {route.page === 'not-found' ? <section className="page-section"><header className="page-heading"><div><h1>Page not found</h1><p className="page-description">This link does not name a Console view. Choose a section from navigation or return to your captures.</p></div></header><p><a className="button" href="#timeline">Open capture timeline</a></p></section> : null}
           {route.page === 'batch' ? <BatchReviewPage /> : null}
           {route.page === 'deliveries' ? <DeliveriesPage deliveryId={route.deliveryId} offset={route.deliveryOffset} /> : null}
           {route.page === 'timeline' ? <TimelinePage tapeId={route.tapeId} tapeOffset={route.tapeOffset} eventOffset={route.eventOffset} /> : null}
@@ -125,7 +127,7 @@ function App() {
           <span>Read-only · no commands run</span>
         </footer>
       </div>
-    </div>
+    </div></>
   )
 }
 
@@ -133,22 +135,20 @@ function NavLink({
   href,
   active,
   label,
-  icon,
 }: {
   href: string
   active: boolean
   label: string
-  icon: string
 }) {
   return (
     <a className={'nav-link' + (active ? ' nav-link-active' : '')} href={href} aria-current={active ? 'page' : undefined}>
-      <span className="nav-icon" aria-hidden="true">{icon}</span>
       <span>{label}</span>
     </a>
   )
 }
 
 function pageLabel(page: PageKey): string {
+  if (page === 'not-found') return 'Page not found'
   if (page === 'batch') return 'Verification batch'
   if (page === 'deliveries') return 'Delivery workbench'
   if (page === 'compile') return 'Compile review'
