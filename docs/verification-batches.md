@@ -69,3 +69,23 @@ from [DVC experiment queues](https://doc.dvc.org/command-reference/exp/run), exa
 at [treeverse/dvc@56e5982](https://github.com/treeverse/dvc/tree/56e59829512ff134aa269099a2099587b810b4dd)
 (Apache-2.0). Implementation reuses SkillTape's own verifier and delivery format;
 no DVC code, runtime, dependency or remote service is included.
+
+
+## Review one case at a time
+
+The source Console presents a case queue next to the selected case's evidence.
+Cases needing attention open first; select **Review** to inspect another case.
+Only that case's detail is mounted. The attention filter keeps the complete
+batch counts visible, and earlier attempts remain available in the selected
+case's history. A changed evidence binding offers inspection, never a retry
+recommendation. Running and unconfirmed outcomes require reconciliation.
+
+The endpoint label describes configuration, not connection health. Unknown
+Console links show a recovery page. **Skip to content** focuses the current
+view without changing its route. The Export guide prepares a command for the
+chosen target and optional saved Receipt; it does not execute it.
+
+This source update applies Hallmark and Impeccable's task-first hierarchy and
+Interface Design's consistent controls. It retains the read-only API contract,
+16-case/3-attempt limits, saved receipts and physical-file checks. It does not
+replace the published v0.4.1 assets or claim a new release.
