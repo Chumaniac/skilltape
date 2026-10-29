@@ -264,7 +264,15 @@ fn protected_options() -> OpenOptions {
 /// remain regular files inside it, including after opening the file handle.
 fn open_data_file(root: &Path, name: &str, append: bool) -> Result<File, TapeStoreError> {
     let root = root.canonicalize()?;
+    if name != MANIFEST && name != EVENTS {
+        return Err(TapeStoreError::UnsafeRoot { path: root });
+    }
     let candidate = root.join(name);
+    // Validate the lexical child before metadata I/O too; canonical validation
+    // below additionally prevents following an existing child out of the root.
+    if !candidate.starts_with(&root) || candidate.parent() != Some(root.as_path()) {
+        return Err(TapeStoreError::UnsafeRoot { path: candidate });
+    }
     let before = fs::symlink_metadata(&candidate)?;
     if !before.is_file() || before.file_type().is_symlink() {
         return Err(TapeStoreError::UnsafeRoot { path: candidate });
