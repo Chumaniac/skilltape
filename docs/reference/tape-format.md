@@ -57,3 +57,20 @@ SkillTape documents use independent stable schemas. See the [reference index](RE
 | Receipt | [`skilltape.dev/receipt/v1`](../../schemas/receipt/v1.json) | comparable verification result |
 
 A producer must not reuse a schema version after changing required fields, path rules, enum values, or redaction semantics.
+
+
+## Compile eligibility in current source
+
+Capture retains a finalized Tape after interruption or a recording error so it
+can still be inspected. Current source Compile rejects a manifest that has not
+finished and any recorded `session_finished` cancellation, timeout or non-null
+recording error. Malformed optional completion flags are input errors. No Skill
+is published and the Tape is not changed. Keep the interrupted record and run a
+new Capture into a new directory when a complete recording is needed.
+
+Finished legacy metadata-only Tapes remain supported. A completed command's
+nonzero exit status is distinct from a Capture interruption; Compile still
+produces a reviewable draft, not proof that replay or business checks passed.
+The shared compiler input constructor and deserializer enforce explicit
+completion evidence, including for direct SDK callers. Tape v1 and existing
+v0.4.1 download assets are unchanged; this is a source-build improvement.
