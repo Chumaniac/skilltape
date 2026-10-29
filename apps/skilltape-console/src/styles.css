@@ -1267,3 +1267,5 @@ tbody code {
 .export-options p, .export-command p, .export-plugin p { color: var(--muted); font-size: .85rem; line-height: 1.6; }
 .export-plugin { font-size: .85rem; }
 @media (max-width: 1040px) { .batch-workspace, .export-layout { grid-template-columns: minmax(0, 1fr); } }
+
+.compile-source code { white-space: normal; overflow-wrap: anywhere; }

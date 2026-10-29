@@ -500,3 +500,66 @@ fn local_ids_are_deterministic_and_lexicographically_sortable() {
     assert!(first_id < second_id);
     assert_eq!(first_id, "tape_00000000000000000042-00000000000000000000");
 }
+
+#[test]
+fn oversized_manifest_cannot_create_an_unreadable_tape() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path().join("oversized");
+    assert!(TapeStore::create(&root, manifest(&"x".repeat(65536))).is_err());
+    assert!(!root.exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn data_files_cannot_follow_links_outside_the_selected_tape() {
+    use std::os::unix::fs::symlink;
+    let (temp, root, store) = create_store();
+    let outside_manifest = temp.path().join("outside-manifest.json");
+    fs::copy(root.join("manifest.json"), &outside_manifest).unwrap();
+    fs::remove_file(root.join("manifest.json")).unwrap();
+    symlink(&outside_manifest, root.join("manifest.json")).unwrap();
+    assert!(
+        store.read_manifest().is_err(),
+        "manifest link must not be followed"
+    );
+    fs::remove_file(root.join("manifest.json")).unwrap();
+    fs::copy(&outside_manifest, root.join("manifest.json")).unwrap();
+    let outside_events = temp.path().join("outside-events.jsonl");
+    fs::write(&outside_events, b"").unwrap();
+    fs::remove_file(root.join("events.jsonl")).unwrap();
+    symlink(&outside_events, root.join("events.jsonl")).unwrap();
+    assert!(
+        store.read_events_bounded(1024, 10).is_err(),
+        "event link must not be followed"
+    );
+    assert!(
+        store.append(&event(0)).is_err(),
+        "append must not modify an external link target"
+    );
+    assert_eq!(fs::read(&outside_events).unwrap(), b"");
+}
+
+#[cfg(unix)]
+#[test]
+fn fifo_manifest_is_rejected_without_waiting_for_a_writer() {
+    use std::ffi::CString;
+    use std::os::unix::fs::OpenOptionsExt;
+    let (_temp, root, store) = create_store();
+    let path = root.join("manifest.json");
+    fs::remove_file(&path).unwrap();
+    let name = CString::new(path.to_str().unwrap()).unwrap();
+    assert_eq!(unsafe { libc::mkfifo(name.as_ptr(), 0o600) }, 0);
+    let (sender, receiver) = mpsc::channel();
+    let worker = thread::spawn(move || sender.send(store.read_manifest().is_err()).unwrap());
+    let result = receiver.recv_timeout(Duration::from_secs(2));
+    if result.is_err() {
+        // Release a regressed blocking open so this test never strands a thread.
+        let release = OpenOptions::new()
+            .write(true)
+            .custom_flags(libc::O_NONBLOCK)
+            .open(&path);
+        drop(release);
+    }
+    worker.join().unwrap();
+    assert!(result.unwrap());
+}

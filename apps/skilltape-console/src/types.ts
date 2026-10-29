@@ -102,6 +102,12 @@ export interface SkillDiff {
   files: FileSummary[]
   lint: LintSummary
   policy_plan?: PolicyPlan | null
+  compile_source?: {
+    format: 'skilltape.dev/tape-source/v1'
+    manifest_sha256: string
+    events_sha256: string
+    event_count: number
+  } | null
 }
 
 export interface PolicyPlan {

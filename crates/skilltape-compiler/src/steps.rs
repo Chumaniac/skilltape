@@ -55,10 +55,7 @@ enum FilesystemOperationKind {
 #[derive(Debug)]
 struct PendingTerminal {
     start_sequence: u64,
-    program: String,
-    args: Vec<String>,
-    cwd_scope: String,
-    reads_inputs: bool,
+    operation_index: usize,
 }
 
 pub(crate) fn compile_steps(tape: &TapeSession) -> Result<StepCompilation, CompileError> {
@@ -69,18 +66,14 @@ pub(crate) fn compile_steps(tape: &TapeSession) -> Result<StepCompilation, Compi
     for event in tape.events() {
         match &event.kind {
             TapeEventKind::TerminalCommand => {
+                // A new command begins a new observation scope. Changes from
+                // later commands must not rewrite an earlier output assertion.
+                if event.payload.get("phase").and_then(Value::as_str) == Some("started") {
+                    filesystem_operations.clear();
+                }
                 handle_terminal_event(event, &mut pending_terminal, &mut operations)?;
             }
             TapeEventKind::FilesystemChanged => {
-                if let Some(pending) = &pending_terminal {
-                    return Err(CompileError::AmbiguousTerminalGrouping {
-                        sequence: pending.start_sequence,
-                        reason: format!(
-                            "filesystem event {} separates terminal start from output",
-                            event.sequence
-                        ),
-                    });
-                }
                 let change = parse_filesystem_event(event)?;
                 let operation_index = match filesystem_operations.get(&change.path).copied() {
                     Some(index)
@@ -124,7 +117,7 @@ pub(crate) fn compile_steps(tape: &TapeSession) -> Result<StepCompilation, Compi
     if let Some(pending) = pending_terminal {
         return Err(CompileError::AmbiguousTerminalGrouping {
             sequence: pending.start_sequence,
-            reason: "terminal started event has no adjacent output event".into(),
+            reason: "terminal started event has no completed output event".into(),
         });
     }
 
@@ -162,11 +155,17 @@ fn handle_terminal_event(
                 .any(|argument| contains_input_reference(argument));
             *pending_terminal = Some(PendingTerminal {
                 start_sequence: event.sequence,
+                operation_index: operations.len(),
+            });
+            // Reserve the command's position at start. Filesystem observations
+            // may arrive while it runs, but their assertions must run after it.
+            operations.push(Operation::Terminal(TerminalOperation {
                 program: command.to_owned(),
                 args,
                 cwd_scope,
                 reads_inputs,
-            });
+                event_sequences: vec![event.sequence],
+            }));
         }
         "output" => {
             let pending =
@@ -177,13 +176,14 @@ fn handle_terminal_event(
                         reason: "terminal output event has no preceding started event".into(),
                     })?;
             validate_terminal_output(object, event)?;
-            operations.push(Operation::Terminal(TerminalOperation {
-                program: pending.program,
-                args: pending.args,
-                cwd_scope: pending.cwd_scope,
-                reads_inputs: pending.reads_inputs,
-                event_sequences: vec![pending.start_sequence, event.sequence],
-            }));
+            let Some(Operation::Terminal(operation)) = operations.get_mut(pending.operation_index)
+            else {
+                return Err(CompileError::AmbiguousTerminalGrouping {
+                    sequence: pending.start_sequence,
+                    reason: "terminal operation position is unavailable".into(),
+                });
+            };
+            operation.event_sequences.push(event.sequence);
         }
         other => {
             return Err(CompileError::UnsupportedPayload {

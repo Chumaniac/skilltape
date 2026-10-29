@@ -530,3 +530,37 @@ fn provenance_serializes_in_compile_json_shape() {
     assert_eq!(value["target_identity"], "shell@v1");
     assert_eq!(value["steps"][0]["event_sequences"][0], 0);
 }
+
+#[test]
+fn source_tape_hashes_normalized_values_and_changes_with_consumed_events() {
+    use skilltape_compiler::SourceTape;
+    use skilltape_tape::TapeManifest;
+    let manifest = TapeManifest {
+        schema: "skilltape.dev/tape/v1".into(),
+        id: "source".into(),
+        started_at_ms: 1,
+        finished_at_ms: Some(2),
+        platform: "synthetic".into(),
+        workspace_root: "private-source".into(),
+        event_count: 1,
+    };
+    let original = SourceTape::new(&manifest, &session(1)).unwrap();
+    assert_eq!(original, SourceTape::new(&manifest, &session(1)).unwrap());
+    let mut changed = event(0);
+    changed.payload = serde_json::json!({"different": true});
+    let next = SourceTape::new(&manifest, &TapeSession::new(vec![changed]).unwrap()).unwrap();
+    assert_eq!(original.manifest_sha256, next.manifest_sha256);
+    assert_ne!(original.events_sha256, next.events_sha256);
+    assert!(!serde_json::to_string(&original)
+        .unwrap()
+        .contains("private-source"));
+}
+
+#[test]
+fn legacy_compile_provenance_does_not_require_or_invent_a_capture_source() {
+    use skilltape_compiler::CompileProvenance;
+    let document = serde_json::json!({"schema":"skilltape.dev/compile/v1","target_identity":"generic@1","steps":[]});
+    let provenance: CompileProvenance = serde_json::from_value(document.clone()).unwrap();
+    assert!(provenance.source_tape.is_none());
+    assert_eq!(serde_json::to_value(provenance).unwrap(), document);
+}

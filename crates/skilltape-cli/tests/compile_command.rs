@@ -335,3 +335,58 @@ fn compile_accepts_a_normal_completed_capture_and_legacy_terminal_metadata() {
         compile(&tape, &temp.path().join("compiled"), &[]).success();
     }
 }
+
+#[test]
+fn compile_records_consumed_tape_identity_without_copying_source_metadata() {
+    let temp = TempDir::new().unwrap();
+    let mut documents = Vec::new();
+    for (folder, id) in [("a", "first-source"), ("b", "second-source")] {
+        let tape = temp.path().join(folder).join("tape");
+        create_tape(&tape);
+        let manifest_path = tape.join("manifest.json");
+        let mut manifest: Value =
+            serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+        manifest["id"] = json!(id);
+        manifest["workspace_root"] = json!("private-source-marker");
+        fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+        let original = fs::read(&manifest_path).unwrap();
+        let output = temp.path().join(folder).join("compiled-skill");
+        compile(&tape, &output, &[]).success();
+        let text = fs::read_to_string(output.join("compile.json")).unwrap();
+        assert!(!text.contains(id));
+        assert!(!text.contains("private-source-marker"));
+        let document: Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(document["source_tape"]["event_count"], 1);
+        for field in ["manifest_sha256", "events_sha256"] {
+            let hash = document["source_tape"][field]
+                .as_str()
+                .expect("source digest");
+            assert!(hash.starts_with("sha256:") && hash.len() == 71);
+        }
+        assert_eq!(fs::read(&manifest_path).unwrap(), original);
+        documents.push(document);
+    }
+    assert_ne!(
+        documents[0]["source_tape"]["manifest_sha256"],
+        documents[1]["source_tape"]["manifest_sha256"]
+    );
+    assert_eq!(
+        documents[0]["source_tape"]["events_sha256"],
+        documents[1]["source_tape"]["events_sha256"]
+    );
+    assert_eq!(documents[0]["steps"], documents[1]["steps"]);
+}
+
+#[test]
+fn compile_rejects_an_oversized_manifest_before_materializing_output() {
+    let temp = TempDir::new().unwrap();
+    let tape = temp.path().join("tape");
+    create_tape(&tape);
+    let path = tape.join("manifest.json");
+    let mut manifest: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    manifest["id"] = json!("x".repeat(65536));
+    fs::write(&path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+    let output = temp.path().join("compiled-skill");
+    compile(&tape, &output, &[]).code(2);
+    assert!(!output.exists());
+}
