@@ -9,7 +9,7 @@ assets remain unchanged. Shared manifest reads and writes are limited to 64 KiB;
 metadata changes during input reading stop publication. See the
 [Tape source format](reference/tape-format.md#retained-capture-identity).
 
-394 Rust checks passed serially with normal local process/signal permissions.
+396 Rust checks passed serially with normal local process/signal permissions.
 The earlier restricted-context cancellation failures are retained separately;
 no cancellation implementation or assertion was weakened. A macOS hosted
 starter check then exposed valid filesystem observations interleaved with a
@@ -24,6 +24,15 @@ independently recomputed and executable files byte-identical. Browser and hosted
 checks are recorded by the current delivery receipt. No installed release,
 deployment, paid provider or user business workflow was executed by this
 follow-up; the native starter executions used new isolated synthetic inputs.
+
+The aggregate CodeQL gate subsequently identified two path-injection findings
+in Tape data reads. An external manifest link was reproduced before the fix.
+Shared data opens now check canonical containment, regular-file/no-follow
+boundaries and opened-file identity; append uses the same protection. Native
+CLI checks reject the outside link and FIFO without creating a package or
+changing the external file. Original source-summary/legacy reads were rechecked.
+The gate is rerun through the existing PR workflow; no finding is dismissed or
+branch policy bypassed.
 
 ## Compile interruption guard - 2026-10-29 source
 

@@ -110,3 +110,15 @@ sequences. A later command begins a new observation scope so its file changes
 cannot replace an earlier command's assertion. Missing outputs, nested starts,
 or unpaired output events are still rejected. Capture order, paths, hashes and
 replay policy are not rewritten to make a draft pass.
+
+### Data file boundaries
+
+Manifest and event reads resolve inside the selected canonical Tape directory
+and require regular files. Symlink and special-file inputs are rejected before
+parsing; file opens use no-follow flags and Unix nonblocking mode, followed by
+path/handle checks. Unix compares device/inode identity; other platforms retain
+regular-file, reparse and metadata checks. Appending events uses the same file
+boundary. A FIFO cannot wait indefinitely for a writer. These checks follow the
+[CodeQL path validation guidance](https://codeql.github.com/codeql-query-help/rust/rust-path-injection/)
+and preserve the selected directory as the authority; they are not a general
+operating-system sandbox or author authentication.

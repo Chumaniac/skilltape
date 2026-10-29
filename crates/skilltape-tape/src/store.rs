@@ -103,12 +103,7 @@ impl TapeStore {
         }
         let store = Self { root };
         store.read_manifest()?;
-        if !store.root.join(EVENTS).is_file() {
-            return Err(TapeStoreError::InvalidRoot {
-                path: store.root,
-                source: io::Error::new(io::ErrorKind::NotFound, "events.jsonl missing"),
-            });
-        }
+        open_data_file(&store.root, EVENTS, false)?;
         Ok(store)
     }
 
@@ -149,9 +144,7 @@ impl TapeStore {
                 line: expected as usize + 1,
             });
         }
-        let mut file = OpenOptions::new()
-            .append(true)
-            .open(self.root.join(EVENTS))?;
+        let mut file = open_data_file(&self.root, EVENTS, true)?;
         serde_json::to_writer(&mut file, event)?;
         file.write_all(b"\n")?;
         file.sync_all()?;
@@ -186,7 +179,7 @@ impl TapeStore {
     }
 
     pub fn read_manifest(&self) -> Result<TapeManifest, TapeStoreError> {
-        let file = File::open(self.root.join(MANIFEST))?;
+        let file = open_data_file(&self.root, MANIFEST, false)?;
         let mut bytes = Vec::new();
         file.take(MAX_MANIFEST_BYTES + 1).read_to_end(&mut bytes)?;
         if bytes.len() as u64 > MAX_MANIFEST_BYTES {
@@ -217,7 +210,7 @@ impl TapeStore {
         max_bytes: Option<u64>,
         max_events: Option<u64>,
     ) -> Result<EventIter, TapeStoreError> {
-        let file = File::open(self.root.join(EVENTS))?;
+        let file = open_data_file(&self.root, EVENTS, false)?;
         if max_bytes.is_some_and(|limit| file.metadata().map_or(true, |m| m.len() > limit)) {
             return Err(TapeStoreError::ReadBudgetExceeded);
         }
@@ -236,15 +229,89 @@ impl TapeStore {
     }
 
     fn lock_exclusive(&self) -> Result<File, TapeStoreError> {
-        let file = OpenOptions::new()
+        let file = protected_options()
             .read(true)
             .write(true)
             .create(true)
             .truncate(false)
             .open(self.root.join(STORE_LOCK))?;
+        if !file.metadata()?.is_file() {
+            return Err(TapeStoreError::UnsafeRoot {
+                path: self.root.clone(),
+            });
+        }
         FileExt::lock_exclusive(&file)?;
         Ok(file)
     }
+}
+
+fn protected_options() -> OpenOptions {
+    let mut options = OpenOptions::new();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        options.custom_flags(0x0020_0000); // FILE_FLAG_OPEN_REPARSE_POINT
+    }
+    options
+}
+
+/// The selected canonical Tape directory is the authority. Data children must
+/// remain regular files inside it, including after opening the file handle.
+fn open_data_file(root: &Path, name: &str, append: bool) -> Result<File, TapeStoreError> {
+    let root = root.canonicalize()?;
+    let candidate = root.join(name);
+    let before = fs::symlink_metadata(&candidate)?;
+    if !before.is_file() || before.file_type().is_symlink() {
+        return Err(TapeStoreError::UnsafeRoot { path: candidate });
+    }
+    let path = candidate.canonicalize()?;
+    if !path.starts_with(&root) || path.parent() != Some(root.as_path()) {
+        return Err(TapeStoreError::UnsafeRoot { path });
+    }
+    let file = protected_options()
+        .read(!append)
+        .append(append)
+        .open(&path)?;
+    let opened = file.metadata()?;
+    let current = fs::symlink_metadata(&candidate)?;
+    if !opened.is_file()
+        || !current.is_file()
+        || current.file_type().is_symlink()
+        || candidate.canonicalize()? != path
+        || !same_data_file(&before, &opened)
+        || !same_data_file(&current, &opened)
+    {
+        return Err(TapeStoreError::UnsafeRoot { path });
+    }
+    Ok(file)
+}
+
+#[cfg(unix)]
+fn same_data_file(left: &fs::Metadata, right: &fs::Metadata) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    left.dev() == right.dev() && left.ino() == right.ino()
+}
+
+#[cfg(not(unix))]
+fn same_data_file(left: &fs::Metadata, right: &fs::Metadata) -> bool {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        if left.file_attributes() & 0x400 != 0 || right.file_attributes() & 0x400 != 0 {
+            return false;
+        }
+    }
+    left.len() == right.len()
+        && left
+            .modified()
+            .ok()
+            .zip(right.modified().ok())
+            .is_some_and(|(left, right)| left == right)
 }
 
 struct EventIter {
@@ -352,7 +419,7 @@ fn initialize_tape(root: &Path, manifest: &TapeManifest) -> Result<(), TapeStore
 }
 
 fn read_event_file(root: &Path) -> Result<Vec<TapeEvent>, TapeStoreError> {
-    let file = File::open(root.join(EVENTS))?;
+    let file = open_data_file(root, EVENTS, false)?;
     let mut events = Vec::new();
     for (index, line) in BufReader::new(file).lines().enumerate() {
         let line_number = index + 1;
