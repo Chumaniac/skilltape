@@ -466,3 +466,25 @@ fn captured_outputs_are_declared_for_replay_and_delivery() {
         .write
         .contains(&"inputs/**".into()));
 }
+
+#[test]
+fn compiler_input_rejects_recorded_interruption_and_invalid_completion_flags() {
+    for completion in [
+        json!({"cancelled": true}),
+        json!({"timed_out": true}),
+        json!({"error": "synthetic-private-interruption"}),
+        json!({"cancelled": "false"}),
+        json!({"timed_out": 0}),
+    ] {
+        let mut events = terminal_tape();
+        events.last_mut().unwrap().payload = completion;
+        assert!(
+            TapeSession::new(events.clone()).is_err(),
+            "interrupted recording must not become compiler input"
+        );
+        assert!(
+            serde_json::from_value::<TapeSession>(json!({"events": events})).is_err(),
+            "deserialization must use the same completion guard"
+        );
+    }
+}

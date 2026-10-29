@@ -12,6 +12,10 @@ use skilltape_tape::{
 use tempfile::TempDir;
 
 fn create_tape(root: &Path) {
+    create_tape_with_completion(root, None, true);
+}
+
+fn create_tape_with_completion(root: &Path, completion: Option<Value>, finished: bool) {
     let store = TapeStore::create(
         root,
         TapeManifest {
@@ -41,7 +45,21 @@ fn create_tape(root: &Path) {
             redaction: RedactionState::Redacted,
         })
         .expect("append tape event");
-    store.finish(3).expect("finish tape");
+    if let Some(payload) = completion {
+        store
+            .append(&TapeEvent {
+                sequence: 1,
+                occurred_at_ms: 3,
+                kind: TapeEventKind::SessionFinished,
+                source: EventSource::System,
+                payload,
+                redaction: RedactionState::Redacted,
+            })
+            .expect("append completion");
+    }
+    if finished {
+        store.finish(4).expect("finish tape");
+    }
 }
 
 fn compile(tape: &Path, output: &Path, extra_args: &[&str]) -> assert_cmd::assert::Assert {
@@ -260,4 +278,60 @@ fn compile_diagnostics_identify_event_without_echoing_private_payload() {
         .stderr(predicates::str::contains("event 0").and(predicates::str::contains("events.jsonl")))
         .stderr(predicates::str::contains("synthetic-private-token").not());
     assert!(!temp.path().join("compiled").exists());
+}
+
+#[test]
+fn compile_rejects_explicitly_interrupted_captures_without_output_or_source_changes() {
+    for payload in [
+        json!({"cancelled": true, "timed_out": false, "exit_code": 130}),
+        json!({"cancelled": false, "timed_out": true, "exit_code": 124}),
+        json!({"cancelled": false, "error": "synthetic-private-interruption"}),
+        json!({"cancelled": "false"}),
+        json!({"timed_out": 0}),
+    ] {
+        let temp = TempDir::new().unwrap();
+        let tape = temp.path().join("tape");
+        create_tape_with_completion(&tape, Some(payload), true);
+        let before = package_files(&tape);
+        let output = temp.path().join("compiled");
+        compile(&tape, &output, &[])
+            .code(2)
+            .stderr(predicates::str::contains("synthetic-private-interruption").not());
+        assert!(
+            !output.exists(),
+            "interrupted capture must not publish a package"
+        );
+        assert_eq!(
+            package_files(&tape),
+            before,
+            "forensic Tape must remain unchanged"
+        );
+    }
+}
+
+#[test]
+fn compile_waits_for_a_finished_manifest_without_publishing() {
+    let temp = TempDir::new().unwrap();
+    let tape = temp.path().join("tape");
+    create_tape_with_completion(&tape, None, false);
+    let before = package_files(&tape);
+    let output = temp.path().join("compiled");
+    compile(&tape, &output, &[])
+        .code(2)
+        .stderr(predicates::str::contains("Capture"));
+    assert!(!output.exists());
+    assert_eq!(package_files(&tape), before);
+}
+
+#[test]
+fn compile_accepts_a_normal_completed_capture_and_legacy_terminal_metadata() {
+    for payload in [
+        json!({"cancelled": false, "timed_out": false, "error": null, "exit_code": 0}),
+        json!({"exit_code": 1}),
+    ] {
+        let temp = TempDir::new().unwrap();
+        let tape = temp.path().join("tape");
+        create_tape_with_completion(&tape, Some(payload), true);
+        compile(&tape, &temp.path().join("compiled"), &[]).success();
+    }
 }

@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use skilltape_schema::{Permissions, Step, Workflow};
-use skilltape_tape::TapeEvent;
+use skilltape_tape::{TapeEvent, TapeEventKind};
 use thiserror::Error;
 
 pub use deterministic::DeterministicCompiler;
@@ -23,6 +23,8 @@ pub use provider::{
 pub enum CompileError {
     #[error("tape event sequence is out of order: expected {expected}, got {actual}")]
     TapeEventOutOfOrder { expected: u64, actual: u64 },
+    #[error("Capture interruption or recording error at event {sequence}; keep the Tape for inspection and capture a completed session before compiling")]
+    InterruptedCapture { sequence: u64 },
     #[error("tape event sequence {sequence} is duplicated")]
     DuplicateTapeEvent { sequence: u64 },
     #[error("compile name must not be empty")]
@@ -104,6 +106,7 @@ impl TapeSession {
         for (expected, event) in events.iter().enumerate() {
             let expected = expected as u64;
             if event.sequence == expected {
+                validate_capture_completion(event)?;
                 continue;
             }
             if event.sequence < expected {
@@ -140,6 +143,40 @@ impl TapeSession {
     pub fn len(&self) -> usize {
         self.events.len()
     }
+}
+
+// Legacy metadata-only traces remain valid. Explicit failed completion evidence
+// must survive every compiler entry point, including deserialization.
+fn validate_capture_completion(event: &TapeEvent) -> Result<(), CompileError> {
+    if !matches!(event.kind, TapeEventKind::SessionFinished) {
+        return Ok(());
+    }
+    let malformed = |field: &str| CompileError::MalformedPayload {
+        sequence: event.sequence,
+        event_kind: "session_finished".into(),
+        field: field.into(),
+    };
+    let payload = event
+        .payload
+        .as_object()
+        .ok_or_else(|| malformed("payload"))?;
+    for flag in ["cancelled", "timed_out"] {
+        match payload.get(flag) {
+            None | Some(serde_json::Value::Bool(false)) => {}
+            Some(serde_json::Value::Bool(true)) => {
+                return Err(CompileError::InterruptedCapture {
+                    sequence: event.sequence,
+                })
+            }
+            Some(_) => return Err(malformed(flag)),
+        }
+    }
+    if payload.get("error").is_some_and(|value| !value.is_null()) {
+        return Err(CompileError::InterruptedCapture {
+            sequence: event.sequence,
+        });
+    }
+    Ok(())
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]

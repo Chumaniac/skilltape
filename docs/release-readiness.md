@@ -1,5 +1,17 @@
 # Release Readiness
 
+## Compile interruption guard - 2026-10-29 source
+
+A failing synthetic test reproduced successful Compile from an explicitly
+cancelled Tape. The shared compiler input now rejects recorded cancellation,
+timeout and recording errors, and the CLI requires a finished manifest. Invalid
+flags fail without echoing their payload. Normal finished captures and legacy
+metadata-only records remain supported; no source Tape or existing output is
+rewritten. Local workspace tests and Clippy passed. A real local Capture/SIGINT
+flow retained the Tape, rejected Compile without output and completed a normal
+Capture/Compile flow. Hosted checks and source delivery are recorded separately;
+no release or installation replacement is implied.
+
 ## Starter Console discovery repair - 2026-10-22
 
 Installed-browser acceptance found that nested starter outputs were absent from

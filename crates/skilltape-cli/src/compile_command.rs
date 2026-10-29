@@ -40,6 +40,8 @@ enum CompileCommandError {
     UnsafeOutput(PathBuf),
     #[error("compile output name is not a valid text path component")]
     InvalidOutputName,
+    #[error("Capture is not finalized. Keep this Tape for inspection; wait for Capture to finish before compiling.")]
+    UnfinishedCapture,
     #[error("compile tape failed: {0}")]
     Tape(#[from] TapeStoreError),
     #[error("compile failed: {0}")]
@@ -109,6 +111,9 @@ fn compile(config: CompileConfig) -> Result<(), CompileCommandError> {
     let target = CompileTarget::new(TARGET_NAME, TARGET_VERSION)?;
 
     let store = TapeStore::open(&config.tape)?;
+    if store.read_manifest()?.finished_at_ms.is_none() {
+        return Err(CompileCommandError::UnfinishedCapture);
+    }
     let events = store
         .read_events_bounded(16 * 1024 * 1024, 100_000)?
         .collect::<Result<Vec<_>, TapeStoreError>>()?;
