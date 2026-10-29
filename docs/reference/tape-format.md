@@ -100,3 +100,13 @@ was not recorded. Malformed claimed source metadata is rejected. These hashes
 are provenance metadata, not author authentication or proof of successful
 replay. Existing Skill/Receipt hash semantics and exports are unchanged; this
 does not retroactively attach source evidence to an old Receipt.
+
+### Commands with concurrent file observations
+
+Filesystem observations may occur between a terminal command's `started` and
+`output` events. Compile keeps the command's workflow position at its start and
+places its observed-output assertions after it, while retaining original event
+sequences. A later command begins a new observation scope so its file changes
+cannot replace an earlier command's assertion. Missing outputs, nested starts,
+or unpaired output events are still rejected. Capture order, paths, hashes and
+replay policy are not rewritten to make a draft pass.

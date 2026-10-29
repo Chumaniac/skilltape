@@ -9,14 +9,21 @@ assets remain unchanged. Shared manifest reads and writes are limited to 64 KiB;
 metadata changes during input reading stop publication. See the
 [Tape source format](reference/tape-format.md#retained-capture-identity).
 
-392 Rust checks passed serially with normal local process/signal permissions.
+394 Rust checks passed serially with normal local process/signal permissions.
 The earlier restricted-context cancellation failures are retained separately;
-no cancellation implementation or assertion was weakened. Production Console
+no cancellation implementation or assertion was weakened. A macOS hosted
+starter check then exposed valid filesystem observations interleaved with a
+running command. Compile now preserves command/output ordering and keeps each
+command's assertions separate; it still rejects incomplete terminal groups.
+The actual same retained interleaved Tape failed the old compiler and compiled
+with the new one. Its shell replay remained denied by the original policy;
+both separate native synthetic starters completed Capture/Compile/Verify/Export.
+Production Console
 and native source readback use retained synthetic Capture assets, with digests
 independently recomputed and executable files byte-identical. Browser and hosted
 checks are recorded by the current delivery receipt. No installed release,
-deployment, paid provider or captured business command was executed by this
-follow-up.
+deployment, paid provider or user business workflow was executed by this
+follow-up; the native starter executions used new isolated synthetic inputs.
 
 ## Compile interruption guard - 2026-10-29 source
 

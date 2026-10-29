@@ -488,3 +488,63 @@ fn compiler_input_rejects_recorded_interruption_and_invalid_completion_flags() {
         );
     }
 }
+
+#[test]
+fn filesystem_observed_during_a_command_follows_its_exec_and_keeps_all_sources() {
+    let mut tape = terminal_tape();
+    for event in &mut tape[2..] {
+        event.sequence += 1;
+        event.occurred_at_ms += 1;
+    }
+    tape.insert(2,event(2,TapeEventKind::FilesystemChanged,EventSource::Filesystem,json!({"kind":"created","path":"outputs/result.txt","size":1,"content_hash":"a".repeat(64)})));
+    let artifact = DeterministicCompiler
+        .compile(request(tape, "interleaved"))
+        .expect("a completed command may contain filesystem observations");
+    assert_eq!(artifact.workflow.steps.len(), 2);
+    let Step::Exec(exec) = &artifact.workflow.steps[0] else {
+        panic!("command must precede its output assertion")
+    };
+    assert_eq!(exec.outputs[0].path, "outputs/result.txt");
+    assert!(matches!(&artifact.workflow.steps[1], Step::Assert(_)));
+    assert_eq!(artifact.provenance[0].event_sequences, vec![1, 3]);
+    assert_eq!(artifact.provenance[1].event_sequences, vec![2]);
+}
+
+#[test]
+fn later_commands_do_not_coalesce_an_earlier_output_assertion() {
+    let mut tape = Vec::new();
+    for (start, hash) in [(0, "a".repeat(64)), (3, "b".repeat(64))] {
+        tape.push(event(
+            start,
+            TapeEventKind::TerminalCommand,
+            EventSource::Shell,
+            json!({"phase":"started","command":"synthetic-tool","args":[],"cwd":"workspace"}),
+        ));
+        tape.push(event(
+            start + 1,
+            TapeEventKind::FilesystemChanged,
+            EventSource::Filesystem,
+            json!({"kind":"modified","path":"outputs/result.txt","size":1,"content_hash":hash}),
+        ));
+        tape.push(event(
+            start + 2,
+            TapeEventKind::TerminalCommand,
+            EventSource::Shell,
+            json!({"phase":"output","text":""}),
+        ));
+    }
+    let artifact = DeterministicCompiler
+        .compile(request(tape, "two-command"))
+        .unwrap();
+    assert_eq!(artifact.workflow.steps.len(), 4);
+    let Step::Assert(first) = &artifact.workflow.steps[1] else {
+        panic!("first assertion")
+    };
+    let Step::Assert(second) = &artifact.workflow.steps[3] else {
+        panic!("second assertion")
+    };
+    assert_eq!(first.assertion.hash, Some("a".repeat(64)));
+    assert_eq!(second.assertion.hash, Some("b".repeat(64)));
+    assert_eq!(artifact.provenance[1].event_sequences, vec![1]);
+    assert_eq!(artifact.provenance[3].event_sequences, vec![4]);
+}
