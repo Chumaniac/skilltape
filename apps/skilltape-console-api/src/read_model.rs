@@ -3,7 +3,7 @@ use std::fs;
 use std::io::{self, BufRead, BufReader, Read};
 use std::path::{Component, Path, PathBuf};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use skilltape_core::{DiagnosticLevel, LoadedSkillPackage, SkillPackage};
@@ -133,6 +133,16 @@ pub struct SkillDiff {
     pub files: Vec<FileSummary>,
     pub lint: LintSummary,
     pub policy_plan: Option<skilltape_verify::PolicyPlan>,
+    pub compile_source: Option<CompileSource>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CompileSource {
+    pub format: String,
+    pub manifest_sha256: String,
+    pub events_sha256: String,
+    pub event_count: u64,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -320,7 +330,48 @@ impl ConsoleReadModel {
             files,
             lint: lint_summary(lint),
             policy_plan: skilltape_verify::policy_plan(&package).ok(),
+            compile_source: self.compile_source(&package_path, skill_id)?,
         })
+    }
+
+    fn compile_source(
+        &self,
+        package: &Path,
+        skill_id: &str,
+    ) -> Result<Option<CompileSource>, ReadModelError> {
+        let path = package.join("compile.json");
+        if let Err(error) = fs::symlink_metadata(&path) {
+            return if error.kind() == io::ErrorKind::NotFound {
+                Ok(None)
+            } else {
+                Err(error.into())
+            };
+        }
+        let document = self.read_document(&path, skill_id, "compile")?.document;
+        let Some(source) = document.get("source_tape") else {
+            return Ok(None);
+        };
+        if document.get("schema").and_then(Value::as_str) != Some("skilltape.dev/compile/v1") {
+            return Err(ReadModelError::InvalidDocument);
+        }
+        let source: CompileSource =
+            serde_json::from_value(source.clone()).map_err(|_| ReadModelError::InvalidDocument)?;
+        let digest = |value: &str| {
+            value.strip_prefix("sha256:").is_some_and(|hash| {
+                hash.len() == 64
+                    && hash
+                        .bytes()
+                        .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+            })
+        };
+        if source.format != "skilltape.dev/tape-source/v1"
+            || source.event_count > MAX_TAPE_EVENTS
+            || !digest(&source.manifest_sha256)
+            || !digest(&source.events_sha256)
+        {
+            return Err(ReadModelError::InvalidDocument);
+        }
+        Ok(Some(source))
     }
 
     pub fn run(&self, run_id: &str) -> Result<StoredDocument, ReadModelError> {

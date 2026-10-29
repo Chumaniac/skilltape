@@ -1,5 +1,23 @@
 # Release Readiness
 
+## 2026-10-29 Capture source review follow-up
+
+CLI Compile now records normalized Capture manifest/event digests and the event
+count, and Console exposes the bounded read-only summary with an explicit legacy
+fallback. Old executable package files, Skill/Receipt hashes and successful
+assets remain unchanged. Shared manifest reads and writes are limited to 64 KiB;
+metadata changes during input reading stop publication. See the
+[Tape source format](reference/tape-format.md#retained-capture-identity).
+
+392 Rust checks passed serially with normal local process/signal permissions.
+The earlier restricted-context cancellation failures are retained separately;
+no cancellation implementation or assertion was weakened. Production Console
+and native source readback use retained synthetic Capture assets, with digests
+independently recomputed and executable files byte-identical. Browser and hosted
+checks are recorded by the current delivery receipt. No installed release,
+deployment, paid provider or captured business command was executed by this
+follow-up.
+
 ## Compile interruption guard - 2026-10-29 source
 
 A failing synthetic test reproduced successful Compile from an explicitly

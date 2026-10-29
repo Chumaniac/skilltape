@@ -61,6 +61,8 @@ A producer must not reuse a schema version after changing required fields, path 
 
 ## Compile eligibility in current source
 
+
+
 Capture retains a finalized Tape after interruption or a recording error so it
 can still be inspected. Current source Compile rejects a manifest that has not
 finished and any recorded `session_finished` cancellation, timeout or non-null
@@ -74,3 +76,27 @@ produces a reviewable draft, not proof that replay or business checks passed.
 The shared compiler input constructor and deserializer enforce explicit
 completion evidence, including for direct SDK callers. Tape v1 and existing
 v0.4.1 download assets are unchanged; this is a source-build improvement.
+
+## Retained Capture identity
+
+New CLI compilations add an optional `source_tape` to `skilltape.dev/compile/v1`:
+`format: skilltape.dev/tape-source/v1`, `manifest_sha256`, `events_sha256`, and
+`event_count`. The digests cover compact JSON of the parsed v1 manifest and
+ordered event array, with object keys sorted. They identify the values consumed
+by Compile, including recorded identity, rather than file formatting, unknown
+fields or unrelated Tape files. The summary contains no original workspace
+path, recorded identifier or event payload. Repeating the same compilation is
+deterministic; different Capture identities remain distinguishable even when
+they produce the same executable package.
+
+Compile rechecks manifest values after the bounded event read and stops before
+publishing if metadata changed. Tape manifests now have a shared 64 KiB read
+limit; new writes also enforce it. Existing event limits remain 16 MiB and
+100,000 events. Oversized or interrupted inputs remain on disk for inspection.
+
+Console's read-only Compile review displays the two source digests and event
+count. Old packages without this optional metadata explicitly say their source
+was not recorded. Malformed claimed source metadata is rejected. These hashes
+are provenance metadata, not author authentication or proof of successful
+replay. Existing Skill/Receipt hash semantics and exports are unchanged; this
+does not retroactively attach source evidence to an old Receipt.

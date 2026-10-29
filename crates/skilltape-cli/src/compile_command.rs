@@ -6,7 +6,8 @@ use std::process::ExitCode;
 use serde::Serialize;
 use serde_json::Value;
 use skilltape_compiler::{
-    CompileError, CompileRequest, CompileTarget, Compiler, DeterministicCompiler, TapeSession,
+    CompileError, CompileRequest, CompileTarget, Compiler, DeterministicCompiler, SourceTape,
+    TapeSession,
 };
 use skilltape_core::SkillPackage;
 use skilltape_tape::{TapeStore, TapeStoreError};
@@ -42,6 +43,8 @@ enum CompileCommandError {
     InvalidOutputName,
     #[error("Capture is not finalized. Keep this Tape for inspection; wait for Capture to finish before compiling.")]
     UnfinishedCapture,
+    #[error("Capture metadata changed while reading. Keep the Tape and retry after recording has stopped.")]
+    SourceChanged,
     #[error("compile tape failed: {0}")]
     Tape(#[from] TapeStoreError),
     #[error("compile failed: {0}")]
@@ -111,13 +114,18 @@ fn compile(config: CompileConfig) -> Result<(), CompileCommandError> {
     let target = CompileTarget::new(TARGET_NAME, TARGET_VERSION)?;
 
     let store = TapeStore::open(&config.tape)?;
-    if store.read_manifest()?.finished_at_ms.is_none() {
+    let manifest = store.read_manifest()?;
+    if manifest.finished_at_ms.is_none() {
         return Err(CompileCommandError::UnfinishedCapture);
     }
     let events = store
         .read_events_bounded(16 * 1024 * 1024, 100_000)?
         .collect::<Result<Vec<_>, TapeStoreError>>()?;
     let tape = TapeSession::new(events)?;
+    if store.read_manifest()? != manifest {
+        return Err(CompileCommandError::SourceChanged);
+    }
+    let source_tape = SourceTape::new(&manifest, &tape)?;
     let request = CompileRequest::new(tape, name, target.clone())?;
     let artifact = DeterministicCompiler.compile(request)?;
 
@@ -126,7 +134,7 @@ fn compile(config: CompileConfig) -> Result<(), CompileCommandError> {
     let staging = Builder::new()
         .prefix(".skilltape-compile-")
         .tempdir_in(parent)?;
-    materialize(&staging, &artifact, &target)?;
+    materialize(&staging, &artifact, &target, source_tape)?;
     lint_staged_package(&staging)?;
 
     ensure_output_available(&config.output)?;
@@ -219,6 +227,7 @@ fn materialize(
     staging: &TempDir,
     artifact: &skilltape_compiler::CompileOutput,
     target: &CompileTarget,
+    source_tape: SourceTape,
 ) -> Result<(), CompileCommandError> {
     for (path, contents) in &artifact.fixtures.files {
         write_staged_file(staging.path(), path, contents)?;
@@ -234,11 +243,9 @@ fn materialize(
         "permissions.json",
         &json_document(&artifact.permissions)?,
     )?;
-    write_staged_file(
-        staging.path(),
-        "compile.json",
-        &json_document(&artifact.provenance_document(target.clone()))?,
-    )?;
+    let mut provenance = artifact.provenance_document(target.clone());
+    provenance.source_tape = Some(source_tape);
+    write_staged_file(staging.path(), "compile.json", &json_document(&provenance)?)?;
     Ok(())
 }
 

@@ -14,7 +14,7 @@ use thiserror::Error;
 
 pub use deterministic::DeterministicCompiler;
 pub use proposal::{apply_proposal, ProposalError, ProposalPolicy};
-pub use provenance::{CompileProvenance, StepProvenance, COMPILE_SCHEMA_V1};
+pub use provenance::{CompileProvenance, SourceTape, StepProvenance, COMPILE_SCHEMA_V1};
 pub use provider::{
     ProposalInput, ProposalProvider, ProposalStatus, ProviderError, WorkflowProposal,
 };

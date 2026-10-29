@@ -1,8 +1,41 @@
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use skilltape_tape::TapeManifest;
 
-use crate::{CompileError, CompileTarget};
+use crate::{CompileError, CompileTarget, TapeSession};
 
 pub const COMPILE_SCHEMA_V1: &str = "skilltape.dev/compile/v1";
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct SourceTape {
+    pub format: String,
+    pub manifest_sha256: String,
+    pub events_sha256: String,
+    pub event_count: u64,
+}
+
+impl SourceTape {
+    /// Digests the normalized v1 values consumed by the compiler, not the
+    /// original file formatting. No workspace paths or payloads are copied.
+    pub fn new(manifest: &TapeManifest, tape: &TapeSession) -> Result<Self, serde_json::Error> {
+        fn digest(value: &impl Serialize) -> Result<String, serde_json::Error> {
+            let bytes = serde_json::to_vec(&serde_json::to_value(value)?)?;
+            Ok(format!(
+                "sha256:{}",
+                Sha256::digest(bytes)
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>()
+            ))
+        }
+        Ok(Self {
+            format: "skilltape.dev/tape-source/v1".into(),
+            manifest_sha256: digest(manifest)?,
+            events_sha256: digest(&tape.events())?,
+            event_count: tape.events().len() as u64,
+        })
+    }
+}
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct StepProvenance {
@@ -59,6 +92,8 @@ pub struct CompileProvenance {
     pub schema: String,
     pub target_identity: String,
     pub steps: Vec<StepProvenance>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_tape: Option<SourceTape>,
 }
 
 impl CompileProvenance {
@@ -67,6 +102,7 @@ impl CompileProvenance {
             schema: COMPILE_SCHEMA_V1.into(),
             target_identity: target.identity(),
             steps,
+            source_tape: None,
         }
     }
 }

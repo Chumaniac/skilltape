@@ -665,3 +665,30 @@ async fn coverage_rejects_linked_tape_roots_and_members() {
     let (status, _, _) = request(&root, "/api/v1/tapes/tape-a/coverage", &[]).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
+
+#[tokio::test]
+async fn compile_source_summary_is_optional_bounded_and_validated() {
+    let (_temp, root) = fixture();
+    let path = root.join("skills/demo/compile.json");
+    let source = json!({"format":"skilltape.dev/tape-source/v1","manifest_sha256":format!("sha256:{}", "a".repeat(64)),"events_sha256":format!("sha256:{}", "b".repeat(64)),"event_count":1});
+    fs::write(
+        &path,
+        serde_json::to_vec(&json!({"schema":"skilltape.dev/compile/v1","source_tape":source}))
+            .unwrap(),
+    )
+    .unwrap();
+    let (status, _, diff) = request(&root, "/api/v1/skills/demo/diff", &[]).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(diff["compile_source"], source);
+    fs::write(
+        &path,
+        br#"{"schema":"skilltape.dev/compile/v1","source_tape":{"event_count":1}}"#,
+    )
+    .unwrap();
+    let (status, _, _) = request(&root, "/api/v1/skills/demo/diff", &[]).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    fs::remove_file(&path).unwrap();
+    let (status, _, diff) = request(&root, "/api/v1/skills/demo/diff", &[]).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(diff["compile_source"].is_null());
+}

@@ -500,3 +500,11 @@ fn local_ids_are_deterministic_and_lexicographically_sortable() {
     assert!(first_id < second_id);
     assert_eq!(first_id, "tape_00000000000000000042-00000000000000000000");
 }
+
+#[test]
+fn oversized_manifest_cannot_create_an_unreadable_tape() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path().join("oversized");
+    assert!(TapeStore::create(&root, manifest(&"x".repeat(65536))).is_err());
+    assert!(!root.exists());
+}

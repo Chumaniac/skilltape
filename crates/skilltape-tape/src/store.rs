@@ -11,6 +11,7 @@ use crate::{TapeEvent, TapeManifest};
 const MANIFEST: &str = "manifest.json";
 const EVENTS: &str = "events.jsonl";
 const STORE_LOCK: &str = ".store.lock";
+const MAX_MANIFEST_BYTES: u64 = 64 * 1024;
 
 #[derive(Debug, Error)]
 pub enum TapeStoreError {
@@ -185,7 +186,14 @@ impl TapeStore {
     }
 
     pub fn read_manifest(&self) -> Result<TapeManifest, TapeStoreError> {
-        let bytes = fs::read(self.root.join(MANIFEST))?;
+        let file = File::open(self.root.join(MANIFEST))?;
+        let mut bytes = Vec::new();
+        file.take(MAX_MANIFEST_BYTES + 1).read_to_end(&mut bytes)?;
+        if bytes.len() as u64 > MAX_MANIFEST_BYTES {
+            return Err(TapeStoreError::InvalidManifest(
+                "manifest exceeds 64 KiB read limit".into(),
+            ));
+        }
         serde_json::from_slice(&bytes).map_err(|e| TapeStoreError::InvalidManifest(e.to_string()))
     }
 
@@ -327,6 +335,11 @@ fn validate_root(root: &Path) -> Result<(), TapeStoreError> {
 }
 
 fn validate_manifest(manifest: &TapeManifest) -> Result<(), TapeStoreError> {
+    if serde_json::to_vec_pretty(manifest)?.len() as u64 + 1 > MAX_MANIFEST_BYTES {
+        return Err(TapeStoreError::InvalidManifest(
+            "manifest exceeds 64 KiB read limit".into(),
+        ));
+    }
     serde_json::to_value(manifest)
         .and_then(serde_json::from_value::<TapeManifest>)
         .map(|_| ())

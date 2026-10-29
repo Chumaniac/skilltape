@@ -72,6 +72,16 @@ export function CompileReviewPage({ skillId = '' }: CompileReviewProps) {
         />
       </div>
 
+      <article className="panel compile-source" aria-labelledby="compile-source-title">
+        <h2 id="compile-source-title">Capture source</h2>
+        {skill.compile_source ? <>
+          <p>Recorded source: {formatNumber(skill.compile_source.event_count)} events. Compare these digests with the retained Capture.</p>
+          <p>Manifest <code>{skill.compile_source.manifest_sha256}</code></p>
+          <p>Events <code>{skill.compile_source.events_sha256}</code></p>
+          <p className="panel-note">Normalized v1 content digests only. This is not author authentication or proof of a successful replay.</p>
+        </> : <p>This package does not record its Capture source. Existing workflow and verification evidence remain available.</p>}
+      </article>
+
       <div className="review-grid">
         <article className="panel panel-span-2">
           <div className="panel-heading">

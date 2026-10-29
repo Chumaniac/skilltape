@@ -564,3 +564,16 @@ test('a disconnected Console gives a connection recovery step', async ({ page })
   await page.getByRole('button', {name: 'Retry request'}).click()
   await expect(page.getByRole('heading', {name: 'Capture timeline', exact: true})).toBeVisible()
 })
+
+test('compile review distinguishes a recorded Capture source from legacy metadata', async ({page}) => {
+  await mockApi(page)
+  const source = {format:'skilltape.dev/tape-source/v1',manifest_sha256:'sha256:'+'a'.repeat(64),events_sha256:'sha256:'+'b'.repeat(64),event_count:3}
+  await page.route('**/api/v1/skills/demo/diff', route => route.fulfill({json:{...skill,compile_source:source}}), {times:1})
+  await page.goto('/#compile?skill=demo')
+  await expect(page.getByRole('heading',{name:'Capture source',exact:true})).toBeVisible()
+  await expect(page.getByText('Recorded source: 3 events.',{exact:false})).toBeVisible()
+  await expect(page.getByText(source.events_sha256,{exact:true})).toBeVisible()
+  await expect(page.getByText('This is not author authentication',{exact:false})).toBeVisible()
+  await page.reload()
+  await expect(page.getByText('This package does not record its Capture source.',{exact:false})).toBeVisible()
+})
