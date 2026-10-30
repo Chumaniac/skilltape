@@ -577,3 +577,11 @@ test('compile review distinguishes a recorded Capture source from legacy metadat
   await page.reload()
   await expect(page.getByText('This package does not record its Capture source.',{exact:false})).toBeVisible()
 })
+
+
+test('capture package lookup shows only exact matches and rejects a response for another Tape',async({page})=>{
+ await mockApi(page);let foreign=false;
+ await page.route('**/api/v1/tapes/tape-a/packages*',route=>route.fulfill({json:{schema:'skilltape.dev/console/v1',tape_id:foreign?'other':'tape-a',items:[{id:'demo',matches_tape:true,source_state:'matched'},{id:'different',matches_tape:false,source_state:'different'}],offset:0,limit:50,total:2,next_offset:null}}));
+ await page.goto('/#timeline');await page.getByRole('button',{name:'Find compiled packages'}).click();await expect(page.getByRole('link',{name:'Review compiled package demo'})).toHaveAttribute('href','#compile?skill=demo');await expect(page.getByRole('link',{name:'Review compiled package different'})).toHaveCount(0);
+ foreign=true;await page.getByRole('button',{name:'Refresh package lookup'}).click();await expect(page.getByText('Package discovery is incomplete or unsupported.',{exact:false})).toBeVisible();await expect(page.getByRole('link',{name:'Review compiled package demo'})).toHaveCount(0);
+});

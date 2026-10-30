@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { formatDate, formatEventPayload, formatNumber, getTapeEvents, getTapes, getWorkspaces } from '../api'
 import type { Collection, TapeEvent, TapeEvents, TapeSummary, WorkspaceSummary } from '../types'
+import { TapePackages } from './TapePackages'
 import { CaptureCoverage } from './CaptureCoverage'
 import { EmptyState, PageError, PageLoading, titleCase } from '../ui'
 
@@ -129,6 +130,7 @@ export function TimelinePage({ tapeId, tapeOffset = 0, eventOffset = 0 }: Timeli
           <strong>{!selectedSummary ? 'Unknown' : selectedSummary.finished_at_ms !== null ? 'Finished' : 'Open'}</strong>
         </div>
       </div>
+      {selectedTape ? <TapePackages key={selectedTape} tapeId={selectedTape} /> : null}
       {selectedTape ? <CaptureCoverage key={selectedTape} tapeId={selectedTape} eventHref={sequence => tapeLink(selectedTape,tapeOffset,Math.floor(sequence/100)*100)} /> : null}
       {data.events ? (
         <PageNavigation

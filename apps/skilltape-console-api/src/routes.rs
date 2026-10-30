@@ -64,6 +64,7 @@ impl From<ReadModelError> for ApiError {
             ReadModelError::UnsafePath => Self::Forbidden,
             ReadModelError::NotFound => Self::NotFound,
             ReadModelError::InvalidDocument => Self::InvalidDocument,
+            ReadModelError::DiscoveryCapacity => Self::Unavailable { code: "package_discovery_capacity", message: "Package discovery is limited to 1000 entries. Open a saved package ID directly." },
             ReadModelError::UnsupportedPlatform => Self::Unavailable {
                 code: "unsupported_delivery_platform",
                 message: "File integrity inspection is unavailable on this platform.",
@@ -131,6 +132,7 @@ pub fn router_with_static(model: ConsoleReadModel, static_root: Option<PathBuf>)
         .route("/api/v1/deliveries/{id}", get(delivery_review))
         .route("/api/v1/tapes/{id}/events", get(tape_events))
         .route("/api/v1/tapes/{id}/coverage", get(tape_coverage))
+        .route("/api/v1/tapes/{id}/packages", get(tape_packages))
         .route("/api/v1/skills/{id}/diff", get(skill_diff))
         .route("/api/v1/runs/{id}", get(run_document))
         .route("/api/v1/receipts/{id}", get(receipt_document))
@@ -245,6 +247,20 @@ async fn tape_coverage(
 ) -> Result<Json<crate::coverage::TapeCoverage>, ApiError> {
     let permit = inspection_permit(&state)?;
     let (report, _permit) = inspect(permit, move || state.model.tape_coverage(&tape_id)).await?;
+    Ok(Json(report))
+}
+
+async fn tape_packages(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Query(query): Query<PageQuery>,
+) -> Result<Json<crate::read_model::TapePackages>, ApiError> {
+    let (offset, limit) = page(&query)?;
+    let permit = inspection_permit(&state)?;
+    let (report, _permit) = inspect(permit, move || {
+        state.model.tape_packages(&id, offset, limit)
+    })
+    .await?;
     Ok(Json(report))
 }
 

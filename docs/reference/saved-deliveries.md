@@ -106,3 +106,21 @@ missing file, invalid metadata and unsupported/busy states remain unaccepted.
 Check keyboard/320px layout, selection, refresh and cancelled requests without
 weakening existing scenarios. Full Rust/Console and existing packaging gates
 apply. Revert normally; never alter or regenerate the successful delivery.
+
+
+## Capture to saved package and retained Verify preparation
+
+Timeline can explicitly look up packages in `skills/` and `.skilltape/skills/`. A
+match requires both normalized Tape digests and the event count recorded by Compile.
+The lookup never compiles, lints all packages or runs a Skill. It reads at most
+1,000 directory entries, 50 provenance documents per page, 64 KiB per document,
+and the existing 16 MiB / 100,000-event Tape budget. Unreadable or oversized
+provenance is not a match. Open a known package ID directly when outside these limits.
+
+Verify preparation retains only filenames for up to 16 packages in this tab for
+24 hours, within 16 KiB of session storage. A blocked store is explained. Reopening
+the view keeps the copied command's Receipt name. **Prepare a new verification**
+chooses a fresh filename; no previous Receipt is replaced by the Console.
+**Check this verification Receipt** performs an explicit read before offering its
+view link. A missing/failed Receipt stays visible and cannot become successful
+export evidence. The export CLI still checks the authoritative package binding.

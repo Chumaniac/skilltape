@@ -50,6 +50,8 @@ pub enum ReadModelError {
     InvalidDocument,
     #[error("delivery inspection is unavailable on this platform")]
     UnsupportedPlatform,
+    #[error("package discovery capacity exceeded")]
+    DiscoveryCapacity,
     #[error("stored resource could not be read")]
     Io(#[from] io::Error),
 }
@@ -143,6 +145,20 @@ pub struct CompileSource {
     pub manifest_sha256: String,
     pub events_sha256: String,
     pub event_count: u64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct TapePackage {
+    pub id: String,
+    pub matches_tape: bool,
+    pub source_state: &'static str,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct TapePackages {
+    pub tape_id: String,
+    #[serde(flatten)]
+    pub packages: Collection<TapePackage>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -296,6 +312,109 @@ impl ConsoleReadModel {
             report.state = "changed";
         }
         Ok(report)
+    }
+
+    pub fn tape_packages(
+        &self,
+        tape_id: &str,
+        offset: usize,
+        limit: usize,
+    ) -> Result<TapePackages, ReadModelError> {
+        let store = self.checked_tape(tape_id)?;
+        let manifest = store.read_manifest().map_err(map_tape_error)?;
+        let events = store
+            .read_events_bounded(MAX_EVENT_BYTES, MAX_TAPE_EVENTS)
+            .map_err(map_tape_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(map_tape_error)?;
+        if store.read_manifest().map_err(map_tape_error)? != manifest
+            || events.len() as u64 != manifest.event_count
+        {
+            return Err(ReadModelError::InvalidDocument);
+        }
+        let digest = |value: Value| -> Result<String, ReadModelError> {
+            let bytes = serde_json::to_vec(&value).map_err(|_| ReadModelError::InvalidDocument)?;
+            Ok(format!(
+                "sha256:{}",
+                Sha256::digest(bytes)
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>()
+            ))
+        };
+        // Use the compiler's normalized JSON representation, not file formatting.
+        let manifest_hash =
+            digest(serde_json::to_value(&manifest).map_err(|_| ReadModelError::InvalidDocument)?)?;
+        let events_hash =
+            digest(serde_json::to_value(&events).map_err(|_| ReadModelError::InvalidDocument)?)?;
+        let mut ids = BTreeSet::new();
+        let mut inspected = 0;
+        for root in [
+            self.root.join("skills"),
+            self.root.join(STORAGE_DIR).join("skills"),
+        ] {
+            self.ensure_safe_path(&root)?;
+            let entries = match fs::read_dir(&root) {
+                Ok(entries) => entries,
+                Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+                Err(error) => return Err(error.into()),
+            };
+            for entry in entries {
+                inspected += 1;
+                if inspected > 1000 {
+                    return Err(ReadModelError::DiscoveryCapacity);
+                }
+                let entry = entry?;
+                let metadata = fs::symlink_metadata(entry.path())?;
+                let id = entry.file_name().to_string_lossy().into_owned();
+                if metadata.is_dir()
+                    && !metadata.file_type().is_symlink()
+                    && validate_id(&id).is_ok()
+                {
+                    ids.insert(id);
+                }
+            }
+        }
+        let total = ids.len();
+        let limit = limit.min(50);
+        let mut items = Vec::new();
+        for id in ids.into_iter().skip(offset).take(limit) {
+            let path = self.find_skill(&id)?.join("compile.json");
+            let source = self
+                .bounded_stored_file(&path, 64 * 1024)
+                .and_then(|bytes| {
+                    let document: Value = serde_json::from_slice(&bytes)
+                        .map_err(|_| ReadModelError::InvalidDocument)?;
+                    if document.get("schema").and_then(Value::as_str)
+                        != Some("skilltape.dev/compile/v1")
+                    {
+                        return Err(ReadModelError::InvalidDocument);
+                    }
+                    serde_json::from_value::<CompileSource>(document["source_tape"].clone())
+                        .map_err(|_| ReadModelError::InvalidDocument)
+                });
+            let (matches_tape, source_state) = match source {
+                Ok(source) => {
+                    let matches = manifest.finished_at_ms.is_some()
+                        && source.format == "skilltape.dev/tape-source/v1"
+                        && source.manifest_sha256 == manifest_hash
+                        && source.events_sha256 == events_hash
+                        && source.event_count == manifest.event_count;
+                    (matches, if matches { "matched" } else { "different" })
+                }
+                Err(ReadModelError::NotFound) => (false, "unrecorded"),
+                Err(_) => (false, "unavailable"),
+            };
+            items.push(TapePackage {
+                id,
+                matches_tape,
+                source_state,
+            });
+        }
+        Ok(TapePackages {
+            tape_id: tape_id.into(),
+            packages: collection(items, offset, limit, total),
+        })
     }
 
     pub fn skill_diff(&self, skill_id: &str) -> Result<SkillDiff, ReadModelError> {

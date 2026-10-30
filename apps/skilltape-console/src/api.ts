@@ -288,3 +288,11 @@ export async function getTapeCoverage(id: string, signal?: AbortSignal) {
   if (!isTapeCoverage(value,id)) throw new ApiError('Capture coverage is invalid or unsupported. Check the saved Tape, then retry.',502,'invalid_coverage')
   return value
 }
+
+
+export interface TapePackages extends Collection<{id:string;matches_tape:boolean;source_state:'matched'|'different'|'unrecorded'|'unavailable'}> {tape_id:string}
+export async function getTapePackages(tapeId:string,signal?:AbortSignal,offset=0):Promise<TapePackages>{
+ const value=await get<unknown>('/tapes/'+encodeURIComponent(tapeId)+'/packages?limit=50&offset='+offset,signal)
+ if(!isCollection(value,50,(row:unknown):row is TapePackages['items'][number]=>Boolean(row&&typeof row==='object'&&typeof (row as {id:string}).id==='string'&&isSavedEvidenceId((row as {id:string}).id)&&['matched','different','unrecorded','unavailable'].includes((row as {source_state:string}).source_state)&&typeof (row as {matches_tape:boolean}).matches_tape==='boolean'&&((row as {source_state:string}).source_state==='matched')===(row as {matches_tape:boolean}).matches_tape))||!('tape_id' in value)||value.tape_id!==tapeId)throw new ApiError('Package discovery is incomplete or unsupported. Retry or open a known saved package ID.',502,'invalid_packages')
+ return value as TapePackages
+}
