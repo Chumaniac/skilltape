@@ -8,6 +8,7 @@ import { CodeBlock, EmptyState, JsonDisclosure, PageError, PageLoading, StatusBa
 
 interface ReceiptViewProps {
   receiptId?: string
+  skillId?: string
 }
 
 function ReceiptPicker({ receiptId, onOpen }: { receiptId: string; onOpen: (id: string) => void }) {
@@ -36,7 +37,7 @@ function ReceiptPicker({ receiptId, onOpen }: { receiptId: string; onOpen: (id: 
   )
 }
 
-export function ReceiptViewPage({ receiptId = '' }: ReceiptViewProps) {
+export function ReceiptViewPage({ receiptId = '', skillId = '' }: ReceiptViewProps) {
   const [receipt, setReceipt] = useState<Receipt | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
@@ -67,10 +68,10 @@ export function ReceiptViewPage({ receiptId = '' }: ReceiptViewProps) {
     return () => controller.abort()
   }, [receiptId, reload])
 
-  const picker = <ReceiptPicker key={receiptId} receiptId={receiptId} onOpen={(id) => {
+  const picker = <><ReceiptPicker key={receiptId} receiptId={receiptId} onOpen={(id) => {
     if (id === receiptId) setReload(value => value + 1)
-    else window.location.hash = 'receipt?run=' + encodeURIComponent(id)
-  }} />
+    else window.location.hash = 'receipt?run=' + encodeURIComponent(id) + (skillId ? '&skill=' + encodeURIComponent(skillId) : '')
+  }} />{isSavedEvidenceId(skillId) ? <nav className="journey-actions" aria-label="Receipt next steps"><a className="button" href={'#compile?skill='+encodeURIComponent(skillId)}>Return to package review</a><a className="button" href={'#export?skill='+encodeURIComponent(skillId)+'&run='+encodeURIComponent(receiptId)}>Prepare this package’s export</a></nav> : null}</>
   if (loading) return <>{picker}<PageLoading label="Loading verification Receipt…" /></>
   if (error) return <>{picker}<PageError message={error} onRetry={() => setReload((value) => value + 1)} /></>
   if (!receipt) {

@@ -260,7 +260,7 @@ test('navigation opens compile and permission review pages', async ({ page }) =>
   await expect(page.getByText('Lint clean')).toBeVisible()
   await expect(page.getByText('format', { exact: true })).toBeVisible()
 
-  await page.getByRole('link', { name: 'Permissions' }).click()
+  await page.getByRole('link', { name: 'Permissions', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Skill permissions' })).toBeVisible()
   await expect(page.getByText('Environment variables are not available.')).toBeVisible()
   await expect(page.getByText('Scoped access', { exact: true })).toBeVisible()

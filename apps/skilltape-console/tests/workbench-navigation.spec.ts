@@ -21,15 +21,12 @@ test('keyboard users can skip navigation without changing the active hash route'
   expect(new URL(page.url()).hash).toBe('#export')
 })
 
-test('export choices create a readable command without executing or claiming a connection', async ({ page }) => {
+test('an export without a chosen package asks for a real saved package', async ({ page }) => {
   const writes: string[] = []
   page.on('request', request => { if (request.method() !== 'GET') writes.push(request.method()) })
   await page.goto('/#export')
-  await page.getByLabel('Export target', { exact: true }).selectOption('codex')
-  await expect(page.getByLabel('Export command', { exact: true })).toContainText('skilltape export --target codex')
-  await expect(page.getByLabel('Export command', { exact: true })).not.toContainText('--receipt')
-  await page.getByLabel('Include a saved Receipt', { exact: true }).check()
-  await expect(page.getByLabel('Export command', { exact: true })).toContainText('--receipt ./receipt.json')
-  await expect(page.getByLabel('Local API endpoint')).toContainText('Endpoint')
+  await expect(page.getByRole('heading', { name: 'Choose a package to export', exact: true })).toBeVisible()
+  await expect(page.getByLabel('Saved Skill ID')).toBeVisible()
+  await expect(page.getByRole('region', {name:'Export command'})).toHaveCount(0)
   expect(writes).toEqual([])
 })

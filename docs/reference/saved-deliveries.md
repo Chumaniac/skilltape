@@ -1,5 +1,25 @@
 # Saved delivery workbench contract
 
+## Continue from package review (2026-10-30 source)
+
+Compile and permission review now keep the selected package in their next-step
+links. Export preparation loads its real workspace-relative path, suggests fresh
+Receipt/output names, and provides copyable Verify and export commands. Run them
+from the workspace opened by Console; Console does not execute commands or
+install anything. Existing output is still protected by the export CLI.
+
+Optionally read a saved Receipt by filename. A failed Receipt cannot be included
+in prepared command text. Reading a successful Receipt does not prove it belongs
+to the selected package: the export CLI remains authoritative for that binding
+and final export checks. Receipt views can return to the same package/export
+context. No raw package data or paths are saved in browser storage.
+
+60 Console checks, TypeScript and production build passed. A retained synthetic
+workspace was used for the real API/UI comparison: review → permissions → export
+requires two links and no repeated package-path entry. The retained Receipt
+stayed unchanged. Clipboard interaction was observed through an isolated mock;
+the system clipboard, Skills and exports were not executed or modified.
+
 Date: 2026-10-10. Status: implementation contract.
 
 Distribution update — 2026-10-16: included in the public v0.2.3 Console packages.
