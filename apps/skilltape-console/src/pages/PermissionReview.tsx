@@ -1,3 +1,4 @@
+import { PackageJourney } from './PackageJourney'
 import { useEffect, useState } from 'react'
 
 import { formatNumber, getSkillDiff, isSavedEvidenceId } from '../api'
@@ -65,6 +66,7 @@ export function PermissionReviewPage({ skillId = '' }: PermissionReviewProps) {
         <StatusBadge tone={risk.tone}>{risk.label}</StatusBadge>
       </header>
 
+      <PackageJourney skillId={skill.id} current="permissions" />
       <article className="panel" aria-labelledby="policy-preflight-title">
         <h2 id="policy-preflight-title">Declared policy check</h2>
         <p>Checks declared policy without running steps or creating a Receipt. Inputs, sandbox availability and runtime remain unverified.</p>

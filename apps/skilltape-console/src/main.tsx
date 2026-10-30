@@ -87,7 +87,7 @@ function App() {
           <NavLink href={'#permissions' + skillQuery} active={route.page === 'permissions'} label="Permissions" />
           <NavLink href="#receipt" active={route.page === 'receipt'} label="Verify Receipt" />
           <p className="nav-label" style={{ marginTop: 16 }}>Export</p>
-          <NavLink href="#export" active={route.page === 'export'} label="Export guide" />
+          <NavLink href={'#export' + skillQuery} active={route.page === 'export'} label="Export guide" />
         </nav>
         <div className="sidebar-bottom">
           <div className="local-card">
@@ -118,8 +118,8 @@ function App() {
           {route.page === 'timeline' ? <TimelinePage tapeId={route.tapeId} tapeOffset={route.tapeOffset} eventOffset={route.eventOffset} /> : null}
           {route.page === 'compile' ? <CompileReviewPage key={route.skillId ?? ''} skillId={route.skillId} /> : null}
           {route.page === 'permissions' ? <PermissionReviewPage key={route.skillId ?? ''} skillId={route.skillId} /> : null}
-          {route.page === 'receipt' ? <ReceiptViewPage key={route.receiptId ?? ''} receiptId={route.receiptId} /> : null}
-          {route.page === 'export' ? <ExportTargetsPage /> : null}
+          {route.page === 'receipt' ? <ReceiptViewPage key={route.receiptId ?? ''} receiptId={route.receiptId} skillId={route.skillId} /> : null}
+          {route.page === 'export' ? <ExportTargetsPage key={route.skillId ?? ''} skillId={route.skillId} receiptId={route.receiptId} /> : null}
         </main>
 
         <footer className="app-footer">

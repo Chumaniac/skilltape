@@ -1,3 +1,4 @@
+import { PackageJourney } from './PackageJourney'
 import { useEffect, useState } from 'react'
 
 import { formatNumber, getSkillDiff, isSavedEvidenceId } from '../api'
@@ -82,6 +83,7 @@ export function CompileReviewPage({ skillId = '' }: CompileReviewProps) {
         </> : <p>This package does not record its Capture source. Existing workflow and verification evidence remain available.</p>}
       </article>
 
+      <PackageJourney skillId={skill.id} current="compile" />
       <div className="review-grid">
         <article className="panel panel-span-2">
           <div className="panel-heading">

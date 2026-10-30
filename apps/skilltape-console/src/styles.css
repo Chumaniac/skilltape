@@ -1269,3 +1269,8 @@ tbody code {
 @media (max-width: 1040px) { .batch-workspace, .export-layout { grid-template-columns: minmax(0, 1fr); } }
 
 .compile-source code { white-space: normal; overflow-wrap: anywhere; }
+
+.journey-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1rem 0; }
+.package-journey, .journey-command { min-width: 0; }
+.export-options input:not([type=checkbox]) { width: 100%; min-width: 0; }
+.export-options label { display: block; margin-top: 1rem; }
