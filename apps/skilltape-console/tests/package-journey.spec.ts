@@ -10,7 +10,7 @@ test('a reviewed package carries its real path through permissions and export',a
  await expect(page.getByRole('region',{name:'Export command'})).toContainText("'skills/demo'")
  await expect(page.getByRole('region',{name:'Export command'})).not.toContainText('./my-skill')
  await expect(page.getByRole('region',{name:'Verification command'})).toContainText('--receipt')
- await expect(page.getByRole('link',{name:'Open the saved verification Receipt'})).toHaveAttribute('href',/#receipt\?run=.*&skill=demo/)
+ await expect(page.getByRole('button',{name:'Check this verification Receipt'})).toBeVisible();await expect(page.getByRole('link',{name:'View this verification Receipt'})).toHaveCount(0)
 })
 
 test('export paths are literal and failed Receipts do not become export evidence',async({page})=>{
@@ -29,3 +29,20 @@ test('export paths are literal and failed Receipts do not become export evidence
  await expect(page.getByText('This Receipt did not succeed.',{exact:false})).toBeVisible()
  await expect(page.getByRole('region',{name:'Export command'})).toHaveCount(0)
 })
+
+
+test('prepared verification identity survives reload and leaving the export view',async({page})=>{
+ await page.route('**/api/v1/skills/demo/diff',route=>route.fulfill({json:skill}));await page.goto('/#export?skill=demo');
+ const command=page.getByRole('region',{name:'Verification command'}).locator('code');await expect(command).toContainText('--receipt');const original=await command.innerText();
+ await page.reload();await expect(command).toHaveText(original);await page.getByRole('link',{name:'Return to this package’s review'}).click();
+ await page.getByRole('link',{name:'Prepare this package’s export'}).click();await expect(command).toHaveText(original);
+});
+
+
+test('only a checked Receipt can be opened and a new preparation preserves the old evidence',async({page})=>{
+ await page.route('**/api/v1/skills/demo/diff',route=>route.fulfill({json:skill}));let reads=0;
+ await page.route('**/api/v1/receipts/*',route=>{reads++;return route.fulfill({status:404,json:{error:{code:'not_found',message:'Receipt is not saved yet. Run Verify, then check again.'}}})});await page.goto('/#export?skill=demo');
+ const command=page.getByRole('region',{name:'Verification command'}).locator('code');await expect(command).toContainText('--receipt');const original=await command.innerText();
+ await page.getByRole('button',{name:'Check this verification Receipt'}).click();await expect(page.getByText('Receipt is not saved yet.',{exact:false}).first()).toBeVisible();await expect(page.getByRole('link',{name:'View this verification Receipt'})).toHaveCount(0);expect(reads).toBe(1);
+ await page.getByRole('button',{name:'Prepare a new verification'}).click();await expect(command).not.toHaveText(original);expect(reads).toBe(1);
+});

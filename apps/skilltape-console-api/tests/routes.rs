@@ -692,3 +692,129 @@ async fn compile_source_summary_is_optional_bounded_and_validated() {
     assert_eq!(status, StatusCode::OK);
     assert!(diff["compile_source"].is_null());
 }
+
+#[tokio::test]
+async fn tape_package_discovery_matches_both_normalized_digests_and_bounds_metadata() {
+    use sha2::{Digest, Sha256};
+    let (_temp, root) = fixture();
+    let store = TapeStore::open(root.join(".skilltape/tapes/tape-a")).unwrap();
+    let manifest = store.read_manifest().unwrap();
+    let events = store
+        .read_events_bounded(16 * 1024 * 1024, 100_000)
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    let digest = |v: Value| {
+        format!(
+            "sha256:{}",
+            Sha256::digest(serde_json::to_vec(&v).unwrap())
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        )
+    };
+    let provenance = json!({"schema":"skilltape.dev/compile/v1","source_tape":{"format":"skilltape.dev/tape-source/v1","manifest_sha256":digest(serde_json::to_value(&manifest).unwrap()),"events_sha256":digest(serde_json::to_value(&events).unwrap()),"event_count":events.len()}});
+    fs::write(
+        root.join("skills/demo/compile.json"),
+        serde_json::to_vec(&provenance).unwrap(),
+    )
+    .unwrap();
+    let model = ConsoleReadModel::new(&root).unwrap();
+    let response = router(model)
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/tapes/tape-a/packages?limit=50")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), 1024 * 1024).await.unwrap())
+            .unwrap();
+    assert_eq!(body["items"][0]["id"], "demo");
+    assert_eq!(body["items"][0]["matches_tape"], true);
+    let mut changed = provenance;
+    changed["source_tape"]["events_sha256"] = json!("sha256:".to_owned() + &"f".repeat(64));
+    fs::write(
+        root.join("skills/demo/compile.json"),
+        serde_json::to_vec(&changed).unwrap(),
+    )
+    .unwrap();
+    let response = router(ConsoleReadModel::new(&root).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/tapes/tape-a/packages")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), 1024 * 1024).await.unwrap())
+            .unwrap();
+    assert_eq!(body["items"][0]["matches_tape"], false);
+    fs::write(
+        root.join("skills/demo/compile.json"),
+        vec![b' '; 64 * 1024 + 1],
+    )
+    .unwrap();
+    let response = router(ConsoleReadModel::new(&root).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/tapes/tape-a/packages")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), 1024 * 1024).await.unwrap())
+            .unwrap();
+    assert_eq!(body["items"][0]["source_state"], "unavailable");
+    assert_eq!(body["items"][0]["matches_tape"], false);
+}
+
+#[tokio::test]
+async fn package_discovery_refuses_oversized_directory_and_unsafe_metadata() {
+    let (_temp, root) = fixture();
+    for index in 0..1000 {
+        fs::create_dir(root.join(format!("skills/package-{index}"))).unwrap();
+    }
+    let response = router(ConsoleReadModel::new(&root).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/tapes/tape-a/packages")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+#[cfg(unix)]
+#[tokio::test]
+async fn package_discovery_ignores_symlinks_and_does_not_block_on_a_fifo() {
+    use std::os::unix::{ffi::OsStrExt, fs::symlink};
+    let (_temp, root) = fixture();
+    symlink(root.join("skills/demo"), root.join("skills/alias")).unwrap();
+    let path = root.join("skills/demo/compile.json");
+    let name = std::ffi::CString::new(path.as_os_str().as_bytes()).unwrap();
+    assert_eq!(unsafe { libc::mkfifo(name.as_ptr(), 0o600) }, 0);
+    let response = router(ConsoleReadModel::new(&root).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/tapes/tape-a/packages")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), 1024 * 1024).await.unwrap())
+            .unwrap();
+    assert_eq!(body["total"], 1);
+    assert_eq!(body["items"][0]["source_state"], "unavailable");
+}
