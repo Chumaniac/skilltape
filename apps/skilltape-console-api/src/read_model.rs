@@ -365,12 +365,9 @@ impl ConsoleReadModel {
                     return Err(ReadModelError::DiscoveryCapacity);
                 }
                 let entry = entry?;
-                let metadata = fs::symlink_metadata(entry.path())?;
+                let file_type = entry.file_type()?;
                 let id = entry.file_name().to_string_lossy().into_owned();
-                if metadata.is_dir()
-                    && !metadata.file_type().is_symlink()
-                    && validate_id(&id).is_ok()
-                {
+                if file_type.is_dir() && !file_type.is_symlink() && validate_id(&id).is_ok() {
                     ids.insert(id);
                 }
             }
