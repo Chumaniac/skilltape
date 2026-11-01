@@ -46,3 +46,9 @@ test('only a checked Receipt can be opened and a new preparation preserves the o
  await page.getByRole('button',{name:'Check this verification Receipt'}).click();await expect(page.getByText('Receipt is not saved yet.',{exact:false}).first()).toBeVisible();await expect(page.getByRole('link',{name:'View this verification Receipt'})).toHaveCount(0);expect(reads).toBe(1);
  await page.getByRole('button',{name:'Prepare a new verification'}).click();await expect(command).not.toHaveText(original);expect(reads).toBe(1);
 });
+
+
+test('saved Receipt library reads selected evidence and keeps failed evidence out of export',async({page})=>{
+ await page.route('**/api/v1/skills/demo/diff',r=>r.fulfill({json:skill}));await page.route('**/api/v1/receipts?*',r=>r.fulfill({json:{schema:'skilltape.dev/console/v1',items:[{id:'known-failed',metadata_state:'available',status:'assertion_failed',skill_hash:'b'.repeat(64),run_id:'a'.repeat(64),bytes:100,modified_at_ms:1710000000000}],offset:0,limit:50,total:1,next_offset:null}}));await page.route('**/api/v1/receipts/known-failed',r=>r.fulfill({json:{schema:'skilltape.dev/receipt/v1',id:'known-failed',document:{schema:'skilltape.dev/receipt/v1',run_id:'a'.repeat(64),skill_hash:'b'.repeat(64),status:'assertion_failed',steps:[],assertions:[],policy_decisions:[]}}}));
+ await page.goto('/#export?skill=demo');await page.getByRole('button',{name:'Browse saved Receipts'}).click();await page.getByRole('button',{name:'Read Receipt known-failed',exact:true}).click();await expect(page.getByLabel('Saved Receipt ID',{exact:true})).toHaveValue('known-failed');await expect(page.getByRole('region',{name:'Export command'})).toHaveCount(0);await expect(page.getByText('This Receipt did not succeed.',{exact:false})).toBeVisible();
+});

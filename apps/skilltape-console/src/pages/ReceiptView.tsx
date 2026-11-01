@@ -1,3 +1,4 @@
+import {SavedReceipts} from './SavedReceipts'
 import { RunConditions } from './RunConditions'
 
 import { useEffect, useState } from 'react'
@@ -68,7 +69,7 @@ export function ReceiptViewPage({ receiptId = '', skillId = '' }: ReceiptViewPro
     return () => controller.abort()
   }, [receiptId, reload])
 
-  const picker = <><ReceiptPicker key={receiptId} receiptId={receiptId} onOpen={(id) => {
+  const picker = <><SavedReceipts onRead={id=>{window.location.hash='receipt?run='+encodeURIComponent(id)+(skillId?'&skill='+encodeURIComponent(skillId):'');if(id===receiptId)setReload(value=>value+1)}}/><ReceiptPicker key={receiptId} receiptId={receiptId} onOpen={(id) => {
     if (id === receiptId) setReload(value => value + 1)
     else window.location.hash = 'receipt?run=' + encodeURIComponent(id) + (skillId ? '&skill=' + encodeURIComponent(skillId) : '')
   }} />{isSavedEvidenceId(skillId) ? <nav className="journey-actions" aria-label="Receipt next steps"><a className="button" href={'#compile?skill='+encodeURIComponent(skillId)}>Return to package review</a><a className="button" href={'#export?skill='+encodeURIComponent(skillId)+'&run='+encodeURIComponent(receiptId)}>Prepare this package’s export</a></nav> : null}</>

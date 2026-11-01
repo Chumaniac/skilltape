@@ -818,3 +818,64 @@ async fn package_discovery_ignores_symlinks_and_does_not_block_on_a_fifo() {
     assert_eq!(body["total"], 1);
     assert_eq!(body["items"][0]["source_state"], "unavailable");
 }
+
+#[tokio::test]
+async fn receipt_library_discovers_saved_files_without_sidecars_or_execution() {
+    let (_temp, root) = fixture();
+    let file = root.join(".skilltape/receipts/run-a.json");
+    let original = fs::read(&file).unwrap();
+    fs::write(root.join(".skilltape/receipts/run-a.context.json"), b"{}").unwrap();
+    let response = router(ConsoleReadModel::new(&root).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/receipts?limit=50")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), 1024 * 1024).await.unwrap())
+            .unwrap();
+    assert_eq!(body["total"], 1);
+    assert_eq!(body["items"][0]["id"], "run-a");
+    assert_eq!(fs::read(file).unwrap(), original);
+}
+
+#[tokio::test]
+async fn receipt_library_labels_bounded_metadata_and_ignores_unsafe_entries() {
+    let (_temp, root) = fixture();
+    let receipts = root.join(".skilltape/receipts");
+    let value = json!({"schema":"skilltape.dev/receipt/v1","status":"assertion_failed","run_id":"a".repeat(64),"skill_hash":"b".repeat(64),"steps":[],"assertions":[],"policy_decisions":[]});
+    let data = serde_json::to_vec(&value).unwrap();
+    fs::write(receipts.join("run-a.json"), &data).unwrap();
+    fs::write(receipts.join("large.json"), vec![b' '; 64 * 1024 + 1]).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::{ffi::OsStrExt, fs::symlink};
+        symlink(receipts.join("run-a.json"), receipts.join("linked.json")).unwrap();
+        let fifo =
+            std::ffi::CString::new(receipts.join("pipe.json").as_os_str().as_bytes()).unwrap();
+        assert_eq!(unsafe { libc::mkfifo(fifo.as_ptr(), 0o600) }, 0);
+    }
+    let response = router(ConsoleReadModel::new(&root).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/receipts")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), 1024 * 1024).await.unwrap())
+            .unwrap();
+    assert_eq!(body["total"], 2);
+    assert_eq!(body["items"][0]["id"], "large");
+    assert_eq!(body["items"][0]["metadata_state"], "unavailable");
+    assert_eq!(body["items"][1]["status"], "assertion_failed");
+    assert_eq!(body["items"][1]["skill_hash"], "b".repeat(64));
+    assert_eq!(fs::read(receipts.join("run-a.json")).unwrap(), data);
+}

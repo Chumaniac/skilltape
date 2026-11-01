@@ -64,7 +64,7 @@ impl From<ReadModelError> for ApiError {
             ReadModelError::UnsafePath => Self::Forbidden,
             ReadModelError::NotFound => Self::NotFound,
             ReadModelError::InvalidDocument => Self::InvalidDocument,
-            ReadModelError::DiscoveryCapacity => Self::Unavailable { code: "package_discovery_capacity", message: "Package discovery is limited to 1000 entries. Open a saved package ID directly." },
+            ReadModelError::DiscoveryCapacity => Self::Unavailable { code: "package_discovery_capacity", message: "Saved-evidence discovery is limited to 1000 entries. Open a known saved ID directly." },
             ReadModelError::UnsupportedPlatform => Self::Unavailable {
                 code: "unsupported_delivery_platform",
                 message: "File integrity inspection is unavailable on this platform.",
@@ -135,6 +135,7 @@ pub fn router_with_static(model: ConsoleReadModel, static_root: Option<PathBuf>)
         .route("/api/v1/tapes/{id}/packages", get(tape_packages))
         .route("/api/v1/skills/{id}/diff", get(skill_diff))
         .route("/api/v1/runs/{id}", get(run_document))
+        .route("/api/v1/receipts", get(list_receipts))
         .route("/api/v1/receipts/{id}", get(receipt_document))
         .route("/api/v1/receipts/{id}/context", get(receipt_context))
         .route("/api/v1/runs/{id}/events", get(run_events))
@@ -276,6 +277,16 @@ async fn run_document(
     Path(run_id): Path<String>,
 ) -> Result<Json<StoredDocument>, ApiError> {
     Ok(Json(state.model.run(&run_id)?))
+}
+
+async fn list_receipts(
+    State(state): State<AppState>,
+    Query(query): Query<PageQuery>,
+) -> Result<Json<Collection<crate::read_model::ReceiptSummary>>, ApiError> {
+    let (offset, limit) = page(&query)?;
+    let permit = inspection_permit(&state)?;
+    let (result, _permit) = inspect(permit, move || state.model.receipts(offset, limit)).await?;
+    Ok(Json(result))
 }
 
 async fn receipt_document(
