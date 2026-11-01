@@ -296,3 +296,10 @@ export async function getTapePackages(tapeId:string,signal?:AbortSignal,offset=0
  if(!isCollection(value,50,(row:unknown):row is TapePackages['items'][number]=>Boolean(row&&typeof row==='object'&&typeof (row as {id:string}).id==='string'&&isSavedEvidenceId((row as {id:string}).id)&&['matched','different','unrecorded','unavailable'].includes((row as {source_state:string}).source_state)&&typeof (row as {matches_tape:boolean}).matches_tape==='boolean'&&((row as {source_state:string}).source_state==='matched')===(row as {matches_tape:boolean}).matches_tape))||!('tape_id' in value)||value.tape_id!==tapeId)throw new ApiError('Package discovery is incomplete or unsupported. Retry or open a known saved package ID.',502,'invalid_packages')
  return value as TapePackages
 }
+
+export interface ReceiptSummary {id:string;metadata_state:'available'|'unavailable';status:string|null;skill_hash:string|null;run_id:string|null;bytes:number|null;modified_at_ms:number|null}
+export async function getReceipts(signal?:AbortSignal,offset=0):Promise<Collection<ReceiptSummary>>{
+ const value=await get<unknown>('/receipts?limit=50&offset='+offset,signal)
+ if(!isCollection(value,50,(row:unknown):row is ReceiptSummary=>{if(!row||typeof row!=='object')return false;const v=row as ReceiptSummary;return typeof v.id==='string'&&isSavedEvidenceId(v.id)&&['available','unavailable'].includes(v.metadata_state)&&(v.status===null||['succeeded','run_failed','assertion_failed','policy_denied'].includes(v.status))&&[v.skill_hash,v.run_id].every(hash=>hash===null||typeof hash==='string'&&/^[a-f0-9]{64}$/.test(hash))&&[v.bytes,v.modified_at_ms].every(n=>n===null||Number.isSafeInteger(n)&&n>=0)&&(v.metadata_state!=='available'||v.status!==null&&v.skill_hash!==null&&v.run_id!==null)}))throw new ApiError('Saved Receipt list is invalid. Retry or open a known filename.',502,'invalid_receipt_list')
+ return value
+}

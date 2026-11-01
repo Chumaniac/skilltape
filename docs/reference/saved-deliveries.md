@@ -124,3 +124,18 @@ chooses a fresh filename; no previous Receipt is replaced by the Console.
 **Check this verification Receipt** performs an explicit read before offering its
 view link. A missing/failed Receipt stays visible and cannot become successful
 export evidence. The export CLI still checks the authoritative package binding.
+
+
+## Browse existing Receipts
+
+Receipt view and export preparation now provide an explicit saved Receipt library.
+It lists at most 50 files per page, scans at most 1,000 directory entries, and
+reads at most 64 KiB of metadata per entry. Reserved `.context.json` sidecars,
+links and special files are excluded. Unreadable/large metadata remains labelled
+unavailable; a known filename can still be opened directly under existing limits.
+
+The library shows recorded status, package fingerprint and filesystem update time;
+it does not re-execute Verify or claim a current package match. Selecting an item
+reads the complete Receipt. Failed evidence cannot prepare an export command;
+the export CLI still checks authoritative package binding before any delivery.
+No saved Receipt or installed Skill is replaced.

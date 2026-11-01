@@ -1274,3 +1274,5 @@ tbody code {
 .package-journey, .journey-command { min-width: 0; }
 .export-options input:not([type=checkbox]) { width: 100%; min-width: 0; }
 .export-options label { display: block; margin-top: 1rem; }
+
+.saved-receipts{margin:18px 0;padding:16px;border:1px solid var(--border,#52616b);border-radius:8px}.saved-receipt-list{list-style:none;padding:0}.saved-receipt-list li{display:flex;gap:14px;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--border,#52616b)}.saved-receipt-list li>div{display:grid;min-width:0;gap:6px;overflow-wrap:anywhere}.saved-receipt-list span{font-size:13px}.saved-receipt-list button{flex-shrink:0}@media(max-width:640px){.saved-receipt-list li{align-items:stretch;flex-direction:column}}

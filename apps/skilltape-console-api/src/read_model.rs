@@ -162,6 +162,17 @@ pub struct TapePackages {
 }
 
 #[derive(Clone, Debug, Serialize)]
+pub struct ReceiptSummary {
+    pub id: String,
+    pub metadata_state: &'static str,
+    pub status: Option<String>,
+    pub skill_hash: Option<String>,
+    pub run_id: Option<String>,
+    pub bytes: Option<usize>,
+    pub modified_at_ms: Option<u64>,
+}
+
+#[derive(Clone, Debug, Serialize)]
 pub struct StoredDocument {
     pub schema: &'static str,
     pub id: String,
@@ -496,6 +507,104 @@ impl ConsoleReadModel {
         self.read_document(&path, run_id, "run")
     }
 
+    pub fn receipts(
+        &self,
+        offset: usize,
+        limit: usize,
+    ) -> Result<Collection<ReceiptSummary>, ReadModelError> {
+        let root = self.storage_child("receipts")?;
+        let entries = match fs::read_dir(&root) {
+            Ok(v) => v,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                return Ok(collection(Vec::new(), offset, limit.min(50), 0))
+            }
+            Err(e) => return Err(e.into()),
+        };
+        let mut ids = BTreeSet::new();
+        for (index, entry) in entries.enumerate() {
+            if index >= 1000 {
+                return Err(ReadModelError::DiscoveryCapacity);
+            }
+            let entry = entry?;
+            let kind = entry.file_type()?;
+            if !kind.is_file() || kind.is_symlink() {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().into_owned();
+            // Context sidecars are reserved; they remain accessible through the context route.
+            if name.ends_with(".context.json") {
+                continue;
+            }
+            if let Some(id) = name.strip_suffix(".json") {
+                if validate_id(id).is_ok() {
+                    ids.insert(id.to_owned());
+                }
+            }
+        }
+        let total = ids.len();
+        let limit = limit.min(50);
+        let mut items = Vec::new();
+        for id in ids.into_iter().skip(offset).take(limit) {
+            let mut row = ReceiptSummary {
+                id: id.clone(),
+                metadata_state: "unavailable",
+                status: None,
+                skill_hash: None,
+                run_id: None,
+                bytes: None,
+                modified_at_ms: None,
+            };
+            if let Ok((bytes, metadata)) =
+                self.bounded_stored_file_info(&root.join(format!("{id}.json")), 64 * 1024)
+            {
+                row.bytes = Some(bytes.len());
+                row.modified_at_ms = metadata
+                    .modified()
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .and_then(|d| u64::try_from(d.as_millis()).ok());
+                if let Ok(value) = serde_json::from_slice::<Value>(&bytes) {
+                    let hash = |key: &str| {
+                        value
+                            .get(key)
+                            .and_then(Value::as_str)
+                            .filter(|s| {
+                                s.len() == 64
+                                    && s.bytes()
+                                        .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+                            })
+                            .map(str::to_owned)
+                    };
+                    if value.get("schema").and_then(Value::as_str)
+                        == Some("skilltape.dev/receipt/v1")
+                    {
+                        row.status = value
+                            .get("status")
+                            .and_then(Value::as_str)
+                            .filter(|s| {
+                                matches!(
+                                    *s,
+                                    "succeeded"
+                                        | "run_failed"
+                                        | "assertion_failed"
+                                        | "policy_denied"
+                                )
+                            })
+                            .map(str::to_owned);
+                        row.skill_hash = hash("skill_hash");
+                        row.run_id = hash("run_id");
+                        if row.status.is_some() && row.skill_hash.is_some() && row.run_id.is_some()
+                        {
+                            row.metadata_state = "available";
+                        }
+                    }
+                }
+            }
+            items.push(row);
+        }
+        Ok(collection(items, offset, limit, total))
+    }
+
     pub fn receipt(&self, receipt_id: &str) -> Result<StoredDocument, ReadModelError> {
         validate_id(receipt_id)?;
         let path = self
@@ -605,6 +714,15 @@ impl ConsoleReadModel {
     }
 
     fn bounded_stored_file(&self, path: &Path, limit: u64) -> Result<Vec<u8>, ReadModelError> {
+        self.bounded_stored_file_info(path, limit)
+            .map(|(bytes, _)| bytes)
+    }
+
+    fn bounded_stored_file_info(
+        &self,
+        path: &Path,
+        limit: u64,
+    ) -> Result<(Vec<u8>, fs::Metadata), ReadModelError> {
         self.ensure_safe_path(path)?;
         let mut options = fs::OpenOptions::new();
         options.read(true);
@@ -626,7 +744,7 @@ impl ConsoleReadModel {
         if bytes.len() as u64 > limit {
             return Err(ReadModelError::InvalidDocument);
         }
-        Ok(bytes)
+        Ok((bytes, metadata))
     }
 
     pub fn run_events(
