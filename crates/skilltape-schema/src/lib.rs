@@ -15,6 +15,7 @@ pub enum SchemaId {
     PermissionsV1,
     LockV1,
     ReceiptV1,
+    ReplayV1,
 }
 
 impl SchemaId {
@@ -25,6 +26,7 @@ impl SchemaId {
             Self::PermissionsV1 => "skilltape.dev/permissions/v1",
             Self::LockV1 => "skilltape.dev/lock/v1",
             Self::ReceiptV1 => "skilltape.dev/receipt/v1",
+            Self::ReplayV1 => "skilltape.dev/replay/v1",
         }
     }
 }

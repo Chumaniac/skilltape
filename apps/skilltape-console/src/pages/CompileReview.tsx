@@ -14,9 +14,14 @@ export function CompileReviewPage({ skillId = '' }: CompileReviewProps) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [reload, setReload] = useState(0)
+  const [workflowPage, setWorkflowPage] = useState(0)
+  const [diagnosticPage, setDiagnosticPage] = useState(0)
 
   useEffect(() => {
-    if (!isSavedEvidenceId(skillId)) return
+    setSkill(null)
+    setWorkflowPage(0)
+    setDiagnosticPage(0)
+    if (!isSavedEvidenceId(skillId)) { setLoading(false); setError(''); return }
     const controller = new AbortController()
     setLoading(true)
     setError('')
@@ -49,6 +54,8 @@ export function CompileReviewPage({ skillId = '' }: CompileReviewProps) {
   }
 
   const stepCount = skill.workflow.steps?.length ?? 0
+  const pageSize = 100
+  const diagnostics = [...skill.lint.errors, ...skill.lint.warnings]
   const lintTone = skill.lint.errors.length === 0 ? 'good' : 'danger'
   return (
     <>{picker}<section className="page-section">
@@ -95,9 +102,9 @@ export function CompileReviewPage({ skillId = '' }: CompileReviewProps) {
           </div>
           {stepCount > 0 ? (
             <ol className="workflow-list">
-              {skill.workflow.steps?.map((step, index) => (
-                <li key={String(step.id ?? index)}>
-                  <span className="step-index">{String(index + 1).padStart(2, '0')}</span>
+              {skill.workflow.steps?.slice(workflowPage * pageSize, (workflowPage + 1) * pageSize).map((step, index) => (
+                <li key={String(step.id ?? '') + ':' + (workflowPage * pageSize + index)}>
+                  <span className="step-index">{String(workflowPage * pageSize + index + 1).padStart(2, '0')}</span>
                   <div className="step-copy">
                     <strong>{String(step.id ?? 'Unnamed step')}</strong>
                     <span>{String(step.action ?? 'unknown action')}</span>
@@ -112,6 +119,11 @@ export function CompileReviewPage({ skillId = '' }: CompileReviewProps) {
               message="This package has a valid workflow document, but it contains no executable steps."
             />
           )}
+          {stepCount > pageSize && <nav aria-label="Workflow pages" className="panel-heading">
+            <button type="button" disabled={workflowPage === 0} onClick={() => setWorkflowPage(value => value - 1)}>Previous workflow page</button>
+            <span>Steps {workflowPage * pageSize + 1}–{Math.min((workflowPage + 1) * pageSize, stepCount)} of {stepCount}</span>
+            <button type="button" disabled={(workflowPage + 1) * pageSize >= stepCount} onClick={() => setWorkflowPage(value => value + 1)}>Next workflow page</button>
+          </nav>}
           <JsonDisclosure label="View workflow JSON" value={skill.workflow} />
         </article>
 
@@ -153,8 +165,8 @@ export function CompileReviewPage({ skillId = '' }: CompileReviewProps) {
             </div>
           ) : (
             <ul className="diagnostic-list">
-              {[...skill.lint.errors, ...skill.lint.warnings].map((diagnostic) => (
-                <li className={'diagnostic diagnostic-' + diagnostic.level} key={diagnostic.code + diagnostic.file}>
+              {diagnostics.slice(diagnosticPage * pageSize, (diagnosticPage + 1) * pageSize).map((diagnostic, index) => (
+                <li className={'diagnostic diagnostic-' + diagnostic.level} key={diagnostic.code + diagnostic.file + ':' + (diagnosticPage * pageSize + index)}>
                   <StatusBadge tone={diagnostic.level === 'error' ? 'danger' : 'warn'}>{diagnostic.level}</StatusBadge>
                   <div>
                     <strong>{diagnostic.code}</strong>
@@ -165,6 +177,11 @@ export function CompileReviewPage({ skillId = '' }: CompileReviewProps) {
               ))}
             </ul>
           )}
+          {diagnostics.length > pageSize && <nav aria-label="Diagnostic pages" className="panel-heading">
+            <button type="button" disabled={diagnosticPage === 0} onClick={() => setDiagnosticPage(value => value - 1)}>Previous diagnostic page</button>
+            <span>Findings {diagnosticPage * pageSize + 1}–{Math.min((diagnosticPage + 1) * pageSize, diagnostics.length)} of {diagnostics.length}</span>
+            <button type="button" disabled={(diagnosticPage + 1) * pageSize >= diagnostics.length} onClick={() => setDiagnosticPage(value => value + 1)}>Next diagnostic page</button>
+          </nav>}
           <JsonDisclosure label="View manifest JSON" value={skill.manifest} />
         </article>
       </div>

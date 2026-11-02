@@ -5,6 +5,7 @@ const WORKFLOW_V1_SCHEMA: &str = include_str!("../../../schemas/workflow/v1.json
 const PERMISSIONS_V1_SCHEMA: &str = include_str!("../../../schemas/permissions/v1.json");
 const LOCK_V1_SCHEMA: &str = include_str!("../../../schemas/lock/v1.json");
 const RECEIPT_V1_SCHEMA: &str = include_str!("../../../schemas/receipt/v1.json");
+const REPLAY_V1_SCHEMA: &str = include_str!("../../../schemas/replay/v1.json");
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SchemaDiagnostic {
@@ -73,6 +74,7 @@ fn schema_value(schema_id: SchemaId) -> serde_json::Value {
         SchemaId::PermissionsV1 => PERMISSIONS_V1_SCHEMA,
         SchemaId::LockV1 => LOCK_V1_SCHEMA,
         SchemaId::ReceiptV1 => RECEIPT_V1_SCHEMA,
+        SchemaId::ReplayV1 => REPLAY_V1_SCHEMA,
     };
 
     serde_json::from_str(schema).expect("embedded JSON Schema must be valid JSON")

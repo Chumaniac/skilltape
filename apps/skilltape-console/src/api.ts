@@ -103,8 +103,12 @@ export async function getSkillDiff(skillId: string, signal?: AbortSignal) {
   return skill
 }
 
-export function getRun(runId: string, signal?: AbortSignal) {
-  return get<StoredDocument>('/runs/' + encodeURIComponent(runId), signal)
+export async function getRun(runId: string, signal?: AbortSignal) {
+  const value = await get<unknown>('/runs/' + encodeURIComponent(runId), signal)
+  if (!isRunDocument(value, runId)) {
+    throw new ApiError('The saved run is invalid or unsupported. Inspect the original record; Console did not run or modify it.', 502, 'invalid_run')
+  }
+  return value
 }
 
 export async function getReceipt(receiptId: string, signal?: AbortSignal) {
@@ -117,6 +121,53 @@ export async function getReceipt(receiptId: string, signal?: AbortSignal) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function boundedPayload(value: unknown): boolean {
+  let nodes = 0
+  function inspect(item: unknown, depth: number): boolean {
+    if (++nodes > 100000 || depth > 64) return false
+    if (typeof item === 'string') return item.length <= 65536
+    if (typeof item === 'number') return Number.isFinite(item) && Math.abs(item) <= Number.MAX_SAFE_INTEGER
+    if (Array.isArray(item)) return item.length <= 10000 && item.every(child => inspect(child, depth + 1))
+    if (isRecord(item)) {
+      const keys = Object.keys(item)
+      return keys.length <= 10000 && keys.every(key => key.length <= 65536 && inspect(item[key], depth + 1))
+    }
+    return item === null || typeof item === 'boolean'
+  }
+  return inspect(value, 0)
+}
+
+function isRunDocument(value: unknown, id: string): value is StoredDocument {
+  if (!boundedPayload(value) || !isRecord(value) || value.id !== id || !isRecord(value.document)) return false
+  const document = value.document
+  const keys = (item: Record<string, unknown>, allowed: string[], required = allowed) =>
+    Object.keys(item).every(key => allowed.includes(key)) && required.every(key => Object.hasOwn(item, key))
+  const text = (item: unknown): item is string => typeof item === 'string' && item.length > 0 && item.length <= 65536
+  const digest = (item: unknown) => typeof item === 'string' && /^[a-f0-9]{64}$/.test(item)
+  const count = (item: unknown) => typeof item === 'number' && Number.isSafeInteger(item) && item >= 0
+  const step = (item: unknown) => isRecord(item) && keys(item, ['step_id', 'status', 'exit_code', 'stdout_sha256', 'stdout_bytes', 'stdout_truncated', 'stderr_sha256', 'stderr_bytes', 'stderr_truncated']) &&
+    text(item.step_id) && text(item.status) && ['succeeded', 'failed', 'denied', 'timed_out', 'cancelled', 'spawn_failed'].includes(item.status) &&
+    (item.exit_code === null || Number.isSafeInteger(item.exit_code)) && digest(item.stdout_sha256) && digest(item.stderr_sha256) &&
+    count(item.stdout_bytes) && count(item.stderr_bytes) && typeof item.stdout_truncated === 'boolean' && typeof item.stderr_truncated === 'boolean'
+  const legacy = value.schema === 'skilltape.dev/run/v1'
+  if (document.schema !== value.schema || (!legacy && value.schema !== 'skilltape.dev/replay/v1') ||
+    !text(document.status) || !['succeeded', 'failed', 'cancelled'].includes(document.status) || !Array.isArray(document.steps) || !document.steps.every(step)) return false
+  if (legacy) {
+    return keys(document, ['schema', 'status', 'steps']) &&
+      (document.status !== 'succeeded' || document.steps.every(item => item.status === 'succeeded'))
+  }
+  if (!keys(document, ['schema', 'status', 'steps', 'policy_decisions', 'output_truncated', 'failure'], ['schema', 'status', 'steps', 'policy_decisions', 'output_truncated']) ||
+    typeof document.output_truncated !== 'boolean' || !Array.isArray(document.policy_decisions) ||
+    !document.policy_decisions.every(item => isRecord(item) && keys(item, ['step_id', 'phase', 'allowed', 'code', 'reason', 'risk']) &&
+      text(item.step_id) && text(item.code) && text(item.reason) && text(item.phase) && ['before', 'after'].includes(item.phase) &&
+      typeof item.allowed === 'boolean' && text(item.risk) && ['low', 'medium', 'high', 'critical'].includes(item.risk))) return false
+  if (document.failure != null && (!isRecord(document.failure) || !keys(document.failure, ['kind', 'step_id', 'status']) ||
+    !text(document.failure.kind) || !['policy_denied', 'step_failed'].includes(document.failure.kind) || !text(document.failure.step_id) ||
+    document.failure.status !== null && typeof document.failure.status !== 'string')) return false
+  return document.status !== 'succeeded' || document.failure == null && document.steps.every(item => item.status === 'succeeded') &&
+    document.policy_decisions.every(item => item.allowed === true)
 }
 
 const isText = (value: unknown): value is string => typeof value === 'string'
@@ -156,17 +207,18 @@ function isTapeEvents(value: unknown, id: string): value is TapeEvents {
 }
 
 function isSkillDiff(value: unknown): value is SkillDiff {
-  if (!isRecord(value) || value.schema !== 'skilltape.dev/console/v1' || !isText(value.id) || !isText(value.package_path) ||
+  if (!boundedPayload(value) || !isRecord(value) || value.schema !== 'skilltape.dev/console/v1' || !isText(value.id) || !isText(value.package_path) ||
     !isRecord(value.manifest) || !isRecord(value.workflow) || !isRecord(value.permissions) || !isRecord(value.lockfile) || !isRecord(value.lint)) return false
   const permissions = value.permissions, lint = value.lint
   if (!isRecord(permissions.filesystem) || !isRecord(permissions.process) || !isRecord(permissions.network) || !isRecord(permissions.secrets)) return false
-  const diagnostic = (item: unknown) => isRecord(item) && isText(item.code) && isText(item.file) && isText(item.path) &&
-    isText(item.message) && isText(item.level) && ['error', 'warning'].includes(item.level)
-  return Array.isArray(value.workflow.steps) && value.workflow.steps.every(step => isRecord(step) && isText(step.id) && isText(step.action) &&
-      ['program', 'path', 'operation'].every(field => step[field] === undefined || isText(step[field]))) &&
-    Array.isArray(value.files) && value.files.every(file => isRecord(file) && isText(file.path) && isCount(file.bytes) &&
+  const viewText = (item: unknown): item is string => isText(item) && item.length <= 4096
+  const diagnostic = (item: unknown) => isRecord(item) && viewText(item.code) && viewText(item.file) && viewText(item.path) &&
+    viewText(item.message) && isText(item.level) && ['error', 'warning'].includes(item.level)
+  return Array.isArray(value.workflow.steps) && value.workflow.steps.every(step => isRecord(step) && viewText(step.id) && isText(step.action) &&
+      ['program', 'path', 'operation'].every(field => step[field] === undefined || viewText(step[field]))) &&
+    Array.isArray(value.files) && value.files.length <= 64 && value.files.every(file => isRecord(file) && viewText(file.path) && isCount(file.bytes) &&
       isText(file.sha256) && /^[0-9a-f]{64}$/.test(file.sha256)) &&
-    isCount(lint.files_checked) && Array.isArray(lint.errors) && lint.errors.every(diagnostic) && Array.isArray(lint.warnings) && lint.warnings.every(diagnostic) &&
+    isCount(lint.files_checked) && Array.isArray(lint.errors) && lint.errors.every(diagnostic) && Array.isArray(lint.warnings) && lint.warnings.every(diagnostic) && lint.errors.length + lint.warnings.length <= 10000 &&
     isTextList(permissions.filesystem.read) && isTextList(permissions.filesystem.write) &&
     isTextList(permissions.process.executables) && isCount(permissions.process.max_processes) && isCount(permissions.process.default_timeout_ms) &&
     typeof permissions.network.enabled === 'boolean' && isTextList(permissions.network.allow_hosts) && typeof permissions.secrets.read_environment === 'boolean'

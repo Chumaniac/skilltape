@@ -285,6 +285,43 @@ async fn run_and_receipt_routes_return_stored_documents() {
 }
 
 #[tokio::test]
+async fn saved_runs_validate_actual_replay_and_explicit_legacy_shapes() {
+    let (_temp, root) = fixture();
+    let path = root.join(".skilltape/runs/run-a/run.json");
+    let replay = json!({"schema":"skilltape.dev/replay/v1","status":"succeeded","steps":[],
+                       "policy_decisions":[],"output_truncated":false});
+    let original = serde_json::to_vec(&replay).unwrap();
+    fs::write(&path, &original).unwrap();
+    let (status, _, value) = request(&root, "/api/v1/runs/run-a", &[]).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(value["schema"], "skilltape.dev/replay/v1");
+    assert_eq!(fs::read(&path).unwrap(), original);
+    for invalid in [
+        json!({"status":"succeeded","private":"PRIVATE_RUN_SENTINEL"}),
+        json!({"schema":"skilltape.dev/run/v1","status":"succeeded","steps":[],"unknown":"PRIVATE_RUN_SENTINEL"}),
+        json!({"schema":"skilltape.dev/run/v1","status":"succeeded","steps":vec![json!({});10001]}),
+    ] {
+        fs::write(&path, serde_json::to_vec(&invalid).unwrap()).unwrap();
+        let (status, body, _) = request(&root, "/api/v1/runs/run-a", &[]).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+        assert!(!body.contains("PRIVATE_RUN_SENTINEL"));
+    }
+}
+
+#[tokio::test]
+async fn compile_review_refuses_console_metadata_over_budget_without_modifying_it() {
+    let (_temp, root) = fixture();
+    let path = root.join("skills/demo/README.md");
+    fs::write(&path, vec![b'x'; 8 * 1024 * 1024 + 1]).unwrap();
+    let before = fs::metadata(&path).unwrap().len();
+    assert_eq!(
+        request(&root, "/api/v1/skills/demo/diff", &[]).await.0,
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+    assert_eq!(fs::metadata(&path).unwrap().len(), before);
+}
+
+#[tokio::test]
 async fn batch_review_reads_only_bounded_case_metadata_and_rejects_tampering() {
     use sha2::{Digest, Sha256};
     let (_temp, root) = fixture();

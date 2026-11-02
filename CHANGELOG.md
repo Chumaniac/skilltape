@@ -10,6 +10,9 @@
 - Validate resource limits consistently before execution, input hashing and new
   run-context creation; reject zero/oversized stream limits and timeouts that
   cannot be represented by the recorded millisecond contract.
+- Validate stored Replay summaries and the explicit legacy aggregate shape;
+  return their actual schema identity. Bound Console package/documents and use
+  paginated lists plus lazy, visibly limited JSON previews without changing files.
 
 ## Unreleased - 2026-10-22
 

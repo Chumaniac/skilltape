@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { isSavedEvidenceId } from './api'
 
 export function SkillPicker({ skillId, onOpen }: { skillId: string; onOpen: (id: string) => void }) {
@@ -127,10 +127,16 @@ export function JsonDisclosure({
   value: unknown
   open?: boolean
 }) {
+  const [expanded, setExpanded] = useState(open)
+  const preview = useMemo(() => {
+    if (!expanded) return ''
+    const text = JSON.stringify(value, null, 2) ?? 'null'
+    return text.length > 65536 ? text.slice(0, 65536) + '\n… Preview truncated. Inspect the saved JSON for the complete record.' : text
+  }, [expanded, value])
   return (
-    <details className="json-disclosure" open={open}>
+    <details className="json-disclosure" open={expanded} onToggle={event => setExpanded(event.currentTarget.open)}>
       <summary>{label}</summary>
-      <CodeBlock value={JSON.stringify(value, null, 2)} />
+      {expanded && <CodeBlock value={preview} />}
     </details>
   )
 }

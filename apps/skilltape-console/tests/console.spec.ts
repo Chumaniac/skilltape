@@ -56,6 +56,56 @@ const receipt = {
   ],
 }
 
+test('bounded saved run documents preserve explicit legacy and replay identities',async({page})=>{
+ await mockApi(page)
+ let payload:unknown={schema:'skilltape.dev/run/v1',id:'run-a',document:{status:'succeeded'}}
+ await page.route('**/api/v1/runs/run-a',route=>route.fulfill({json:payload}))
+ await page.route('**/contract-check',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><title>Isolated API contract</title>'}))
+ await page.goto('/contract-check')
+ const inspect=()=>page.evaluate(async()=>{
+  const module=await import('/src/api.ts')
+  try{return {valid:true,schema:(await module.getRun('run-a')).schema}}catch(error){return {valid:false,code:(error as {code?:string}).code}}
+ })
+ expect(await inspect()).toEqual({valid:false,code:'invalid_run'})
+ payload={schema:'skilltape.dev/run/v1',id:'run-a',document:{schema:'skilltape.dev/run/v1',status:'succeeded',steps:[]}}
+ expect(await inspect()).toEqual({valid:true,schema:'skilltape.dev/run/v1'})
+ payload={schema:'skilltape.dev/replay/v1',id:'run-a',document:{schema:'skilltape.dev/replay/v1',status:'succeeded',steps:[],policy_decisions:[],output_truncated:false}}
+ expect(await inspect()).toEqual({valid:true,schema:'skilltape.dev/replay/v1'})
+ payload={schema:'skilltape.dev/replay/v1',id:'run-a',document:{schema:'skilltape.dev/replay/v1',status:'succeeded',
+  steps:[{...receipt.steps[0],status:{toString:'PRIVATE_RUN_SENTINEL'}}],policy_decisions:[],output_truncated:false}}
+ expect(await inspect()).toEqual({valid:false,code:'invalid_run'})
+})
+
+test('large compile arrays use bounded workflow and diagnostic pages',async({page})=>{
+ await mockApi(page)
+ const payload={...skill,workflow:{...skill.workflow,steps:Array.from({length:205},(_,index)=>({id:'step-'+index,action:'exec',program:'printf',args:['x'.repeat(400)]}))},
+  lint:{files_checked:6,errors:[],warnings:Array.from({length:205},(_,index)=>({code:'SYNTHETIC'+index,level:'warning',file:'workflow.yaml',path:'/steps/'+index,message:'Synthetic review note'}))}}
+ await page.route('**/api/v1/skills/demo/diff',route=>route.fulfill({json:payload}))
+ await page.goto('/#compile?skill=demo')
+ await expect(page.locator('.workflow-list > li')).toHaveCount(100)
+ await expect(page.locator('.diagnostic-list > li')).toHaveCount(100)
+ const json=page.locator('details').filter({has:page.getByText('View workflow JSON',{exact:true})})
+ await expect(json.locator('pre')).toHaveCount(0)
+ await page.getByText('View workflow JSON',{exact:true}).click()
+ await expect(json.locator('pre')).toContainText('Preview truncated')
+ expect((await json.locator('pre').innerText()).length).toBeLessThan(65700)
+ await page.getByRole('button',{name:'Next workflow page'}).click()
+ await expect(page.getByText('step-100',{exact:true})).toBeVisible()
+ await page.getByRole('button',{name:'Next workflow page'}).click()
+ await expect(page.locator('.workflow-list > li')).toHaveCount(5)
+ await page.getByRole('button',{name:'Next diagnostic page'}).click()
+ await expect(page.getByText('SYNTHETIC100',{exact:true})).toBeVisible()
+})
+
+test('oversized compile arrays fail explicitly without rendering an unbounded list',async({page})=>{
+ await mockApi(page)
+ await page.route('**/api/v1/skills/demo/diff',route=>route.fulfill({json:{...skill,workflow:{...skill.workflow,
+  steps:Array.from({length:10001},(_,index)=>({id:'step-'+index,action:'exec',program:'printf'}))}}}))
+ await page.goto('/#compile?skill=demo')
+ await expect(page.getByRole('alert')).toContainText('The saved Skill package is invalid or unsupported.')
+ await expect(page.locator('.workflow-list > li')).toHaveCount(0)
+})
+
 async function mockApi(page: import('@playwright/test').Page, mode: 'normal' | 'error' = 'normal', storedReceipt = receipt) {
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url())
