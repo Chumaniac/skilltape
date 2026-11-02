@@ -1,81 +1,110 @@
-# skilltape 项目完成情况与优化清单
+# SkillTape project status and optimization review
 
-审查日期：2026-11-02（北京时间）。
+Status: reviewed source and follow-up plan. Date: 2026-11-02, Asia/Shanghai.
 
-审查基线：[`69d1828e9a18a6b50fe25405fd2060036331f238`](https://github.com/Chumaniac/skilltape/commit/69d1828e9a18a6b50fe25405fd2060036331f238)。
+Reviewed baseline: `69d1828e9a18a6b50fe25405fd2060036331f238`.
+The implementation references below apply to that baseline. This change adds a
+review document; the proposed implementation changes remain follow-up work.
 
-本地捕获、编译、核验、回执和导出工具较完整；当前源码功能多于 v0.4.1 下载包。
+## Current stage
 
-本次提交新增审查文档。清单中的优化仍为待执行事项，源码判断、历史验证、当前云端结果和实际验收分别记录。
+SkillTape has a substantial local Capture, Compile, Verify, Receipt, and Export
+workflow. Current source includes features beyond the unchanged v0.4.1 download
+archives. Source completion, published binaries, platform support, and business
+acceptance therefore require separate statements.
 
-## 已有能力
+## Implemented capabilities
 
-- Capture→Compile→Lint→Verify→Receipt→Export、策略预检、Console、Starter 和可恢复 Batch 已有代码。 依据：[README.md:14](https://github.com/Chumaniac/skilltape/blob/69d1828e9a18a6b50fe25405fd2060036331f238/README.md#L14)；[crates/skilltape-cli/src/batch_command.rs:730](https://github.com/Chumaniac/skilltape/blob/69d1828e9a18a6b50fe25405fd2060036331f238/crates/skilltape-cli/src/batch_command.rs#L730)。
-- Batch 的 prepare 不执行、pending 执行、显式 retry、取消和 unconfirmed 分流已有状态约束。 依据：[crates/skilltape-core/src/batch.rs:182](https://github.com/Chumaniac/skilltape/blob/69d1828e9a18a6b50fe25405fd2060036331f238/crates/skilltape-core/src/batch.rs#L182)。
-- 输入文件、进程 stdout/stderr、Console 页数、Receipt/context 和 Batch 保留材料已设置多类容量边界。 依据：[crates/skilltape-runner/src/workspace.rs:11](https://github.com/Chumaniac/skilltape/blob/69d1828e9a18a6b50fe25405fd2060036331f238/crates/skilltape-runner/src/workspace.rs#L11)；[crates/skilltape-runner/src/lib.rs:65](https://github.com/Chumaniac/skilltape/blob/69d1828e9a18a6b50fe25405fd2060036331f238/crates/skilltape-runner/src/lib.rs#L65)；[crates/skilltape-cli/src/batch_command.rs:22](https://github.com/Chumaniac/skilltape/blob/69d1828e9a18a6b50fe25405fd2060036331f238/crates/skilltape-cli/src/batch_command.rs#L22)。
+- Capture, Compile, Lint, Verify, Receipt, Export, policy preflight, Console,
+  Starter, and recoverable Batch have implementation paths. See
+  [the source/release distinction](../../README.md#L14) and
+  [Batch commands](../../crates/skilltape-cli/src/batch_command.rs#L730).
+- Batch prepare does not execute a case. Pending execution, explicit retries,
+  cancellation, and unconfirmed outcomes have state constraints. See
+  [Batch state](../../crates/skilltape-core/src/batch.rs#L182).
+- Input files, process stdout/stderr, Console pages, Receipt/context reads, and
+  retained Batch material have several existing capacity limits. See
+  [workspace limits](../../crates/skilltape-runner/src/workspace.rs#L11),
+  [process defaults](../../crates/skilltape-runner/src/lib.rs#L65), and
+  [Batch admission](../../crates/skilltape-cli/src/batch_command.rs#L22).
 
-## 当前缺口与完成边界
+## Completion boundaries
 
-- Starter/Batch 属于 source-main，未随原 v0.4.1 下载包发布；Windows Replay/Verify 继续 fail-closed。 依据：[README.md:14](https://github.com/Chumaniac/skilltape/blob/69d1828e9a18a6b50fe25405fd2060036331f238/README.md#L14)；[README.md:90](https://github.com/Chumaniac/skilltape/blob/69d1828e9a18a6b50fe25405fd2060036331f238/README.md#L90)。
-- 回执证明受限本地流程和文件关系，不证明认证执行身份、业务语义、远程交付或长期 CPU/RSS。 依据：[docs/release-readiness.md:114](https://github.com/Chumaniac/skilltape/blob/69d1828e9a18a6b50fe25405fd2060036331f238/docs/release-readiness.md#L114)。
+- Starter and Batch belong to current source and are not included in the
+  unchanged v0.4.1 archives. Windows Replay and Verify remain fail-closed. See
+  [the README](../../README.md#L14) and
+  [Windows support](../../README.md#L90).
+- A Receipt records bounded local execution and file relationships. It does not
+  prove an authenticated executor, business semantics, remote delivery, or
+  long-term CPU/RSS performance. See
+  [release-readiness limits](../../docs/release-readiness.md#L114).
 
-## 优化顺序与验收条件
+## Prioritized follow-up
 
-P1 表示影响正确性、可恢复性或下一阶段交付的优先事项；P2 为可靠性和维护改进；P3 为后续扩展或基线测量。优先级不表示已确认安全漏洞。
+P1 identifies a correctness or delivery boundary to resolve first. P2 covers
+reliability and maintenance. These priorities are not vulnerability ratings.
 
-### P1 给 Replay 生成文件和脚本复制建立统一预算
+### P1 Apply one budget to generated files and copied scripts
 
-证据级别：源码容量缺口，未运行超限复现。
+Evidence: a source-level capacity gap; no oversized execution was run. Input
+budgets and process-output limits do not bound all generated files. The
+`file_hash`, materialization, and referenced-script copy paths do not share a
+symmetric count and byte budget.
 
-输入预算与进程输出限制不能约束所有生成文件；file_hash、物化和引用脚本复制缺少对称的文件数/字节预算。
+Acceptance: share file-count, depth, single-file, and total-byte limits across
+hashing, materialization, and the delivery manifest. Growing, replaced, or
+oversized outputs must fail without publishing a partial delivery.
 
-验收条件：hash、materialize、delivery manifest 共用单文件/总字节/数量/深度预算；增长、替换或超限时拒绝发布部分交付。
+References: [assertion execution](../../crates/skilltape-runner/src/execution.rs#L212),
+[output materialization](../../crates/skilltape-runner/src/workspace.rs#L85),
+[script copying](../../crates/skilltape-runner/src/workspace.rs#L413), and
+[Workflow arrays](../../schemas/workflow/v1.json#L39).
 
-依据：[crates/skilltape-runner/src/execution.rs:212](https://github.com/Chumaniac/skilltape/blob/69d1828e9a18a6b50fe25405fd2060036331f238/crates/skilltape-runner/src/execution.rs#L212)；[crates/skilltape-runner/src/workspace.rs:85](https://github.com/Chumaniac/skilltape/blob/69d1828e9a18a6b50fe25405fd2060036331f238/crates/skilltape-runner/src/workspace.rs#L85)；[schemas/workflow/v1.json:39](https://github.com/Chumaniac/skilltape/blob/69d1828e9a18a6b50fe25405fd2060036331f238/schemas/workflow/v1.json#L39)。
+### P2 Align resource validation with run-context binding
 
-### P2 对齐资源配置与 run-context 的有效性约束
+Evidence: source constraints differ. Runner `validate_limits` does not reject
+`max_output_bytes: 0`, while context binding requires a positive value. A library
+caller could obtain a run whose sidecar cannot bind to its Receipt.
 
-证据级别：源码状态约束不一致。
+Acceptance: reject invalid and unsupported limits at entry, then cover execution,
+save, Console reading, and Batch binding with the same accepted values.
 
-runner validate_limits 未拒绝 max_output_bytes=0，而 context 绑定要求其大于 0，库调用可能产生无法绑定的回执侧车。
+References: [runner validation](../../crates/skilltape-runner/src/lib.rs#L463),
+[context binding](../../crates/skilltape-verify/src/context.rs#L91).
 
-验收条件：入口拒绝无效值与超实现上限，验证运行、保存、Console 与 Batch 读取的一致性。
+### P2 Bound and validate Console diff and run inputs
 
-依据：[crates/skilltape-runner/src/lib.rs:463](https://github.com/Chumaniac/skilltape/blob/69d1828e9a18a6b50fe25405fd2060036331f238/crates/skilltape-runner/src/lib.rs#L463)；[crates/skilltape-verify/src/context.rs:91](https://github.com/Chumaniac/skilltape/blob/69d1828e9a18a6b50fe25405fd2060036331f238/crates/skilltape-verify/src/context.rs#L91)。
+Evidence: source-level maintenance and resource risk. Diff validation checks
+structure without equivalent collection limits; the run read model parses JSON
+without validating the complete run v1 contract.
 
-### P2 给 Console diff/run 输入补齐有界契约校验
+Acceptance: validate run v1 on the server, bound array counts and field lengths,
+and paginate large collections. Malformed or oversized fixtures must not reach
+unbounded page rendering.
 
-证据级别：源码维护与资源风险。
+References: [client validation](../../apps/skilltape-console/src/api.ts#L158),
+[run read model](../../apps/skilltape-console-api/src/read_model.rs#L504),
+[review rendering](../../apps/skilltape-console/src/pages/CompileReview.tsx#L98).
 
-diff 数组只检查结构、run.json 只解析 JSON；大集合渲染或合法 JSON 的错误 schema 可流向客户端。
+### P2 Commit or roll back all installer components together
 
-验收条件：服务端校验 run v1，客户端校验数量/长度并分页；malformed/oversized fixture 不进入页面渲染。
+Evidence: source-level failure-path risk; installation failure was not injected.
+If replacing Console fails after CLI/API replacement, the current recovery path
+can restore only Console and leave mixed component versions.
 
-依据：[apps/skilltape-console/src/api.ts:158](https://github.com/Chumaniac/skilltape/blob/69d1828e9a18a6b50fe25405fd2060036331f238/apps/skilltape-console/src/api.ts#L158)；[apps/skilltape-console-api/src/read_model.rs:504](https://github.com/Chumaniac/skilltape/blob/69d1828e9a18a6b50fe25405fd2060036331f238/apps/skilltape-console-api/src/read_model.rs#L504)；[apps/skilltape-console/src/pages/CompileReview.tsx:98](https://github.com/Chumaniac/skilltape/blob/69d1828e9a18a6b50fe25405fd2060036331f238/apps/skilltape-console/src/pages/CompileReview.tsx#L98)。
+Acceptance: retain and atomically commit or restore the previous CLI, API, and UI
+as one installation. Inject failure in the last replacement step and verify
+component versions and existing user data remain intact.
 
-### P2 让安装器三件套共同提交或回滚
+Reference: [Unix installer](../../scripts/install.sh#L166).
 
-证据级别：源码失败路径风险，未模拟安装失败。
+## Verification record
 
-CLI/API 已替换后若 Console 替换失败，当前路径可能仅恢复 Console，留下混合版本。
-
-验收条件：保留旧 CLI/API/UI 并统一事务替换；模拟最后一步失败，确认三件套版本和用户回执/数据均保持。
-
-依据：[scripts/install.sh:166](https://github.com/Chumaniac/skilltape/blob/69d1828e9a18a6b50fe25405fd2060036331f238/scripts/install.sh#L166)。
-
-## 验证记录
-
-- 审查基线 main 的 9 项托管检查均 success，含平台编译/Console/Rust/已有 CodeQL。
-- 本轮用户文档检查 10 项通过；没有新增启动扫描或发行操作。
-- 未运行 Rust 全套、安装器故障注入、Windows Replay、真实执行任务或新版本发布。
-
-审查基线云端检查摘要：success 9。
-- [Analyze (actions)](https://github.com/Chumaniac/skilltape/actions/runs/41275817867/job/124757667248)：success。
-- [Analyze (python)](https://github.com/Chumaniac/skilltape/actions/runs/41275817867/job/124757667227)：success。
-- [Analyze (javascript-typescript)](https://github.com/Chumaniac/skilltape/actions/runs/41275817867/job/124757667215)：success。
-- [Analyze (rust)](https://github.com/Chumaniac/skilltape/actions/runs/41275817867/job/124757667089)：success。
-- [Windows production compile](https://github.com/Chumaniac/skilltape/actions/runs/41275818042/job/124757665722)：success。
-- [Console (ubuntu-latest)](https://github.com/Chumaniac/skilltape/actions/runs/41275818042/job/124757665710)：success。
-- [Rust (macos-14)](https://github.com/Chumaniac/skilltape/actions/runs/41275818042/job/124757665694)：success。
-- [Console (macos-latest)](https://github.com/Chumaniac/skilltape/actions/runs/41275818042/job/124757665684)：success。
-- [Rust (ubuntu-latest)](https://github.com/Chumaniac/skilltape/actions/runs/41275818042/job/124757665660)：success。
+- The reviewed baseline had nine successful hosted checks covering the existing
+  platform, Rust, Console, and CodeQL jobs.
+- The ten existing user-documentation checks passed locally during this review.
+- This review did not run the full Rust suite locally, installer failure
+  injection, Windows Replay, a real user workflow, or a new release.
+- The repository-wide language scan, Markdown link audit, and whitespace check
+  apply to this document revision. Existing protected-main checks remain in
+  force; this document does not change their assertions or configuration.
