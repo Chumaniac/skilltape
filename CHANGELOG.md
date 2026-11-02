@@ -7,6 +7,9 @@
   enumeration before publication, while retaining no-link and changing-file checks.
 - Bound Workflow steps, arguments and output declarations. Capacity diagnostics
   omit the invalid command arguments instead of formatting the complete payload.
+- Validate resource limits consistently before execution, input hashing and new
+  run-context creation; reject zero/oversized stream limits and timeouts that
+  cannot be represented by the recorded millisecond contract.
 
 ## Unreleased - 2026-10-22
 

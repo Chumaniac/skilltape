@@ -29,6 +29,7 @@ impl RunContext {
         input_hash: String,
         limits: &ResourceLimits,
     ) -> Result<Self, VerifyError> {
+        limits.validate()?;
         Ok(Self {
             schema: "skilltape.dev/run-context/v1".into(),
             receipt_sha256: sha256(&serde_json::to_vec(receipt)?),

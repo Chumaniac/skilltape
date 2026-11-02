@@ -34,7 +34,7 @@ materialization share a distinct-path high-water inventory: repeated checks do
 not charge the same unchanged file twice, but every read is checked again.
 Verify hashes and delivery assembly use the same file and total-byte ceilings.
 
-Copies and hashes use no-link reads, the observed length plus at most one growth
+Replay copies and internal hashes use no-link reads, the observed length plus at most one growth
 probe byte, and identity/change checks. Directory entries are charged before a
 sorted list is collected. Budget failures do not publish a partial output
 directory or replace an existing destination. Workflow step, argument and output
@@ -45,6 +45,14 @@ These are source I/O and metadata limits, not an operating-system disk quota,
 process RSS guarantee, or a freeze against concurrent file changes. They do not
 restrict every byte a running command may create before output inspection.
 The unchanged v0.4.1 downloads do not gain these source changes automatically.
+
+New execution and run-context creation share resource validation before input
+reads: at least one process, a positive timeout representable in whole JSON
+safe-integer milliseconds, and 1 byte through 16 MiB for each captured stdout or
+stderr stream per process.
+The 1 MiB library default and the CLI's smaller default remain supported.
+Historical context inspection remains read-only; stricter creation limits do
+not rewrite old receipts or conditions.
 
 ## Arguments and cancellation
 

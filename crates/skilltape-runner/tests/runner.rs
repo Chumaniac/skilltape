@@ -313,6 +313,82 @@ async fn artifact_capacity_accepts_exact_bytes_without_caching_hash_results() {
     );
 }
 
+#[tokio::test]
+async fn process_output_limits_are_rejected_before_events_or_workspace_setup() {
+    for bytes in [
+        0,
+        skilltape_core::ARTIFACT_MAX_FILE_BYTES as usize + 1,
+        usize::MAX,
+    ] {
+        let root = tempdir().expect("root");
+        let input = root.path().join("input");
+        fs::create_dir(&input).expect("input");
+        let output = root.path().join("output");
+        let fixture = package(vec![], permissions(&[], &[], &[]));
+        let adapter = FakeAdapter::default();
+        let (sender, mut receiver) = mpsc::channel(4);
+        let result = run_skill_with_adapter(
+            RunRequest {
+                package: fixture.package,
+                input_root: input,
+                output_root: output.clone(),
+                limits: ResourceLimits {
+                    max_output_bytes: bytes,
+                    ..limits()
+                },
+            },
+            PolicyEngine::default(),
+            sender,
+            CancellationToken::new(),
+            &adapter,
+        )
+        .await;
+        assert!(
+            matches!(result, Err(RunError::InvalidLimits { message }) if message.contains("max_output_bytes"))
+        );
+        assert!(receiver.try_recv().is_err());
+        assert_eq!(adapter.calls(), 0);
+        assert!(!output.exists());
+    }
+}
+
+#[tokio::test]
+async fn unrepresentable_process_timeout_is_rejected_before_events() {
+    for timeout in [
+        Duration::from_nanos(1),
+        Duration::from_micros(1500),
+        Duration::from_millis(9_007_199_254_740_992),
+        Duration::MAX,
+    ] {
+        let root = tempdir().expect("root");
+        let input = root.path().join("input");
+        fs::create_dir(&input).expect("input");
+        let fixture = package(vec![], permissions(&[], &[], &[]));
+        let (sender, mut receiver) = mpsc::channel(4);
+        let adapter = FakeAdapter::default();
+        let result = run_skill_with_adapter(
+            RunRequest {
+                package: fixture.package,
+                input_root: input,
+                output_root: root.path().join("output"),
+                limits: ResourceLimits {
+                    step_timeout: timeout,
+                    ..limits()
+                },
+            },
+            PolicyEngine::default(),
+            sender,
+            CancellationToken::new(),
+            &adapter,
+        )
+        .await;
+        assert!(
+            matches!(result, Err(RunError::InvalidLimits { message }) if message.contains("step_timeout"))
+        );
+        assert!(receiver.try_recv().is_err());
+    }
+}
+
 fn package(workflow_steps: Vec<Value>, permissions: Value) -> PackageFixture {
     package_with_output(workflow_steps, permissions, None)
 }
