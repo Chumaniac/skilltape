@@ -25,6 +25,27 @@ these checks do not freeze files against another process changing them.
 
 These limits are included in the v0.2.3 packages.
 
+## Replay artifact I/O in current source
+
+Current unreleased source applies shared ceilings of 10,000 entries, depth 64,
+16 MiB per regular file and 64 MiB total to referenced-script staging and Replay
+artifact I/O. Script staging has its own inventory. Hash assertions and output
+materialization share a distinct-path high-water inventory: repeated checks do
+not charge the same unchanged file twice, but every read is checked again.
+Verify hashes and delivery assembly use the same file and total-byte ceilings.
+
+Copies and hashes use no-link reads, the observed length plus at most one growth
+probe byte, and identity/change checks. Directory entries are charged before a
+sorted list is collected. Budget failures do not publish a partial output
+directory or replace an existing destination. Workflow step, argument and output
+declaration arrays are limited to 10,000 items each, and shape/capacity failures
+do not echo the complete invalid command payload.
+
+These are source I/O and metadata limits, not an operating-system disk quota,
+process RSS guarantee, or a freeze against concurrent file changes. They do not
+restrict every byte a running command may create before output inspection.
+The unchanged v0.4.1 downloads do not gain these source changes automatically.
+
 ## Arguments and cancellation
 
 `--command` names one executable. Pass each argument with `--arg`; spaces and

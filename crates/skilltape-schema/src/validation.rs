@@ -30,10 +30,19 @@ impl SchemaDiagnostic {
             .unwrap_or("schema")
             .to_owned();
 
+        // Array/shape failures can otherwise format the complete invalid
+        // workflow, including large arguments and private command values.
+        let message = match keyword.as_str() {
+            "maxItems" => "array exceeds its supported item capacity".to_owned(),
+            "oneOf" | "anyOf" | "allOf" => {
+                "value does not match a supported schema shape".to_owned()
+            }
+            _ => error.to_string(),
+        };
         Self {
             instance_path: error.instance_path().as_str().to_owned(),
             keyword,
-            message: error.to_string(),
+            message,
         }
     }
 }

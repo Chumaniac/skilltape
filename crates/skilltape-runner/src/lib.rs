@@ -11,6 +11,7 @@ use thiserror::Error;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
+mod artifact_io;
 mod execution;
 mod input_io;
 mod policy_checks;

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased source - 2026-11-02
+
+- Share file, total-byte, entry and depth ceilings across Replay artifact I/O,
+  Verify hashes and delivery assembly. Bound referenced-script copies and output
+  enumeration before publication, while retaining no-link and changing-file checks.
+- Bound Workflow steps, arguments and output declarations. Capacity diagnostics
+  omit the invalid command arguments instead of formatting the complete payload.
+
 ## Unreleased - 2026-10-22
 
 - Use Console-compatible starter storage, including the real Receipt and run-condition index; keep delivery artifacts directly discoverable.

@@ -22,7 +22,7 @@ use super::run_command::{self, VerifyConfig};
 const INPUT_BYTES: u64 = 128 * 1024 * 1024;
 const OUTPUT_ADMISSION_BYTES: u64 = 256 * 1024 * 1024;
 const DELIVERY_RESERVE: u64 = 66 * 1024 * 1024;
-const FILE_BYTES: u64 = 16 * 1024 * 1024;
+const FILE_BYTES: u64 = skilltape_core::ARTIFACT_MAX_FILE_BYTES;
 const RECEIPT_BYTES: u64 = 1024 * 1024;
 const STATE: &str = ".skilltape/batch.json";
 const PLAN: &str = ".skilltape/batch-plan.json";
@@ -617,7 +617,7 @@ fn delivery_hash(
         total = total
             .checked_add(file.bytes)
             .ok_or_else(|| fail("delivery byte capacity exceeded"))?;
-        if total > 64 * 1024 * 1024 {
+        if total > skilltape_core::ARTIFACT_MAX_TOTAL_BYTES {
             return Err(fail("delivery byte capacity exceeded"));
         }
     }
@@ -645,7 +645,11 @@ fn delivery_hash(
         .map(|byte| format!("{byte:02x}"))
         .collect();
     if observed != manifest.artifact_set_sha256
-        || (physical && inventory(&path.join("artifacts"), 64 * 1024 * 1024)? != declared)
+        || (physical
+            && inventory(
+                &path.join("artifacts"),
+                skilltape_core::ARTIFACT_MAX_TOTAL_BYTES,
+            )? != declared)
     {
         return Err(fail("retained delivery inventory changed"));
     }

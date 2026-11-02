@@ -2,17 +2,19 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::io;
 use std::path::{Component, Path, PathBuf};
+use std::sync::Mutex;
 
+use crate::artifact_io::ArtifactBudget;
 use skilltape_core::LoadedSkillPackage;
 use skilltape_schema::Step;
 use tempfile::{Builder, TempDir};
 use thiserror::Error;
 
 // Shared metadata and actual input I/O ceilings; package scripts and outputs use separate paths.
-const INPUT_MAX_ENTRIES: u64 = 10_000;
-const INPUT_MAX_DEPTH: u64 = 64;
-const INPUT_MAX_FILE_BYTES: u64 = 16 * 1024 * 1024;
-const INPUT_MAX_TOTAL_BYTES: u64 = 64 * 1024 * 1024;
+const INPUT_MAX_ENTRIES: u64 = skilltape_core::ARTIFACT_MAX_ENTRIES;
+const INPUT_MAX_DEPTH: u64 = skilltape_core::ARTIFACT_MAX_DEPTH;
+const INPUT_MAX_FILE_BYTES: u64 = skilltape_core::ARTIFACT_MAX_FILE_BYTES;
+const INPUT_MAX_TOTAL_BYTES: u64 = skilltape_core::ARTIFACT_MAX_TOTAL_BYTES;
 
 #[derive(Debug, Error)]
 pub(crate) enum WorkspaceError {
@@ -20,6 +22,8 @@ pub(crate) enum WorkspaceError {
     InvalidInputRoot { path: PathBuf },
     #[error("input capacity exceeded: {dimension} limit is {limit}")]
     InputCapacity { dimension: &'static str, limit: u64 },
+    #[error("artifact capacity exceeded: {dimension} limit is {limit}")]
+    ArtifactCapacity { dimension: &'static str, limit: u64 },
     #[error("workspace path is unsafe: {path}")]
     UnsafePath { path: String },
     #[error("symlinks are not allowed in a replay workspace: {path}")]
@@ -46,6 +50,7 @@ pub(crate) enum WorkspaceError {
 pub(crate) struct ReplayWorkspace {
     _tempdir: TempDir,
     root: PathBuf,
+    output_budget: Mutex<ArtifactBudget>,
 }
 
 impl ReplayWorkspace {
@@ -67,6 +72,7 @@ impl ReplayWorkspace {
         Ok(Self {
             _tempdir: tempdir,
             root,
+            output_budget: Mutex::new(ArtifactBudget::default()),
         })
     }
 
@@ -80,6 +86,36 @@ impl ReplayWorkspace {
 
     pub(crate) fn ensure_safe_path(&self, path: &Path) -> Result<(), WorkspaceError> {
         ensure_no_symlink_ancestors(path)
+    }
+
+    pub(crate) fn hash_file(&self, path: &Path) -> Result<String, WorkspaceError> {
+        self.ensure_safe_path(path)?;
+        let metadata = fs::symlink_metadata(path).map_err(|source| WorkspaceError::Io {
+            path: path.to_owned(),
+            source,
+        })?;
+        if !metadata.is_file() || metadata.is_symlink() {
+            return Err(WorkspaceError::UnsafePath {
+                path: "hash target is not a regular file".into(),
+            });
+        }
+        let relative = path
+            .strip_prefix(&self.root)
+            .map_err(|_| WorkspaceError::UnsafePath {
+                path: "hash target escaped workspace".into(),
+            })?;
+        let relative = relative
+            .strip_prefix("outputs")
+            .or_else(|_| relative.strip_prefix("inputs"))
+            .unwrap_or(relative);
+        let mut budget = self
+            .output_budget
+            .lock()
+            .map_err(|_| WorkspaceError::UnsafePath {
+                path: "artifact accounting is unavailable".into(),
+            })?;
+        budget.observe(path, &metadata, relative.components().count() as u64)?;
+        crate::artifact_io::hash_file(&self.root, path, &metadata)
     }
 
     pub(crate) fn materialize_outputs(
@@ -115,6 +151,12 @@ impl ReplayWorkspace {
             })?;
 
         let mut destinations = BTreeSet::new();
+        let mut budget = self
+            .output_budget
+            .lock()
+            .map_err(|_| WorkspaceError::UnsafePath {
+                path: "artifact accounting is unavailable".into(),
+            })?;
         for relative in paths {
             let source = self.resolve(relative)?;
             let source_metadata =
@@ -128,8 +170,9 @@ impl ReplayWorkspace {
             if !destinations.insert(destination_relative.clone()) {
                 continue;
             }
+            let depth = Path::new(&destination_relative).components().count() as u64;
             let destination = staging.path().join(destination_relative);
-            copy_entry(&source, &destination)?;
+            copy_entry(&source, &destination, &self.root, &mut budget, depth)?;
         }
 
         if symlink_metadata(output_root)?.is_some() {
@@ -169,7 +212,13 @@ pub(crate) fn resolve_under(root: &Path, relative: &str) -> Result<PathBuf, Work
 }
 
 pub(crate) fn copy_path(from: &Path, to: &Path) -> Result<(), WorkspaceError> {
-    copy_entry(from, to)
+    copy_entry(
+        from,
+        to,
+        from.parent().unwrap_or_else(|| Path::new(".")),
+        &mut ArtifactBudget::default(),
+        0,
+    )
 }
 
 pub(crate) fn move_path(from: &Path, to: &Path) -> Result<(), WorkspaceError> {
@@ -426,6 +475,7 @@ fn copy_referenced_scripts(
         }
     }
 
+    let mut budget = ArtifactBudget::default();
     for relative in paths {
         validate_relative_path(&relative)?;
         let source = package.root.join(&relative);
@@ -433,12 +483,25 @@ fn copy_referenced_scripts(
         if symlink_metadata(&source)?.is_none() {
             return Err(WorkspaceError::MissingScript { path: relative });
         }
-        copy_entry(&source, &workspace_root.join(&relative))?;
+        let depth = Path::new(&relative).components().count() as u64;
+        copy_entry(
+            &source,
+            &workspace_root.join(&relative),
+            &package.root,
+            &mut budget,
+            depth,
+        )?;
     }
     Ok(())
 }
 
-fn copy_entry(source: &Path, destination: &Path) -> Result<(), WorkspaceError> {
+fn copy_entry(
+    source: &Path,
+    destination: &Path,
+    source_root: &Path,
+    budget: &mut ArtifactBudget,
+    depth: u64,
+) -> Result<(), WorkspaceError> {
     let metadata = symlink_metadata(source)?.ok_or_else(|| WorkspaceError::Io {
         path: source.to_path_buf(),
         source: io::Error::new(io::ErrorKind::NotFound, "path does not exist"),
@@ -450,6 +513,7 @@ fn copy_entry(source: &Path, destination: &Path) -> Result<(), WorkspaceError> {
     }
     ensure_no_symlink_ancestors(source)?;
     ensure_no_symlink_ancestors(destination)?;
+    budget.observe(source, &metadata, depth)?;
 
     if metadata.is_dir() {
         if destination == source || destination.starts_with(source) {
@@ -479,23 +543,55 @@ fn copy_entry(source: &Path, destination: &Path) -> Result<(), WorkspaceError> {
             path: source_path.clone(),
             source: error,
         })?;
-        let mut entries = directory
-            .map(|entry| {
-                entry
-                    .map(|entry| entry.path())
-                    .map_err(|error| WorkspaceError::Io {
-                        path: source.to_path_buf(),
-                        source: error,
-                    })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut entries = Vec::new();
+        for entry in directory {
+            let path = entry
+                .map_err(|error| WorkspaceError::Io {
+                    path: source.to_owned(),
+                    source: error,
+                })?
+                .path();
+            let child = fs::symlink_metadata(&path).map_err(|error| WorkspaceError::Io {
+                path: path.clone(),
+                source: error,
+            })?;
+            if child.is_symlink() || !child.is_file() && !child.is_dir() {
+                return Err(WorkspaceError::UnsafePath {
+                    path: "unsupported artifact entry".into(),
+                });
+            }
+            // Reserve metadata before collecting/sorting so enumeration cannot
+            // allocate an unbounded list before the entry ceiling is checked.
+            budget.observe(&path, &child, depth + 1)?;
+            entries.push(path);
+        }
         entries.sort();
         for entry in entries {
             let name = entry.file_name().ok_or_else(|| WorkspaceError::Io {
                 path: entry.clone(),
                 source: io::Error::new(io::ErrorKind::InvalidData, "entry has no file name"),
             })?;
-            copy_entry(&entry, &destination.join(name))?;
+            copy_entry(
+                &entry,
+                &destination.join(name),
+                source_root,
+                budget,
+                depth + 1,
+            )?;
+        }
+        let current = fs::symlink_metadata(source).map_err(|error| WorkspaceError::Io {
+            path: source.to_owned(),
+            source: error,
+        })?;
+        if !crate::input_io::same_metadata(&metadata, &current).map_err(|error| {
+            WorkspaceError::Io {
+                path: source.to_owned(),
+                source: error,
+            }
+        })? {
+            return Err(WorkspaceError::UnsafePath {
+                path: "artifact directory changed during copy".into(),
+            });
         }
     } else if metadata.is_file() {
         if let Some(parent) = destination.parent() {
@@ -509,10 +605,7 @@ fn copy_entry(source: &Path, destination: &Path) -> Result<(), WorkspaceError> {
                 path: destination.to_path_buf(),
             });
         }
-        fs::copy(source, destination).map_err(|source| WorkspaceError::Io {
-            path: destination.to_path_buf(),
-            source,
-        })?;
+        crate::artifact_io::copy_file(source_root, source, destination, &metadata)?;
         fs::set_permissions(destination, metadata.permissions()).map_err(|source| {
             WorkspaceError::Io {
                 path: destination.to_path_buf(),

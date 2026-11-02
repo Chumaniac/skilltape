@@ -5,7 +5,7 @@
   "required": ["schema", "steps"],
   "properties": {
     "schema": { "const": "skilltape.dev/workflow/v1" },
-    "steps": { "type": "array", "items": { "$ref": "#/$defs/step" } }
+    "steps": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/step" } }
   },
   "patternProperties": { "^x-": true },
   "additionalProperties": false,
@@ -57,9 +57,9 @@
                 "id": { "type": "string", "minLength": 1 },
                 "action": { "const": "exec" },
                 "program": { "type": "string", "minLength": 1 },
-                "args": { "type": "array", "items": { "type": "string" } },
+                "args": { "type": "array", "maxItems": 10000, "items": { "type": "string" } },
                 "timeout_ms": { "type": "integer", "minimum": 1 },
-                "outputs": { "type": "array", "items": { "$ref": "#/$defs/output" } }
+                "outputs": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/output" } }
               },
               "patternProperties": { "^x-": true },
               "additionalProperties": false
@@ -71,9 +71,9 @@
                 "id": { "type": "string", "minLength": 1 },
                 "action": { "const": "script" },
                 "path": { "$ref": "#/$defs/workspacePath" },
-                "args": { "type": "array", "items": { "type": "string" } },
+                "args": { "type": "array", "maxItems": 10000, "items": { "type": "string" } },
                 "timeout_ms": { "type": "integer", "minimum": 1 },
-                "outputs": { "type": "array", "items": { "$ref": "#/$defs/output" } }
+                "outputs": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/output" } }
               },
               "patternProperties": { "^x-": true },
               "additionalProperties": false

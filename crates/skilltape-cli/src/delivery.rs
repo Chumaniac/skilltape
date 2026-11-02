@@ -9,9 +9,9 @@ use skilltape_verify::Receipt;
 use tempfile::{Builder, TempDir};
 use thiserror::Error;
 
-const MAX_ENTRIES: usize = 10_000;
-const MAX_FILE_BYTES: u64 = 16 * 1024 * 1024;
-const MAX_TOTAL_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_ENTRIES: usize = skilltape_core::ARTIFACT_MAX_ENTRIES as usize;
+const MAX_FILE_BYTES: u64 = skilltape_core::ARTIFACT_MAX_FILE_BYTES;
+const MAX_TOTAL_BYTES: u64 = skilltape_core::ARTIFACT_MAX_TOTAL_BYTES;
 const MAX_METADATA_BYTES: usize = 1024 * 1024;
 
 #[derive(Debug, Error)]
@@ -229,7 +229,7 @@ fn collect(
     metadata_budget: &mut usize,
     files: &mut Vec<Artifact>,
 ) -> Result<(), DeliveryError> {
-    if depth > 64 {
+    if depth > skilltape_core::ARTIFACT_MAX_DEPTH as usize {
         return Err(DeliveryError::Assembly("directory depth exceeds limit"));
     }
     let resolved = current.canonicalize()?;

@@ -1,4 +1,5 @@
-//! Input-only bounded hashing and staging. Generic package/output copies keep their own policy.
+//! Bounded reads and input staging; package/output copies reuse the safe reader
+//! with their own inventories.
 
 use crate::workspace::{
     ensure_no_symlink_ancestors, input_snapshot, lexical_workspace_path, InputSnapshot,
@@ -19,11 +20,11 @@ fn failure(path: &Path, source: io::Error) -> WorkspaceError {
 fn changed() -> io::Error {
     io::Error::new(
         io::ErrorKind::InvalidData,
-        "input changed during bounded I/O",
+        "source changed during bounded I/O",
     )
 }
 
-fn same_metadata(left: &Metadata, right: &Metadata) -> io::Result<bool> {
+pub(crate) fn same_metadata(left: &Metadata, right: &Metadata) -> io::Result<bool> {
     if left.is_file() != right.is_file()
         || left.is_dir() != right.is_dir()
         || left.len() != right.len()
@@ -45,7 +46,11 @@ fn same_metadata(left: &Metadata, right: &Metadata) -> io::Result<bool> {
     Ok(true)
 }
 
-fn open_input(root: &Path, path: &Path, expected: &Metadata) -> Result<File, WorkspaceError> {
+pub(crate) fn open_input(
+    root: &Path,
+    path: &Path,
+    expected: &Metadata,
+) -> Result<File, WorkspaceError> {
     let expected_path = lexical_workspace_path(path)?;
     let resolved = expected_path
         .canonicalize()
@@ -90,7 +95,7 @@ fn open_input(root: &Path, path: &Path, expected: &Metadata) -> Result<File, Wor
 }
 
 /// Read exactly the observed size plus at most one probe byte. Never read a growing file to EOF.
-fn read_observed(
+pub(crate) fn read_observed(
     reader: &mut impl Read,
     size: u64,
     mut consume: impl FnMut(&[u8]) -> io::Result<()>,

@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use skilltape_core::{create_skill_template, LoadedSkillPackage, SkillPackage};
 use skilltape_policy::PolicyEngine;
 use skilltape_runner::{
@@ -28,6 +29,7 @@ enum FakeBehavior {
     Return(ProcessOutput),
     WaitForCancel,
     SpawnFailure,
+    CreateFiles(Vec<(String, u64)>),
 }
 
 #[derive(Clone, Default)]
@@ -77,6 +79,17 @@ impl ProcessAdapter for FakeAdapter {
             .clone()
             .expect("fake behavior");
         self.calls.fetch_add(1, Ordering::SeqCst);
+        if let FakeBehavior::CreateFiles(files) = &behavior {
+            for (relative, size) in files {
+                let path = request.cwd.join(relative);
+                fs::create_dir_all(path.parent().expect("synthetic parent"))
+                    .expect("synthetic parents");
+                fs::File::create(path)
+                    .expect("synthetic output")
+                    .set_len(*size)
+                    .expect("synthetic length");
+            }
+        }
         for relative in ["inputs/fixture.txt", "scripts/emit.sh"] {
             if let Ok(contents) = fs::read(request.cwd.join(relative)) {
                 self.snapshots
@@ -94,9 +107,210 @@ impl ProcessAdapter for FakeAdapter {
                     Ok(ProcessOutput::cancelled())
                 }
                 FakeBehavior::SpawnFailure => Err(ProcessError::SpawnFailed),
+                FakeBehavior::CreateFiles(_) => {
+                    Ok(process_output(ProcessStatus::Exited, Some(0), ""))
+                }
             }
         })
     }
+}
+
+fn zero_digest(size: u64) -> String {
+    let mut digest = Sha256::new();
+    let zeros = [0_u8; 8192];
+    let mut remaining = size;
+    while remaining > 0 {
+        let count = remaining.min(zeros.len() as u64) as usize;
+        digest.update(&zeros[..count]);
+        remaining -= count as u64;
+    }
+    digest
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+async fn raw_run(
+    fixture: PackageFixture,
+    input: &Path,
+    output: &Path,
+    adapter: &FakeAdapter,
+) -> Result<skilltape_runner::RunSummary, RunError> {
+    let (sender, _receiver) = mpsc::channel(64);
+    run_skill_with_adapter(
+        RunRequest {
+            package: fixture.package,
+            input_root: input.to_owned(),
+            output_root: output.to_owned(),
+            limits: limits(),
+        },
+        PolicyEngine::default(),
+        sender,
+        CancellationToken::new(),
+        adapter,
+    )
+    .await
+}
+
+#[tokio::test]
+async fn artifact_capacity_rejects_large_and_aggregate_outputs_before_publication() {
+    for (count, size) in [(1, 16 * 1024 * 1024 + 1), (5, 13 * 1024 * 1024)] {
+        let root = tempdir().expect("root");
+        let input = root.path().join("input");
+        fs::create_dir(&input).expect("input");
+        let output = root.path().join("output");
+        let fixture = package_with_output(
+            vec![exec_step("generate", "printf", &[])],
+            permissions(&["outputs/**"], &["outputs/**"], &["printf"]),
+            Some("outputs/tree"),
+        );
+        let adapter = FakeAdapter::new(FakeBehavior::CreateFiles(
+            (0..count)
+                .map(|index| (format!("outputs/tree/file-{index}.bin"), size))
+                .collect(),
+        ));
+        let result = raw_run(fixture, &input, &output, &adapter).await;
+        assert!(
+            matches!(result, Err(RunError::Materialization { message }) if message.contains("capacity"))
+        );
+        assert!(
+            !output.exists(),
+            "A failed budget must not publish a partial directory"
+        );
+    }
+}
+
+#[tokio::test]
+async fn artifact_capacity_bounds_hash_reads_and_aggregate_distinct_targets() {
+    for (count, size) in [(1, 16 * 1024 * 1024 + 1), (5, 13 * 1024 * 1024)] {
+        let root = tempdir().expect("root");
+        let input = root.path().join("input");
+        fs::create_dir(&input).expect("input");
+        let mut steps = vec![exec_step("generate", "printf", &[])];
+        let hash = zero_digest(size);
+        for index in 0..count {
+            steps.push(json!({"action":"assert","id":format!("hash-{index}"),
+            "assertion":{"type":"file_hash","path":format!("outputs/tree/file-{index}.bin"),"hash":hash}}));
+        }
+        let fixture = package(
+            steps,
+            permissions(&["outputs/**"], &["outputs/**"], &["printf"]),
+        );
+        let adapter = FakeAdapter::new(FakeBehavior::CreateFiles(
+            (0..count)
+                .map(|index| (format!("outputs/tree/file-{index}.bin"), size))
+                .collect(),
+        ));
+        let summary = raw_run(fixture, &input, &root.path().join("output"), &adapter)
+            .await
+            .expect("structured failure");
+        assert_eq!(summary.status, RunStatus::Failed);
+        assert!(format!("{:?}", summary.failure).contains("capacity"));
+    }
+}
+
+#[tokio::test]
+async fn artifact_capacity_rejects_large_and_aggregate_scripts_before_spawn() {
+    for (count, size) in [(1, 16 * 1024 * 1024 + 1), (5, 13 * 1024 * 1024)] {
+        let root = tempdir().expect("root");
+        let input = root.path().join("input");
+        fs::create_dir(&input).expect("input");
+        let paths: Vec<_> = (0..count)
+            .map(|index| format!("scripts/part-{index}.sh"))
+            .collect();
+        let allowed: Vec<_> = paths.iter().map(String::as_str).collect();
+        let steps = paths
+            .iter()
+            .enumerate()
+            .map(|(index, path)| {
+                json!({"action":"script", "id":format!("script-{index}"),
+            "path":path,"args":[],"timeout_ms":1000})
+            })
+            .collect();
+        let fixture = package(steps, permissions(&allowed, &[], &allowed));
+        fs::create_dir_all(fixture.package.root.join("scripts")).expect("scripts");
+        for path in paths {
+            fs::File::create(fixture.package.root.join(path))
+                .expect("script")
+                .set_len(size)
+                .expect("length");
+        }
+        let adapter = FakeAdapter::new(FakeBehavior::Return(process_output(
+            ProcessStatus::Exited,
+            Some(0),
+            "",
+        )));
+        let result = raw_run(fixture, &input, &root.path().join("output"), &adapter).await;
+        assert!(
+            matches!(result, Err(RunError::Workspace { message }) if message.contains("capacity"))
+        );
+        assert_eq!(adapter.calls(), 0);
+    }
+}
+
+#[tokio::test]
+async fn artifact_capacity_bounds_entry_enumeration_and_directory_depth() {
+    let cases = [
+        (0..10_001)
+            .map(|index| (format!("outputs/tree/file-{index}"), 0))
+            .collect(),
+        vec![(format!("outputs/tree/{}file", "nested/".repeat(65)), 0)],
+    ];
+    for files in cases {
+        let root = tempdir().expect("root");
+        let input = root.path().join("input");
+        fs::create_dir(&input).expect("input");
+        let output = root.path().join("output");
+        let fixture = package_with_output(
+            vec![exec_step("generate", "printf", &[])],
+            permissions(&["outputs/**"], &["outputs/**"], &["printf"]),
+            Some("outputs/tree"),
+        );
+        let adapter = FakeAdapter::new(FakeBehavior::CreateFiles(files));
+        let result = raw_run(fixture, &input, &output, &adapter).await;
+        assert!(
+            matches!(result, Err(RunError::Materialization { message }) if message.contains("capacity"))
+        );
+        assert!(!output.exists());
+    }
+}
+
+#[tokio::test]
+async fn artifact_capacity_accepts_exact_bytes_without_caching_hash_results() {
+    let root = tempdir().expect("root");
+    let input = root.path().join("input");
+    fs::create_dir(&input).expect("input");
+    let size = 16 * 1024 * 1024;
+    let hash = zero_digest(size);
+    let mut steps = vec![exec_step("generate", "printf", &[])];
+    for index in 0..4 {
+        steps.push(json!({"action":"assert","id":format!("hash-{index}"),
+            "assertion":{"type":"file_hash","path":format!("outputs/tree/file-{index}.bin"),"hash":hash}}));
+    }
+    steps.push(json!({"action":"assert","id":"repeat-hash",
+        "assertion":{"type":"file_hash","path":"outputs/tree/file-0.bin","hash":hash}}));
+    let fixture = package_with_output(
+        steps,
+        permissions(&["outputs/**"], &["outputs/**"], &["printf"]),
+        Some("outputs/tree"),
+    );
+    let adapter = FakeAdapter::new(FakeBehavior::CreateFiles(
+        (0..4)
+            .map(|index| (format!("outputs/tree/file-{index}.bin"), size))
+            .collect(),
+    ));
+    let output = root.path().join("output");
+    let result = raw_run(fixture, &input, &output, &adapter)
+        .await
+        .expect("bounded success");
+    assert_eq!(result.status, RunStatus::Succeeded);
+    assert_eq!(
+        fs::metadata(output.join("tree/file-3.bin"))
+            .expect("published file")
+            .len(),
+        size
+    );
 }
 
 fn package(workflow_steps: Vec<Value>, permissions: Value) -> PackageFixture {
