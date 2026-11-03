@@ -570,9 +570,9 @@ fn copy_entry(
                     source: error,
                 })?
                 .path();
-            let child = fs::symlink_metadata(&path).map_err(|error| WorkspaceError::Io {
+            let child = symlink_metadata(&path)?.ok_or_else(|| WorkspaceError::Io {
                 path: path.clone(),
-                source: error,
+                source: io::Error::new(io::ErrorKind::NotFound, "artifact entry disappeared"),
             })?;
             if child.is_symlink() || !child.is_file() && !child.is_dir() {
                 return Err(WorkspaceError::UnsafePath {
@@ -603,9 +603,9 @@ fn copy_entry(
                 depth + 1,
             )?;
         }
-        let current = fs::symlink_metadata(source).map_err(|error| WorkspaceError::Io {
+        let current = symlink_metadata(source)?.ok_or_else(|| WorkspaceError::Io {
             path: source.to_owned(),
-            source: error,
+            source: io::Error::new(io::ErrorKind::NotFound, "artifact directory disappeared"),
         })?;
         if !crate::input_io::same_metadata(&metadata, &current).map_err(|error| {
             WorkspaceError::Io {
