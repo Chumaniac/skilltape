@@ -51,16 +51,62 @@ archive_url="${release_root}/${asset}"
 checksums_url="${release_root}/checksums.txt"
 
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/skilltape-install.XXXXXX")"
-staged_cli=""
-staged_api=""
-staged_console=""
+stage_dir=""
+backup_dir=""
+lock_dir=""
+own_lock=0
+transaction_active=0
+moving_previous=0
+saved_cli=0
+saved_api=0
+saved_console=0
+attempted_cli=0
+attempted_api=0
+attempted_console=0
+
+exists() { [[ -e "$1" || -L "$1" ]]; }
+
+restore_component() {
+  local target_path="$1" name="$2" attempted="$3" saved="$4"
+  if [[ "$attempted" == 1 ]] && exists "$target_path"; then
+    # Preserve even partially moved new assets if restoring the old copy fails.
+    mv "$target_path" "$backup_dir/failed-$name" || return 1
+  fi
+  if [[ "$saved" == 1 ]]; then
+    if exists "$target_path"; then return 1; fi
+    mv "$backup_dir/previous-$name" "$target_path" || return 1
+  fi
+}
+
 cleanup() {
-  [[ -z "$staged_cli" || ! -e "$staged_cli" ]] || rm -f "$staged_cli"
-  [[ -z "$staged_api" || ! -e "$staged_api" ]] || rm -f "$staged_api"
-  [[ -z "$staged_console" || ! -e "$staged_console" ]] || rm -rf "$staged_console"
+  local status=$? recovery_needed=0
+  trap - EXIT INT TERM
+  set +e
+  if [[ "$transaction_active" == 1 ]]; then
+    restore_component "$install_parent/console" console "$attempted_console" "$saved_console" || recovery_needed=1
+    restore_component "$install_dir/skilltape-console-api" api "$attempted_api" "$saved_api" || recovery_needed=1
+    restore_component "$install_dir/skilltape" cli "$attempted_cli" "$saved_cli" || recovery_needed=1
+    [[ "$moving_previous" == 0 ]] || recovery_needed=1
+    [[ "$status" != 0 ]] || status=1
+  fi
+  [[ -z "$stage_dir" ]] || rm -rf "$stage_dir"
   rm -rf "$tmp_dir"
+  if [[ "$recovery_needed" == 1 ]]; then
+    echo "installation rollback needs manual recovery; preserved assets: $backup_dir; lock: $lock_dir" >&2
+    status=1
+  else
+    [[ -z "$backup_dir" ]] || rm -rf "$backup_dir"
+    if [[ "$own_lock" == 1 ]]; then
+      # Do not remove unexpected files added to the lock by another process.
+      rm -f "$lock_dir/pid"
+      rmdir "$lock_dir" || echo "installation completed; inspect the retained lock before retrying: $lock_dir" >&2
+    fi
+  fi
+  exit "$status"
 }
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 download() {
   local url="$1"
@@ -150,9 +196,30 @@ if [[ -L "$install_dir" ]]; then
 fi
 install_parent="$(dirname "$install_dir")"
 mkdir -p "$install_parent"
-staged_cli="$install_dir/.skilltape.tmp.$$"
-staged_api="$install_dir/.skilltape-console-api.tmp.$$"
-staged_console="$install_parent/.skilltape-console.tmp.$$"
+lock_dir="$install_parent/.skilltape-install.lock"
+if ! mkdir "$lock_dir"; then
+  echo "installation lock already exists; inspect it before retrying: $lock_dir" >&2
+  exit 1
+fi
+own_lock=1
+chmod 0700 "$lock_dir"
+printf '%s\n' "$$" > "$lock_dir/pid"
+for executable in "$install_dir/skilltape" "$install_dir/skilltape-console-api"; do
+  if exists "$executable" && [[ ! -f "$executable" && ! -L "$executable" ]]; then
+    echo "existing executable must be a regular file or symlink: $executable" >&2
+    exit 1
+  fi
+done
+if exists "$install_parent/console" && [[ ! -d "$install_parent/console" && ! -L "$install_parent/console" ]]; then
+  echo "existing Console must be a directory or symlink" >&2
+  exit 1
+fi
+stage_dir="$(mktemp -d "$install_parent/.skilltape-stage.XXXXXX")"
+backup_dir="$(mktemp -d "$install_parent/.skilltape-rollback.XXXXXX")"
+chmod 0700 "$stage_dir" "$backup_dir"
+staged_cli="$stage_dir/skilltape"
+staged_api="$stage_dir/skilltape-console-api"
+staged_console="$stage_dir/console"
 cp "$candidate" "$staged_cli"
 cp "$candidate_api" "$staged_api"
 mkdir -p "$staged_console"
@@ -163,19 +230,31 @@ chmod 0755 "$staged_cli" "$staged_api"
   exit 1
 }
 
-mv -f "$staged_cli" "$install_dir/skilltape"
-staged_cli=""
-mv -f "$staged_api" "$install_dir/skilltape-console-api"
-staged_api=""
-previous_console="$tmp_dir/previous-console"
-if [[ -e "$install_parent/console" || -L "$install_parent/console" ]]; then
-  mv "$install_parent/console" "$previous_console"
+transaction_active=1
+if exists "$install_dir/skilltape"; then
+  moving_previous=1
+  mv "$install_dir/skilltape" "$backup_dir/previous-cli"
+  saved_cli=1
+  moving_previous=0
 fi
-if ! mv "$staged_console" "$install_parent/console"; then
-  [[ -e "$previous_console" ]] && mv "$previous_console" "$install_parent/console"
-  echo "failed to install Console UI" >&2
-  exit 1
+if exists "$install_dir/skilltape-console-api"; then
+  moving_previous=1
+  mv "$install_dir/skilltape-console-api" "$backup_dir/previous-api"
+  saved_api=1
+  moving_previous=0
 fi
-staged_console=""
+if exists "$install_parent/console"; then
+  moving_previous=1
+  mv "$install_parent/console" "$backup_dir/previous-console"
+  saved_console=1
+  moving_previous=0
+fi
+attempted_cli=1
+mv "$staged_cli" "$install_dir/skilltape"
+attempted_api=1
+mv "$staged_api" "$install_dir/skilltape-console-api"
+attempted_console=1
+mv "$staged_console" "$install_parent/console"
+transaction_active=0
 
 echo "Installed skilltape $version for $target at $install_dir/skilltape"

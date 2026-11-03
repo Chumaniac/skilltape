@@ -87,6 +87,13 @@ $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("skilltape-install-" + 
 $stagedCli = $null
 $stagedApi = $null
 $stagedConsole = $null
+$stageRoot = $null
+$backupRoot = $null
+$lockPath = $null
+$installLock = $null
+$components = @()
+$transactionActive = $false
+$backupInProgress = $false
 
 function Assert-RegularFile([string]$Path, [string]$Label) {
     $item = Get-Item -LiteralPath $Path -ErrorAction Stop
@@ -102,14 +109,6 @@ function Assert-RegularDirectory([string]$Path, [string]$Label) {
     }
 }
 
-function Replace-File([string]$Staged, [string]$Destination) {
-    if (Test-Path -LiteralPath $Destination) {
-        [System.IO.File]::Replace($Staged, $Destination, $null)
-    }
-    else {
-        [System.IO.File]::Move($Staged, $Destination)
-    }
-}
 
 try {
     New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
@@ -197,52 +196,85 @@ try {
     Assert-RegularDirectory $InstallDir "install directory"
     $installParent = Split-Path -Parent $InstallDir
     New-Item -ItemType Directory -Path $installParent -Force | Out-Null
-    $stagedCli = Join-Path $InstallDir (".skilltape.tmp." + [guid]::NewGuid().ToString("N") + ".exe")
-    $stagedApi = Join-Path $InstallDir (".skilltape-console-api.tmp." + [guid]::NewGuid().ToString("N") + ".exe")
-    $stagedConsole = Join-Path $installParent (".skilltape-console.tmp." + [guid]::NewGuid().ToString("N"))
+    $lockPath = Join-Path $installParent ".skilltape-install.lock"
+    $installLock = [System.IO.File]::Open($lockPath, [System.IO.FileMode]::CreateNew,
+        [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+    $stageRoot = Join-Path $installParent (".skilltape-stage-" + [guid]::NewGuid().ToString("N"))
+    $backupRoot = Join-Path $installParent (".skilltape-rollback-" + [guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $stageRoot | Out-Null
+    New-Item -ItemType Directory -Path $backupRoot | Out-Null
+    $stagedCli = Join-Path $stageRoot "skilltape.exe"
+    $stagedApi = Join-Path $stageRoot "skilltape-console-api.exe"
+    $stagedConsole = Join-Path $stageRoot "console"
     Copy-Item -LiteralPath $candidate.FullName -Destination $stagedCli
     Copy-Item -LiteralPath $candidateApi.FullName -Destination $stagedApi
-    New-Item -ItemType Directory -Path $stagedConsole -Force | Out-Null
+    New-Item -ItemType Directory -Path $stagedConsole | Out-Null
     Get-ChildItem -LiteralPath $consoleSource -Force | Copy-Item -Destination $stagedConsole -Recurse -Force
     Assert-RegularFile $stagedCli "staged skilltape binary"
     Assert-RegularFile $stagedApi "staged Console API binary"
     Assert-RegularFile (Join-Path $stagedConsole "index.html") "staged Console UI index"
 
-    $destination = Join-Path $InstallDir "skilltape.exe"
-    Replace-File $stagedCli $destination
-    $stagedCli = $null
-    $apiDestination = Join-Path $InstallDir "skilltape-console-api.exe"
-    Replace-File $stagedApi $apiDestination
-    $stagedApi = $null
-    $consoleDestination = Join-Path $installParent "console"
-    $previousConsole = Join-Path $tempRoot "previous-console"
-    if (Test-Path -LiteralPath $consoleDestination) {
-        Move-Item -LiteralPath $consoleDestination -Destination $previousConsole
-    }
-    try {
-        Move-Item -LiteralPath $stagedConsole -Destination $consoleDestination
-        $stagedConsole = $null
-    }
-    catch {
-        if (Test-Path -LiteralPath $previousConsole) {
-            Move-Item -LiteralPath $previousConsole -Destination $consoleDestination
+    $components = @(
+        @{ Name = "cli"; Destination = (Join-Path $InstallDir "skilltape.exe"); Staged = $stagedCli; Saved = $false; Attempted = $false },
+        @{ Name = "api"; Destination = (Join-Path $InstallDir "skilltape-console-api.exe"); Staged = $stagedApi; Saved = $false; Attempted = $false },
+        @{ Name = "console"; Destination = (Join-Path $installParent "console"); Staged = $stagedConsole; Saved = $false; Attempted = $false }
+    )
+    foreach ($component in $components) {
+        if (Test-Path -LiteralPath $component.Destination) {
+            if ($component.Name -eq "console") { Assert-RegularDirectory $component.Destination "existing Console" }
+            else { Assert-RegularFile $component.Destination "existing executable" }
         }
-        throw
     }
+    $transactionActive = $true
+    foreach ($component in $components) {
+        if (Test-Path -LiteralPath $component.Destination) {
+            $backupInProgress = $true
+            Move-Item -LiteralPath $component.Destination -Destination (Join-Path $backupRoot ("previous-" + $component.Name))
+            $component.Saved = $true
+            $backupInProgress = $false
+        }
+    }
+    foreach ($component in $components) {
+        $component.Attempted = $true
+        Move-Item -LiteralPath $component.Staged -Destination $component.Destination
+    }
+    $transactionActive = $false
 
     Write-Output "Installed skilltape $Version for $Target at $(Join-Path $InstallDir 'skilltape.exe')"
 }
 finally {
-    if ($null -ne $stagedCli -and (Test-Path -LiteralPath $stagedCli)) {
-        Remove-Item -LiteralPath $stagedCli -Force -ErrorAction SilentlyContinue
+    $recoveryNeeded = $backupInProgress
+    if ($transactionActive) {
+        for ($i = $components.Count - 1; $i -ge 0; $i--) {
+            $component = $components[$i]
+            try {
+                if ($component.Attempted -and (Test-Path -LiteralPath $component.Destination)) {
+                    Move-Item -LiteralPath $component.Destination -Destination (Join-Path $backupRoot ("failed-" + $component.Name))
+                }
+                if ($component.Saved) {
+                    if (Test-Path -LiteralPath $component.Destination) { throw "Restore destination is occupied." }
+                    Move-Item -LiteralPath (Join-Path $backupRoot ("previous-" + $component.Name)) -Destination $component.Destination
+                }
+            }
+            catch { $recoveryNeeded = $true }
+        }
     }
-    if ($null -ne $stagedApi -and (Test-Path -LiteralPath $stagedApi)) {
-        Remove-Item -LiteralPath $stagedApi -Force -ErrorAction SilentlyContinue
+    foreach ($temporary in @($stageRoot, $tempRoot)) {
+        if ($null -ne $temporary -and (Test-Path -LiteralPath $temporary)) {
+            Remove-Item -LiteralPath $temporary -Recurse -Force -ErrorAction SilentlyContinue
+        }
     }
-    if ($null -ne $stagedConsole -and (Test-Path -LiteralPath $stagedConsole)) {
-        Remove-Item -LiteralPath $stagedConsole -Recurse -Force -ErrorAction SilentlyContinue
-    }
-    if (Test-Path -LiteralPath $tempRoot) {
-        Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
+    if ($null -ne $installLock) {
+        $installLock.Dispose()
+        if ($recoveryNeeded) {
+            Write-Warning "Installation rollback needs manual recovery; preserved assets: $backupRoot; lock: $lockPath"
+        }
+        else {
+            if ($null -ne $backupRoot -and (Test-Path -LiteralPath $backupRoot)) {
+                Remove-Item -LiteralPath $backupRoot -Recurse -Force
+            }
+            try { Remove-Item -LiteralPath $lockPath -Force }
+            catch { Write-Warning "Installation completed; inspect the retained lock before retrying: $lockPath" }
+        }
     }
 }

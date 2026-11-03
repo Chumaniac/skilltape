@@ -11,6 +11,7 @@ use thiserror::Error;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
+mod artifact_io;
 mod execution;
 mod input_io;
 mod policy_checks;
@@ -69,6 +70,35 @@ impl Default for ResourceLimits {
             step_timeout: Duration::from_secs(120),
             max_output_bytes: 1024 * 1024,
         }
+    }
+}
+
+impl ResourceLimits {
+    /// Validate new execution/context inputs without accessing a workspace.
+    pub fn validate(&self) -> Result<(), RunError> {
+        if self.max_processes < MAX_ACTIVE_PROCESSES {
+            return Err(RunError::InvalidLimits {
+                message: "resource max_processes must be at least one".into(),
+            });
+        }
+        let milliseconds = self.step_timeout.as_millis();
+        // Console consumes JSON numbers, so new conditions must remain exact
+        // safe integers instead of silently truncating fractions or precision.
+        if milliseconds == 0
+            || milliseconds > 9_007_199_254_740_991
+            || !self.step_timeout.subsec_nanos().is_multiple_of(1_000_000)
+        {
+            return Err(RunError::InvalidLimits {
+                message: "step_timeout must be positive whole safe-integer milliseconds".into(),
+            });
+        }
+        let maximum = skilltape_core::ARTIFACT_MAX_FILE_BYTES as usize;
+        if self.max_output_bytes == 0 || self.max_output_bytes > maximum {
+            return Err(RunError::InvalidLimits {
+                message: format!("max_output_bytes must be in 1..={maximum}"),
+            });
+        }
+        Ok(())
     }
 }
 
@@ -464,19 +494,10 @@ fn validate_limits(
     limits: &ResourceLimits,
     permissions: &skilltape_schema::Permissions,
 ) -> Result<(), RunError> {
-    if limits.max_processes < MAX_ACTIVE_PROCESSES {
-        return Err(RunError::InvalidLimits {
-            message: "resource max_processes must be at least one".into(),
-        });
-    }
+    limits.validate()?;
     if permissions.process.max_processes < MAX_ACTIVE_PROCESSES {
         return Err(RunError::InvalidLimits {
             message: "package permissions process.max_processes must be at least one".into(),
-        });
-    }
-    if limits.step_timeout.is_zero() {
-        return Err(RunError::InvalidLimits {
-            message: "step_timeout must be greater than zero".into(),
         });
     }
     Ok(())

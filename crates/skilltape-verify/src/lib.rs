@@ -82,6 +82,7 @@ pub async fn verify_run_with_context(
     request: VerifyRequest,
     cancel: CancellationToken,
 ) -> Result<(Receipt, RunContext), VerifyError> {
+    request.limits.validate()?;
     let context_limits = request.limits.clone();
     validate_assertions(&request.assertions)?;
     ensure_directory(&request.input_root).map_err(|_| VerifyError::InvalidInputRoot)?;

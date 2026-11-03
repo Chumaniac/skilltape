@@ -5,7 +5,9 @@ use std::time::Duration;
 use serde_json::{json, Value};
 use skilltape_core::{create_skill_template, LoadedSkillPackage, SkillPackage};
 use skilltape_runner::ResourceLimits;
-use skilltape_verify::{verify_run, Assertion, ReceiptStatus, VerifyError, VerifyRequest};
+use skilltape_verify::{
+    verify_run, Assertion, ReceiptStatus, RunContext, VerifyError, VerifyRequest,
+};
 use tempfile::{tempdir, TempDir};
 
 struct PackageFixture {
@@ -78,6 +80,74 @@ fn input_root(root: &Path) -> std::path::PathBuf {
     fs::create_dir(&input).expect("input");
     fs::write(input.join("source.txt"), "payload").expect("source");
     input
+}
+
+#[tokio::test]
+async fn newly_generated_context_rejects_limits_the_runner_cannot_accept() {
+    let root = tempdir().expect("root");
+    let input = input_root(root.path());
+    let receipt = verify_fixture(
+        file_copy_package(),
+        &input,
+        &root.path().join("output"),
+        vec![],
+    )
+    .await;
+    for bytes in [0, skilltape_core::ARTIFACT_MAX_FILE_BYTES as usize + 1] {
+        let invalid = ResourceLimits {
+            max_output_bytes: bytes,
+            ..limits()
+        };
+        assert!(matches!(
+            RunContext::new(&receipt, "a".repeat(64), &invalid),
+            Err(VerifyError::Runner(_))
+        ));
+    }
+    for bytes in [1, skilltape_core::ARTIFACT_MAX_FILE_BYTES as usize] {
+        let valid = ResourceLimits {
+            max_output_bytes: bytes,
+            ..limits()
+        };
+        let context =
+            RunContext::new(&receipt, "a".repeat(64), &valid).expect("valid source limits");
+        assert!(context.binds_receipt(&serde_json::to_vec(&receipt).expect("receipt")));
+    }
+    for timeout in [
+        Duration::from_nanos(1),
+        Duration::from_micros(1500),
+        Duration::from_millis(9_007_199_254_740_992),
+        Duration::MAX,
+    ] {
+        let invalid = ResourceLimits {
+            step_timeout: timeout,
+            ..limits()
+        };
+        assert!(RunContext::new(&receipt, "a".repeat(64), &invalid).is_err());
+    }
+}
+
+#[tokio::test]
+async fn invalid_limits_precede_input_reads_and_receipt_generation() {
+    let root = tempdir().expect("root");
+    let fixture = package(vec![], permissions(&[], &[], &[]));
+    let result = verify_run(VerifyRequest {
+        package: fixture.package,
+        input_root: root.path().join("not-created"),
+        output_root: root.path().join("output"),
+        limits: ResourceLimits {
+            max_output_bytes: 0,
+            ..limits()
+        },
+        assertions: vec![],
+    })
+    .await;
+    assert!(matches!(
+        result,
+        Err(VerifyError::Runner(
+            skilltape_runner::RunError::InvalidLimits { .. }
+        ))
+    ));
+    assert!(!root.path().join("output").exists());
 }
 
 #[tokio::test]

@@ -22,6 +22,8 @@ const MAX_TAPE_MANIFEST_BYTES: u64 = 64 * 1024;
 // Match the existing Receipt-context budget; larger saved documents need a
 // paginated format before Console can safely inspect them.
 const MAX_STORED_DOCUMENT_BYTES: u64 = 8 * 1024 * 1024;
+const MAX_CONSOLE_VALUE_NODES: usize = 100_000;
+const MAX_CONSOLE_TEXT_BYTES: usize = 64 * 1024;
 const REQUIRED_PACKAGE_FILES: [&str; 6] = [
     "skilltape.yaml",
     "workflow.yaml",
@@ -429,6 +431,15 @@ impl ConsoleReadModel {
         validate_id(skill_id)?;
         let package_path = self.find_skill(skill_id)?;
         reject_symlink_tree(&package_path)?;
+        let mut metadata_bytes = 0_u64;
+        for relative in REQUIRED_PACKAGE_FILES {
+            let metadata = fs::symlink_metadata(package_path.join(relative))
+                .map_err(|_| ReadModelError::InvalidDocument)?;
+            metadata_bytes = metadata_bytes.saturating_add(metadata.len());
+            if !metadata.is_file() || metadata_bytes > MAX_STORED_DOCUMENT_BYTES {
+                return Err(ReadModelError::InvalidDocument);
+            }
+        }
         let package =
             SkillPackage::load(&package_path).map_err(|_| ReadModelError::InvalidDocument)?;
         let lint = package.lint(false);
@@ -442,7 +453,7 @@ impl ConsoleReadModel {
             .map_err(|_| ReadModelError::UnsafePath)?
             .to_string_lossy()
             .replace('\\', "/");
-        Ok(SkillDiff {
+        let diff = SkillDiff {
             schema: CONSOLE_SCHEMA_V1,
             id: skill_id.to_owned(),
             package_path: relative_package,
@@ -458,7 +469,26 @@ impl ConsoleReadModel {
             lint: lint_summary(lint),
             policy_plan: skilltape_verify::policy_plan(&package).ok(),
             compile_source: self.compile_source(&package_path, skill_id)?,
-        })
+        };
+        let mut nodes = 0;
+        if ![
+            &diff.manifest,
+            &diff.workflow,
+            &diff.permissions,
+            &diff.lockfile,
+        ]
+        .iter()
+        .all(|value| bounded_console_value(value, 0, &mut nodes))
+            || diff.lint.errors.len() + diff.lint.warnings.len()
+                > skilltape_core::ARTIFACT_MAX_ENTRIES as usize
+            || serde_json::to_vec(&diff)
+                .map_err(|_| ReadModelError::InvalidDocument)?
+                .len() as u64
+                > MAX_STORED_DOCUMENT_BYTES
+        {
+            return Err(ReadModelError::InvalidDocument);
+        }
+        Ok(diff)
     }
 
     fn compile_source(
@@ -973,7 +1003,7 @@ impl ConsoleReadModel {
         if metadata.file_type().is_symlink() || !metadata.is_file() {
             return Err(ReadModelError::InvalidDocument);
         }
-        let contents = fs::read(&path).map_err(|_| ReadModelError::InvalidDocument)?;
+        let contents = self.bounded_stored_file(&path, MAX_STORED_DOCUMENT_BYTES)?;
         Ok(FileSummary {
             path: relative.to_owned(),
             bytes: contents.len(),
@@ -996,10 +1026,10 @@ impl ConsoleReadModel {
             return Err(ReadModelError::UnsafePath);
         }
         let bytes = self.bounded_stored_file(path, MAX_STORED_DOCUMENT_BYTES)?;
-        let document =
+        let document: Value =
             serde_json::from_slice(&bytes).map_err(|_| ReadModelError::InvalidDocument)?;
         let schema = match kind {
-            "run" => "skilltape.dev/run/v1",
+            "run" => validated_run_schema(&document)?,
             "receipt" => "skilltape.dev/receipt/v1",
             _ => CONSOLE_SCHEMA_V1,
         };
@@ -1009,6 +1039,79 @@ impl ConsoleReadModel {
             document,
         })
     }
+}
+
+fn bounded_console_value(value: &Value, depth: u64, nodes: &mut usize) -> bool {
+    *nodes += 1;
+    if depth > skilltape_core::ARTIFACT_MAX_DEPTH || *nodes > MAX_CONSOLE_VALUE_NODES {
+        return false;
+    }
+    match value {
+        Value::Array(items) => {
+            items.len() <= skilltape_core::ARTIFACT_MAX_ENTRIES as usize
+                && items
+                    .iter()
+                    .all(|item| bounded_console_value(item, depth + 1, nodes))
+        }
+        Value::Object(fields) => {
+            fields.len() <= skilltape_core::ARTIFACT_MAX_ENTRIES as usize
+                && fields.iter().all(|(key, item)| {
+                    key.len() <= MAX_CONSOLE_TEXT_BYTES
+                        && bounded_console_value(item, depth + 1, nodes)
+                })
+        }
+        Value::String(text) => text.len() <= MAX_CONSOLE_TEXT_BYTES,
+        Value::Number(number) => number
+            .as_f64()
+            .is_some_and(|value| value.is_finite() && value.abs() <= 9_007_199_254_740_991.0),
+        _ => true,
+    }
+}
+
+fn validated_run_schema(document: &Value) -> Result<&'static str, ReadModelError> {
+    if !bounded_console_value(document, 0, &mut 0) {
+        return Err(ReadModelError::InvalidDocument);
+    }
+    let legacy = document.get("schema").and_then(Value::as_str) == Some("skilltape.dev/run/v1");
+    let normalized = if legacy {
+        let fields = document
+            .as_object()
+            .ok_or(ReadModelError::InvalidDocument)?;
+        if fields.len() != 3
+            || !["schema", "status", "steps"]
+                .iter()
+                .all(|key| fields.contains_key(*key))
+        {
+            return Err(ReadModelError::InvalidDocument);
+        }
+        // Validate only the legacy aggregate shape. The original document is
+        // returned unchanged; missing policy/truncation evidence is not invented.
+        Some(
+            serde_json::json!({"schema":"skilltape.dev/replay/v1", "status":document["status"],
+            "steps":document["steps"],"policy_decisions":[],"output_truncated":false}),
+        )
+    } else {
+        None
+    };
+    let replay = normalized.as_ref().unwrap_or(document);
+    skilltape_schema::validate_json(skilltape_schema::SchemaId::ReplayV1, replay)
+        .map_err(|_| ReadModelError::InvalidDocument)?;
+    if replay["status"] == "succeeded"
+        && (replay["steps"]
+            .as_array()
+            .is_some_and(|steps| steps.iter().any(|step| step["status"] != "succeeded"))
+            || replay["policy_decisions"]
+                .as_array()
+                .is_some_and(|checks| checks.iter().any(|check| check["allowed"] != true))
+            || !replay.get("failure").unwrap_or(&Value::Null).is_null())
+    {
+        return Err(ReadModelError::InvalidDocument);
+    }
+    Ok(if legacy {
+        "skilltape.dev/run/v1"
+    } else {
+        "skilltape.dev/replay/v1"
+    })
 }
 
 fn collection<T>(items: Vec<T>, offset: usize, limit: usize, total: usize) -> Collection<T> {
@@ -1053,8 +1156,12 @@ pub fn validate_id(id: &str) -> Result<(), ReadModelError> {
 }
 
 fn reject_symlink_tree(root: &Path) -> Result<(), ReadModelError> {
-    let mut entries = vec![root.to_owned()];
-    while let Some(path) = entries.pop() {
+    let mut entries = vec![(root.to_owned(), 0_u64)];
+    let mut seen = 1_u64;
+    while let Some((path, depth)) = entries.pop() {
+        if depth > skilltape_core::ARTIFACT_MAX_DEPTH {
+            return Err(ReadModelError::DiscoveryCapacity);
+        }
         let metadata = fs::symlink_metadata(&path).map_err(|error| match error.kind() {
             io::ErrorKind::NotFound => ReadModelError::NotFound,
             _ => ReadModelError::Io(error),
@@ -1064,8 +1171,14 @@ fn reject_symlink_tree(root: &Path) -> Result<(), ReadModelError> {
         }
         if metadata.is_dir() {
             for entry in fs::read_dir(&path).map_err(ReadModelError::Io)? {
-                entries.push(entry.map_err(ReadModelError::Io)?.path());
+                seen += 1;
+                if seen > skilltape_core::ARTIFACT_MAX_ENTRIES {
+                    return Err(ReadModelError::DiscoveryCapacity);
+                }
+                entries.push((entry.map_err(ReadModelError::Io)?.path(), depth + 1));
             }
+        } else if !metadata.is_file() {
+            return Err(ReadModelError::UnsafePath);
         }
     }
     Ok(())

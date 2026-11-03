@@ -8,8 +8,8 @@ use skilltape_runner::{RunSummary, StepStatus};
 use thiserror::Error;
 
 const MAX_TEXT_ASSERTION_BYTES: u64 = 1024 * 1024;
-const MAX_HASH_FILE_BYTES: u64 = 16 * 1024 * 1024;
-const MAX_HASH_TOTAL_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_HASH_FILE_BYTES: u64 = skilltape_core::ARTIFACT_MAX_FILE_BYTES;
+const MAX_HASH_TOTAL_BYTES: u64 = skilltape_core::ARTIFACT_MAX_TOTAL_BYTES;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]

@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased source - 2026-11-02
+
+- Share file, total-byte, entry and depth ceilings across Replay artifact I/O,
+  Verify hashes and delivery assembly. Bound referenced-script copies and output
+  enumeration before publication, while retaining no-link and changing-file checks.
+- Bound Workflow steps, arguments and output declarations. Capacity diagnostics
+  omit the invalid command arguments instead of formatting the complete payload.
+- Validate resource limits consistently before execution, input hashing and new
+  run-context creation; reject zero/oversized stream limits and timeouts that
+  cannot be represented by the recorded millisecond contract.
+- Validate stored Replay summaries and the explicit legacy aggregate shape;
+  return their actual schema identity. Bound Console package/documents and use
+  paginated lists plus lazy, visibly limited JSON previews without changing files.
+
+- Restore the previous CLI, API and UI together when installation fails. Preserve
+  recovery backups and the lock when restoration cannot finish; add Unix and
+  PowerShell synthetic failure fixtures without changing release assets.
+
 ## Unreleased - 2026-10-22
 
 - Use Console-compatible starter storage, including the real Receipt and run-condition index; keep delivery artifacts directly discoverable.

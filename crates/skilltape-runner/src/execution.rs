@@ -1,14 +1,12 @@
 //! One guarded step: process, file operation, or bounded assertion.
 
 use std::fs;
-use std::io::Read;
 use std::time::Duration;
 
-use sha2::{Digest, Sha256};
 use skilltape_schema::Step;
 use tokio_util::sync::CancellationToken;
 
-use crate::workspace::{copy_path, make_directory, move_path, ReplayWorkspace, WorkspaceError};
+use crate::workspace::{make_directory, move_path, ReplayWorkspace, WorkspaceError};
 use crate::{
     ProcessAdapter, ProcessOutput, ProcessRequest, ProcessStatus, ResourceLimits, RunFailure,
     StepStatus,
@@ -155,7 +153,7 @@ fn execute_file(step: &skilltape_schema::FileStep, workspace: &ReplayWorkspace) 
         match step.operation.as_str() {
             "copy" => {
                 let from = workspace.resolve(&step.from_path)?;
-                copy_path(&from, &to)
+                workspace.copy_path(&from, &to)
             }
             "move" => {
                 let from = workspace.resolve(&step.from_path)?;
@@ -215,24 +213,9 @@ fn execute_assert(
                     .hash
                     .as_deref()
                     .ok_or_else(|| "file_hash assertion requires a hash".to_owned())?;
-                let mut file = fs::File::open(&path).map_err(|error| error.to_string())?;
-                let mut hasher = Sha256::new();
-                let mut buffer = [0_u8; 8192];
-                loop {
-                    let bytes_read = match file.read(&mut buffer) {
-                        Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
-                        result => result.map_err(|error| error.to_string())?,
-                    };
-                    if bytes_read == 0 {
-                        break;
-                    }
-                    hasher.update(&buffer[..bytes_read]);
-                }
-                let actual = hasher
-                    .finalize()
-                    .iter()
-                    .map(|byte| format!("{byte:02x}"))
-                    .collect::<String>();
+                let actual = workspace
+                    .hash_file(&path)
+                    .map_err(|error| error.to_string())?;
                 if actual.eq_ignore_ascii_case(expected) {
                     Ok(())
                 } else {

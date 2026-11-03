@@ -25,6 +25,35 @@ these checks do not freeze files against another process changing them.
 
 These limits are included in the v0.2.3 packages.
 
+## Replay artifact I/O in current source
+
+Current unreleased source applies shared ceilings of 10,000 entries, depth 64,
+16 MiB per regular file and 64 MiB total to referenced-script staging and Replay
+artifact I/O. Script staging has its own inventory. Hash assertions and output
+materialization share a distinct-path high-water inventory: repeated checks do
+not charge the same unchanged file twice, but every read is checked again.
+Verify hashes and delivery assembly use the same file and total-byte ceilings.
+
+Replay copies and internal hashes use no-link reads, the observed length plus at most one growth
+probe byte, and identity/change checks. Directory entries are charged before a
+sorted list is collected. Budget failures do not publish a partial output
+directory or replace an existing destination. Workflow step, argument and output
+declaration arrays are limited to 10,000 items each, and shape/capacity failures
+do not echo the complete invalid command payload.
+
+These are source I/O and metadata limits, not an operating-system disk quota,
+process RSS guarantee, or a freeze against concurrent file changes. They do not
+restrict every byte a running command may create before output inspection.
+The unchanged v0.4.1 downloads do not gain these source changes automatically.
+
+New execution and run-context creation share resource validation before input
+reads: at least one process, a positive timeout representable in whole JSON
+safe-integer milliseconds, and 1 byte through 16 MiB for each captured stdout or
+stderr stream per process.
+The 1 MiB library default and the CLI's smaller default remain supported.
+Historical context inspection remains read-only; stricter creation limits do
+not rewrite old receipts or conditions.
+
 ## Arguments and cancellation
 
 `--command` names one executable. Pass each argument with `--arg`; spaces and
@@ -105,6 +134,18 @@ Return to the [installation guide](installation.md) for supported targets and
 updates, or the [Quickstart](quickstart.md) to create your first Skill.
 
 ### Console read errors and recovery
+
+Current source limits a package's Console metadata and each stored document to
+8 MiB. Traversal and JSON views have entry, depth, node and text ceilings;
+larger packages can still be inspected with CLI tooling without rewriting them.
+Workflow and diagnostic lists show 100 rows per page. JSON previews are created
+only when expanded and visibly stop at 64 KiB of preview text.
+
+The saved-run endpoint validates current `replay/v1` summaries and an explicit
+legacy `run/v1` aggregate with only `schema`, `status` and `steps`. The latter is
+not the `run/v1` event-log schema. Missing legacy policy or truncation evidence
+is not added to the returned document. Unsupported or contradictory records
+return a read error; Console does not execute, migrate or overwrite them.
 
 The Console checks the fields it renders from saved timelines and compiled packages. Out-of-range timestamps, malformed workflow steps, permission shapes and file metadata show an error with a retry action. Check the saved Tape or package with the current CLI before retrying. If the connection fails, start the local Console again.
 
