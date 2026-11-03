@@ -53,6 +53,12 @@ Windows Replay/Verify still fail closed. Earlier
 [v0.2.3 assets](https://github.com/Chumaniac/skilltape/releases/tag/v0.2.3)
 and their dated verification evidence remain available.
 
+The unreleased source also bounds artifact traversal and Console documents,
+validates execution limits before reading inputs, and restores the complete
+CLI/API/UI set after an installer replacement failure. See the
+[source verification record](docs/reviews/2026-11-03-priority-fixes.md). Published
+v0.4.1 downloads and the pinned installers below retain their original behavior.
+
 ## Get a verified Skill in five minutes
 
 Install the fixed public v0.4.1 release without piping a download into a shell.

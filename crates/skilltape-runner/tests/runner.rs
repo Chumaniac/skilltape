@@ -154,6 +154,39 @@ async fn raw_run(
 }
 
 #[tokio::test]
+async fn artifact_capacity_counts_repeated_file_step_copies() {
+    for (count, expected) in [(4, RunStatus::Succeeded), (5, RunStatus::Failed)] {
+        let root = tempdir().expect("root");
+        let input = root.path().join("input");
+        fs::create_dir(&input).expect("input");
+        fs::File::create(input.join("source.bin"))
+            .expect("source")
+            .set_len(16 * 1024 * 1024)
+            .expect("size");
+        let steps = (0..count)
+            .map(|i| {
+                json!({"action":"file","id":format!("copy-{i}"),
+            "operation":"copy","from":"inputs/source.bin","to":format!("outputs/copy-{i}.bin")})
+            })
+            .collect();
+        let fixture = package(steps, permissions(&["inputs/**"], &["outputs/**"], &[]));
+        let adapter = FakeAdapter::new(FakeBehavior::Return(process_output(
+            ProcessStatus::Exited,
+            Some(0),
+            "",
+        )));
+        let summary = raw_run(fixture, &input, &root.path().join("output"), &adapter)
+            .await
+            .expect("summary");
+        assert_eq!(summary.status, expected);
+        if expected == RunStatus::Failed {
+            assert!(format!("{:?}", summary.failure).contains("capacity"));
+        }
+        assert_eq!(adapter.calls(), 0);
+    }
+}
+
+#[tokio::test]
 async fn artifact_capacity_rejects_large_and_aggregate_outputs_before_publication() {
     for (count, size) in [(1, 16 * 1024 * 1024 + 1), (5, 13 * 1024 * 1024)] {
         let root = tempdir().expect("root");

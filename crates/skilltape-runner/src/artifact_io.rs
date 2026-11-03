@@ -16,9 +16,17 @@ use crate::workspace::{ensure_no_symlink_ancestors, lexical_workspace_path, Work
 pub(crate) struct ArtifactBudget {
     entries: BTreeMap<PathBuf, u64>,
     bytes: u64,
+    previous_entries: u64,
 }
 
 impl ArtifactBudget {
+    /// File-step copies charge each operation, including a repeated destination
+    /// after a move. Only observations within one copy inventory are deduplicated.
+    pub(crate) fn begin_copy(&mut self) {
+        self.previous_entries += self.entries.len() as u64;
+        self.entries.clear();
+    }
+
     /// Accounting is deduplicated, never the reads themselves. A changing path
     /// retains its high-water size so repeated assertions cannot release budget.
     pub(crate) fn observe(
@@ -31,7 +39,7 @@ impl ArtifactBudget {
         let key = lexical_workspace_path(path)?;
         let previous = self.entries.get(&key).copied();
         limit(
-            self.entries.len() as u64 + u64::from(previous.is_none()),
+            self.previous_entries + self.entries.len() as u64 + u64::from(previous.is_none()),
             ARTIFACT_MAX_ENTRIES,
             "entries",
         )?;

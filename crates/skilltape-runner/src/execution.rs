@@ -6,7 +6,7 @@ use std::time::Duration;
 use skilltape_schema::Step;
 use tokio_util::sync::CancellationToken;
 
-use crate::workspace::{copy_path, make_directory, move_path, ReplayWorkspace, WorkspaceError};
+use crate::workspace::{make_directory, move_path, ReplayWorkspace, WorkspaceError};
 use crate::{
     ProcessAdapter, ProcessOutput, ProcessRequest, ProcessStatus, ResourceLimits, RunFailure,
     StepStatus,
@@ -153,7 +153,7 @@ fn execute_file(step: &skilltape_schema::FileStep, workspace: &ReplayWorkspace) 
         match step.operation.as_str() {
             "copy" => {
                 let from = workspace.resolve(&step.from_path)?;
-                copy_path(&from, &to)
+                workspace.copy_path(&from, &to)
             }
             "move" => {
                 let from = workspace.resolve(&step.from_path)?;

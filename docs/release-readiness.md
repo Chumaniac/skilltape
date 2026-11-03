@@ -1,5 +1,13 @@
 # Release Readiness
 
+## 2026-11-03 priority source fixes
+
+Artifact capacity, execution-parameter admission, Console document/rendering
+bounds and complete installer rollback are implemented in current source. See
+[verification scope and limits](reviews/2026-11-03-priority-fixes.md). Required
+hosted checks and main delivery are recorded separately. Existing v0.4.1 assets,
+source histories, user Tapes and Receipts remain unchanged.
+
 ## 2026-10-29 Capture source review follow-up
 
 CLI Compile now records normalized Capture manifest/event digests and the event

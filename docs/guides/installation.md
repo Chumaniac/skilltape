@@ -26,6 +26,15 @@ archive SHA-256, validate the CLI, API companion, and Console UI, and stage all
 assets before replacement. A download, checksum, extraction, or staging failure
 leaves an existing installation untouched.
 
+The unreleased source installers additionally back up the CLI, API and UI as one
+replacement transaction. A final-move failure restores the complete previous set;
+a failed fresh install removes its partial set. If restoration is blocked, the
+installer preserves its backup and installation lock and reports the recovery
+location. Inspect those files before removing the lock or retrying. Process
+termination without cleanup (for example, SIGKILL or power loss) still requires
+manual recovery. This source change does not alter the pinned v0.4.1 installers
+or release archives linked below.
+
 Linux needs `bwrap`/Bubblewrap and an available user namespace for Replay and
 Verify; Debian and Ubuntu users can install it with `sudo apt-get install
 bubblewrap`. macOS uses `/usr/bin/sandbox-exec`. Without the corresponding

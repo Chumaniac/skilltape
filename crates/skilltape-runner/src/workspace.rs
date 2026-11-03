@@ -51,6 +51,7 @@ pub(crate) struct ReplayWorkspace {
     _tempdir: TempDir,
     root: PathBuf,
     output_budget: Mutex<ArtifactBudget>,
+    copy_budget: Mutex<ArtifactBudget>,
 }
 
 impl ReplayWorkspace {
@@ -73,6 +74,7 @@ impl ReplayWorkspace {
             _tempdir: tempdir,
             root,
             output_budget: Mutex::new(ArtifactBudget::default()),
+            copy_budget: Mutex::new(ArtifactBudget::default()),
         })
     }
 
@@ -116,6 +118,24 @@ impl ReplayWorkspace {
             })?;
         budget.observe(path, &metadata, relative.components().count() as u64)?;
         crate::artifact_io::hash_file(&self.root, path, &metadata)
+    }
+
+    pub(crate) fn copy_path(&self, from: &Path, to: &Path) -> Result<(), WorkspaceError> {
+        let depth = to
+            .strip_prefix(&self.root)
+            .map_err(|_| WorkspaceError::UnsafePath {
+                path: "copy destination escaped workspace".into(),
+            })?
+            .components()
+            .count() as u64;
+        let mut budget = self
+            .copy_budget
+            .lock()
+            .map_err(|_| WorkspaceError::UnsafePath {
+                path: "copy accounting is unavailable".into(),
+            })?;
+        budget.begin_copy();
+        copy_entry(from, to, &self.root, to, &mut budget, depth)
     }
 
     pub(crate) fn materialize_outputs(
@@ -172,7 +192,14 @@ impl ReplayWorkspace {
             }
             let depth = Path::new(&destination_relative).components().count() as u64;
             let destination = staging.path().join(destination_relative);
-            copy_entry(&source, &destination, &self.root, &mut budget, depth)?;
+            copy_entry(
+                &source,
+                &destination,
+                &self.root,
+                &source,
+                &mut budget,
+                depth,
+            )?;
         }
 
         if symlink_metadata(output_root)?.is_some() {
@@ -209,16 +236,6 @@ pub(crate) fn resolve_under(root: &Path, relative: &str) -> Result<PathBuf, Work
         });
     }
     Ok(path)
-}
-
-pub(crate) fn copy_path(from: &Path, to: &Path) -> Result<(), WorkspaceError> {
-    copy_entry(
-        from,
-        to,
-        from.parent().unwrap_or_else(|| Path::new(".")),
-        &mut ArtifactBudget::default(),
-        0,
-    )
 }
 
 pub(crate) fn move_path(from: &Path, to: &Path) -> Result<(), WorkspaceError> {
@@ -488,6 +505,7 @@ fn copy_referenced_scripts(
             &source,
             &workspace_root.join(&relative),
             &package.root,
+            &source,
             &mut budget,
             depth,
         )?;
@@ -499,6 +517,7 @@ fn copy_entry(
     source: &Path,
     destination: &Path,
     source_root: &Path,
+    accounting_path: &Path,
     budget: &mut ArtifactBudget,
     depth: u64,
 ) -> Result<(), WorkspaceError> {
@@ -513,7 +532,7 @@ fn copy_entry(
     }
     ensure_no_symlink_ancestors(source)?;
     ensure_no_symlink_ancestors(destination)?;
-    budget.observe(source, &metadata, depth)?;
+    budget.observe(accounting_path, &metadata, depth)?;
 
     if metadata.is_dir() {
         if destination == source || destination.starts_with(source) {
@@ -562,7 +581,11 @@ fn copy_entry(
             }
             // Reserve metadata before collecting/sorting so enumeration cannot
             // allocate an unbounded list before the entry ceiling is checked.
-            budget.observe(&path, &child, depth + 1)?;
+            budget.observe(
+                &accounting_path.join(path.file_name().expect("directory entry name")),
+                &child,
+                depth + 1,
+            )?;
             entries.push(path);
         }
         entries.sort();
@@ -575,6 +598,7 @@ fn copy_entry(
                 &entry,
                 &destination.join(name),
                 source_root,
+                &accounting_path.join(name),
                 budget,
                 depth + 1,
             )?;
