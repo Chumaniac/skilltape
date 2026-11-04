@@ -456,15 +456,7 @@ select {
   margin-top: 1rem;
 }
 
-.empty-orbit {
-  display: block;
-  flex: 0 0 auto;
-  width: 2.25rem;
-  height: 2.25rem;
-  border: 1px solid rgba(110, 231, 214, 0.5);
-  border-radius: 50%;
-  box-shadow: inset 0 0 0 0.45rem rgba(110, 231, 214, 0.08);
-}
+
 
 .spinner {
   display: block;
@@ -1276,3 +1268,5 @@ tbody code {
 .export-options label { display: block; margin-top: 1rem; }
 
 .saved-receipts{margin:18px 0;padding:16px;border:1px solid var(--border,#52616b);border-radius:8px}.saved-receipt-list{list-style:none;padding:0}.saved-receipt-list li{display:flex;gap:14px;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--border,#52616b)}.saved-receipt-list li>div{display:grid;min-width:0;gap:6px;overflow-wrap:anywhere}.saved-receipt-list span{font-size:13px}.saved-receipt-list button{flex-shrink:0}@media(max-width:640px){.saved-receipt-list li{align-items:stretch;flex-direction:column}}
+
+.skill-catalog{margin-top:1rem;border-top:1px solid var(--line-bright);padding-top:.5rem}.skill-catalog summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-size:.85rem;font-weight:600}.skill-catalog-content{padding-top:.5rem}.skill-catalog-content>input{width:100%}.skill-catalog-list{list-style:none;margin:.75rem 0;padding:0;max-height:18rem;overflow:auto;border-top:1px solid var(--line-bright)}.skill-catalog-list li{border-bottom:1px solid var(--line-bright)}.skill-catalog-list button{width:100%;padding:.65rem .25rem;text-align:left;border:0;border-radius:0;background:transparent;color:var(--text);overflow-wrap:anywhere}.skill-catalog-list button:hover{background:var(--bg-soft)}

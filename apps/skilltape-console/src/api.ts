@@ -58,6 +58,18 @@ export async function getWorkspaces(signal?: AbortSignal) {
   return value
 }
 
+export async function getSkills(signal?: AbortSignal, query = '', offset = 0): Promise<Collection<string>> {
+  const value = await get<unknown>('/skills?limit=50&offset=' + offset + '&q=' + encodeURIComponent(query), signal)
+  if (!isCollection(value, 50, (id: unknown): id is string => typeof id === 'string' && isSavedEvidenceId(id)) ||
+      value.limit > 50 || value.total > 1000 || value.offset !== offset ||
+      new Set(value.items).size !== value.items.length ||
+      value.items.length !== Math.min(value.limit, Math.max(0, value.total - offset)) ||
+      value.next_offset !== (offset + value.items.length < value.total ? offset + value.items.length : null)) {
+    throw new ApiError('Saved Skill list is invalid. Open a known ID or retry the list.', 502, 'invalid_skill_list')
+  }
+  return value
+}
+
 export async function getBatchReview(signal?: AbortSignal) {
   const value=await get<unknown>('/batch',signal)
   if(!validBatchReview(value)) throw new ApiError('Batch progress is invalid or unsupported. Inspect the saved workspace before continuing.',502,'invalid_batch')

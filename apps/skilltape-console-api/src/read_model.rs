@@ -24,6 +24,7 @@ const MAX_TAPE_MANIFEST_BYTES: u64 = 64 * 1024;
 const MAX_STORED_DOCUMENT_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_CONSOLE_VALUE_NODES: usize = 100_000;
 const MAX_CONSOLE_TEXT_BYTES: usize = 64 * 1024;
+const MAX_SKILL_DISCOVERY: usize = 1000;
 const REQUIRED_PACKAGE_FILES: [&str; 6] = [
     "skilltape.yaml",
     "workflow.yaml",
@@ -227,6 +228,24 @@ impl ConsoleReadModel {
             total: 1,
             next_offset: None,
         })
+    }
+
+    pub fn skills(
+        &self,
+        search: &str,
+        offset: usize,
+        limit: usize,
+    ) -> Result<Collection<String>, ReadModelError> {
+        let (_, limit) = normalize_page(Some(offset), Some(limit))?;
+        let limit = limit.min(50);
+        let needle = search.trim().to_lowercase();
+        let mut ids = self.skill_ids()?;
+        if !needle.is_empty() {
+            ids.retain(|id| id.to_lowercase().contains(&needle));
+        }
+        let total = ids.len();
+        let items = ids.into_iter().skip(offset).take(limit).collect();
+        Ok(collection(items, offset, limit, total))
     }
 
     pub fn tapes(
@@ -941,12 +960,37 @@ impl ConsoleReadModel {
 
     fn skill_ids(&self) -> Result<Vec<String>, ReadModelError> {
         let mut ids = BTreeSet::new();
+        let mut scanned = 0;
         for root in [
             self.root.join("skills"),
             self.root.join(STORAGE_DIR).join("skills"),
         ] {
             self.ensure_safe_path(&root)?;
-            ids.extend(self.directory_names(&root)?);
+            let entries = match fs::read_dir(&root) {
+                Ok(entries) => entries,
+                Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+                Err(error) => return Err(ReadModelError::Io(error)),
+            };
+            for entry in entries {
+                scanned += 1;
+                if scanned > MAX_SKILL_DISCOVERY {
+                    return Err(ReadModelError::DiscoveryCapacity);
+                }
+                let entry = entry.map_err(ReadModelError::Io)?;
+                let kind = entry.file_type().map_err(ReadModelError::Io)?;
+                if !kind.is_dir() || kind.is_symlink() {
+                    continue;
+                }
+                let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
+                    continue;
+                };
+                if name.len() <= 255
+                    && !name.chars().any(char::is_control)
+                    && validate_id(&name).is_ok()
+                {
+                    ids.insert(name);
+                }
+            }
         }
         Ok(ids.into_iter().collect())
     }

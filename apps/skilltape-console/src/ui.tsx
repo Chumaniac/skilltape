@@ -1,10 +1,31 @@
-import { useMemo, useState, type ReactNode } from 'react'
-import { isSavedEvidenceId } from './api'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { getSkills, isSavedEvidenceId } from './api'
+import type { Collection } from './types'
 
 export function SkillPicker({ skillId, onOpen }: { skillId: string; onOpen: (id: string) => void }) {
   const [error, setError] = useState(skillId && !isSavedEvidenceId(skillId) ? 'Use a package directory name, not a path.' : '')
+  const input = useRef<HTMLInputElement>(null)
+  const [catalogOpen, setCatalogOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const [offset, setOffset] = useState(0)
+  const [reload, setReload] = useState(0)
+  const [catalog, setCatalog] = useState<Collection<string> | null>(null)
+  const [catalogLoading, setCatalogLoading] = useState(false)
+  const [catalogError, setCatalogError] = useState(false)
+  useEffect(() => {
+    if (!catalogOpen) return
+    const controller = new AbortController()
+    setCatalogLoading(true); setCatalogError(false); setCatalog(null)
+    const timer = window.setTimeout(() => {
+      getSkills(controller.signal, query, offset)
+        .then(value => { if (!controller.signal.aborted) setCatalog(value) })
+        .catch(() => { if (!controller.signal.aborted) setCatalogError(true) })
+        .finally(() => { if (!controller.signal.aborted) setCatalogLoading(false) })
+    }, 200)
+    return () => { window.clearTimeout(timer); controller.abort() }
+  }, [catalogOpen, query, offset, reload])
   return (
-    <form className="panel receipt-picker" onSubmit={event => {
+    <section className="panel receipt-picker" aria-label="Open a saved Skill"><form onSubmit={event => {
       event.preventDefault()
       const id = String(new FormData(event.currentTarget).get('skill-id') ?? '').trim()
       if (!isSavedEvidenceId(id)) {
@@ -16,14 +37,36 @@ export function SkillPicker({ skillId, onOpen }: { skillId: string; onOpen: (id:
     }}>
       <label htmlFor="skill-id">Saved Skill ID</label>
       <div className="receipt-picker-controls">
-        <input id="skill-id" name="skill-id" defaultValue={skillId} maxLength={255} required
+        <input ref={input} id="skill-id" name="skill-id" defaultValue={skillId} maxLength={255} required
           autoComplete="off" spellCheck={false} onInput={() => setError('')}
           aria-describedby="skill-picker-help skill-picker-error" aria-invalid={error ? true : undefined} />
         <button className="button" type="submit">Open Skill</button>
       </div>
-      <p id="skill-picker-help" className="muted">Enter a name from skills/. Opening it does not run the Skill.</p>
+      <p id="skill-picker-help" className="muted">Enter an ID or browse saved Skills below. Opening a Skill does not run it.</p>
       <p id="skill-picker-error" role="alert">{error}</p>
     </form>
+    <details className="skill-catalog" open={catalogOpen} onToggle={event => setCatalogOpen(event.currentTarget.open)}>
+      <summary>Browse saved Skills</summary>
+      {catalogOpen ? <div className="skill-catalog-content">
+        <label htmlFor="skill-search">Search saved Skills</label>
+        <input id="skill-search" type="search" maxLength={80} autoComplete="off" value={query}
+          onChange={event => { setCatalogLoading(true); setQuery(event.target.value); setOffset(0) }} />
+        {catalogLoading ? <p role="status">Loading saved Skills…</p> : catalogError ? <>
+          <p role="alert">Saved Skills could not be listed. Retry the list, or enter an ID above.</p>
+          <button className="button button-secondary" type="button" onClick={() => { setCatalogLoading(true); setReload(value => value + 1) }}>Retry saved Skills</button>
+        </> : catalog ? <>
+          <p role="status">{catalog.total ? `Showing ${catalog.offset + 1}–${catalog.offset + catalog.items.length} of ${catalog.total} saved Skills` : 'No saved Skill folders match this search.'}</p>
+          <ul className="skill-catalog-list" aria-label="Saved Skills">{catalog.items.map(id => <li key={id}>
+            <button type="button" onClick={() => { if (input.current) input.current.value = id; setError(''); setCatalogOpen(false); onOpen(id) }}>{id}</button>
+          </li>)}</ul>
+          <nav className="receipt-picker-controls" aria-label="Saved Skill pages">
+            <button className="button button-secondary" type="button" disabled={offset === 0} onClick={() => { setCatalogLoading(true); setOffset(Math.max(0, offset - 50)) }}>Previous saved Skills page</button>
+            <button className="button button-secondary" type="button" disabled={catalog.next_offset === null} onClick={() => { setCatalogLoading(true); setOffset(catalog.next_offset ?? offset) }}>Next saved Skills page</button>
+          </nav>
+          <p className="muted">Names from this workspace. Package contents are checked when opened.</p>
+        </> : null}
+      </div> : null}
+    </details></section>
   )
 }
 
@@ -70,7 +113,6 @@ export function EmptyState({
 }) {
   return (
     <div className="state-card state-card-empty">
-      <span className="empty-orbit" aria-hidden="true" />
       <div>
         <h2>{title}</h2>
         <p>{message}</p>

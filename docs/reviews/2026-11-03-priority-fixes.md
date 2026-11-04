@@ -2,7 +2,7 @@
 
 Status: source candidate. Date: 2026-11-03, Asia/Shanghai.
 
-This implements the four follow-ups from the [source review](2026-11-02-project-review.md).
+This implements the four follow-ups from the [historical source review](https://github.com/Chumaniac/skilltape/blob/12ad9107fe5320134cec274358fba5174c4f4fa4/docs/reviews/2026-11-02-project-review.md).
 Existing Tapes, Receipts, release archives and local installations were preserved.
 
 | Area | Behavior and scope | Regression evidence |

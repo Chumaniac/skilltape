@@ -42,6 +42,13 @@ struct PageQuery {
     limit: Option<String>,
 }
 
+#[derive(Clone, Debug, Deserialize, Default)]
+struct SkillQuery {
+    #[serde(flatten)]
+    page: PageQuery,
+    q: Option<String>,
+}
+
 #[derive(Clone, Debug, Serialize)]
 struct ErrorResponse {
     schema: &'static str,
@@ -133,6 +140,7 @@ pub fn router_with_static(model: ConsoleReadModel, static_root: Option<PathBuf>)
         .route("/api/v1/tapes/{id}/events", get(tape_events))
         .route("/api/v1/tapes/{id}/coverage", get(tape_coverage))
         .route("/api/v1/tapes/{id}/packages", get(tape_packages))
+        .route("/api/v1/skills", get(list_skills))
         .route("/api/v1/skills/{id}/diff", get(skill_diff))
         .route("/api/v1/runs/{id}", get(run_document))
         .route("/api/v1/receipts", get(list_receipts))
@@ -286,6 +294,24 @@ async fn list_receipts(
     let (offset, limit) = page(&query)?;
     let permit = inspection_permit(&state)?;
     let (result, _permit) = inspect(permit, move || state.model.receipts(offset, limit)).await?;
+    Ok(Json(result))
+}
+
+async fn list_skills(
+    State(state): State<AppState>,
+    Query(query): Query<SkillQuery>,
+) -> Result<Json<Collection<String>>, ApiError> {
+    let (offset, limit) = page(&query.page)?;
+    let search = query.q.unwrap_or_default();
+    if search.chars().count() > 80 {
+        return Err(ApiError::BadRequest {
+            code: "invalid_skill_search",
+            message: "Skill search must be at most 80 characters",
+        });
+    }
+    let permit = inspection_permit(&state)?;
+    let (result, _permit) =
+        inspect(permit, move || state.model.skills(&search, offset, limit)).await?;
     Ok(Json(result))
 }
 

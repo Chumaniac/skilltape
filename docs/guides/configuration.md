@@ -135,6 +135,23 @@ updates, or the [Quickstart](quickstart.md) to create your first Skill.
 
 ### Console read errors and recovery
 
+The current-source Skill picker lists names from `skills/` and
+`.skilltape/skills/`, deduplicates them and supports literal, case-insensitive
+search. The list keeps one page of up to 50 names. Searches are delayed by
+200 ms while typing, and replacement, close and unmount abort obsolete reads.
+No package content is opened by this discovery request and no Skill is run.
+Package inspection still happens only after explicit selection.
+
+Skill discovery inspects at most 1,000 filesystem entries across both roots,
+including ignored files, and never follows linked folders or emits control
+character IDs. Exceeding that budget produces `package_discovery_capacity`;
+open a known ID directly after inspecting the saved workspace. The same bound
+applies to the workspace's Skill count. The API is `GET /api/v1/skills` with
+`q` (up to 80 characters), `offset` and `limit`; invalid query and page inputs
+return 400, and directory-capacity failures return 503. Responses follow the
+existing Console collection schema. They are folder discovery, not an assertion
+that every folder contains a valid or successfully verified package.
+
 Current source limits a package's Console metadata and each stored document to
 8 MiB. Traversal and JSON views have entry, depth, node and text ceilings;
 larger packages can still be inspected with CLI tooling without rewriting them.
