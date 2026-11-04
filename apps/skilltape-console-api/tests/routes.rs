@@ -102,6 +102,84 @@ async fn request(root: &Path, uri: &str, headers: &[(&str, &str)]) -> (StatusCod
 }
 
 #[tokio::test]
+async fn saved_skill_catalog_is_searchable_paged_read_only_metadata() {
+    let (_temp, root) = fixture();
+    fs::create_dir_all(root.join("skills/alpha")).unwrap();
+    fs::create_dir_all(root.join(".skilltape/skills/demo")).unwrap();
+    fs::create_dir_all(root.join(".skilltape/skills/zeta")).unwrap();
+    fs::write(
+        root.join("skills/alpha/compile.json"),
+        "PRIVATE_CATALOG_SENTINEL",
+    )
+    .unwrap();
+    let (status, body, page) = request(&root, "/api/v1/skills?limit=2", &[]).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(page["items"], json!(["alpha", "demo"]));
+    assert_eq!(page["total"], 3);
+    assert_eq!(page["next_offset"], 2);
+    assert!(!body.contains("PRIVATE_CATALOG_SENTINEL"));
+    let (_, _, next) = request(&root, "/api/v1/skills?limit=2&offset=2", &[]).await;
+    assert_eq!(next["items"], json!(["zeta"]));
+    assert_eq!(next["next_offset"], Value::Null);
+    let (_, _, filtered) = request(&root, "/api/v1/skills?q=ALPHA", &[]).await;
+    assert_eq!(filtered["items"], json!(["alpha"]));
+    let (_, _, literal) = request(&root, "/api/v1/skills?q=..%2F", &[]).await;
+    assert_eq!(literal["items"], json!([]));
+    assert_eq!(
+        fs::read_to_string(root.join("skills/alpha/compile.json")).unwrap(),
+        "PRIVATE_CATALOG_SENTINEL"
+    );
+    for query in [
+        "limit=0",
+        "limit=101",
+        "offset=-1",
+        &format!("q={}", "x".repeat(81)),
+    ] {
+        assert_eq!(
+            request(&root, &format!("/api/v1/skills?{query}"), &[])
+                .await
+                .0,
+            StatusCode::BAD_REQUEST
+        );
+    }
+}
+
+#[tokio::test]
+async fn saved_skill_catalog_bounds_all_scanned_entries() {
+    let (_temp, root) = fixture();
+    for index in 0..999 {
+        fs::write(root.join(format!("skills/ignored-{index}")), "synthetic").unwrap();
+    }
+    assert_eq!(
+        request(&root, "/api/v1/skills", &[]).await.0,
+        StatusCode::OK
+    );
+    fs::write(root.join("skills/one-too-many"), "synthetic").unwrap();
+    let (status, _, data) = request(&root, "/api/v1/skills", &[]).await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(data["error"]["code"], "package_discovery_capacity");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn saved_skill_catalog_does_not_follow_links_or_emit_control_ids() {
+    use std::os::unix::fs::symlink;
+    let (temp, root) = fixture();
+    let outside = temp.path().join("private");
+    fs::create_dir(&outside).unwrap();
+    symlink(&outside, root.join("skills/linked")).unwrap();
+    fs::create_dir(root.join("skills/control\tname")).unwrap();
+    let (_, _, data) = request(&root, "/api/v1/skills", &[]).await;
+    assert_eq!(data["items"], json!(["demo"]));
+    fs::remove_dir_all(root.join("skills")).unwrap();
+    symlink(&outside, root.join("skills")).unwrap();
+    assert_eq!(
+        request(&root, "/api/v1/skills", &[]).await.0,
+        StatusCode::FORBIDDEN
+    );
+}
+
+#[tokio::test]
 async fn workspace_and_tape_routes_return_bounded_read_models() {
     let (_temp, root) = fixture();
     let (status, _body, workspaces) = request(&root, "/api/v1/workspaces", &[]).await;

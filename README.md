@@ -106,6 +106,12 @@ The packaged Console supports previous/next navigation through Tapes and events,
 keeping only the current page in memory. See the [Console guide](docs/guides/configuration.md#local-console-overrides)
 for startup details. This improvement is included in v0.2.3.
 
+Current source adds **Browse saved Skills** to the Compile, Permissions and
+Export pickers. Search folder names, page through 50 results at a time, and open
+one explicitly. Listing reads names only; opening checks the saved package and
+does not execute it. A failed list leaves manual ID entry available. This is a
+source update, not a new versioned download.
+
 v0.2.3 also bounds server-side Tape event reads to
 16 MiB and 100,000 events while validating the complete stream. Capture merges
 at most 10,000 events, charges allocated filesystem metadata against a 16 MiB
