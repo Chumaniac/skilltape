@@ -16,8 +16,8 @@ use serde_json::json;
 use tokio_stream::iter;
 
 use crate::read_model::{
-    normalize_page, Collection, ConsoleReadModel, ReadModelError, SkillDiff, StoredDocument,
-    TapeEvents, CONSOLE_SCHEMA_V1,
+    normalize_page, valid_receipt_filter, Collection, ConsoleReadModel, ReadModelError, SkillDiff,
+    StoredDocument, TapeEvents, CONSOLE_SCHEMA_V1,
 };
 
 #[derive(Clone, Debug)]
@@ -47,6 +47,14 @@ struct SkillQuery {
     #[serde(flatten)]
     page: PageQuery,
     q: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Default)]
+struct ReceiptQuery {
+    #[serde(flatten)]
+    page: PageQuery,
+    status: Option<String>,
+    skill_hash: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -289,11 +297,24 @@ async fn run_document(
 
 async fn list_receipts(
     State(state): State<AppState>,
-    Query(query): Query<PageQuery>,
+    Query(query): Query<ReceiptQuery>,
 ) -> Result<Json<Collection<crate::read_model::ReceiptSummary>>, ApiError> {
-    let (offset, limit) = page(&query)?;
+    let (offset, limit) = page(&query.page)?;
+    let status = query.status.unwrap_or_default();
+    let skill_hash = query.skill_hash.unwrap_or_default();
+    if !valid_receipt_filter(&status, &skill_hash) {
+        return Err(ApiError::BadRequest {
+            code: "invalid_receipt_filter",
+            message: "Use a recorded Receipt status and up to 64 lowercase hexadecimal fingerprint characters",
+        });
+    }
     let permit = inspection_permit(&state)?;
-    let (result, _permit) = inspect(permit, move || state.model.receipts(offset, limit)).await?;
+    let (result, _permit) = inspect(permit, move || {
+        state
+            .model
+            .receipts_filtered(offset, limit, &status, &skill_hash)
+    })
+    .await?;
     Ok(Json(result))
 }
 

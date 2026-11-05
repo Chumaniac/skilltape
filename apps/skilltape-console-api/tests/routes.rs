@@ -935,6 +935,65 @@ async fn package_discovery_ignores_symlinks_and_does_not_block_on_a_fifo() {
 }
 
 #[tokio::test]
+async fn receipt_library_filters_metadata_status_and_skill_digest_before_paging() {
+    let (_temp, root) = fixture();
+    for (id, status, hash) in [
+        ("filter-a", "succeeded", "a".repeat(64)),
+        ("filter-b", "run_failed", "a".repeat(64)),
+        ("filter-c", "policy_denied", "b".repeat(64)),
+    ] {
+        fs::write(root.join(format!(".skilltape/receipts/{id}.json")), serde_json::to_vec(&json!({
+            "schema":"skilltape.dev/receipt/v1","status":status,"skill_hash":hash,"run_id":"c".repeat(64),
+            "private":"PRIVATE_RECEIPT_BODY_SENTINEL"
+        })).unwrap()).unwrap();
+    }
+    fs::write(root.join(".skilltape/receipts/broken.json"), b"not-json").unwrap();
+    let (status, body, data) = request(
+        &root,
+        "/api/v1/receipts?status=run_failed&skill_hash=aa&limit=1",
+        &[],
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(data["total"], 1);
+    assert_eq!(data["items"][0]["id"], "filter-b");
+    assert!(!body.contains("PRIVATE_RECEIPT_BODY_SENTINEL"));
+    let (_, _, page) = request(
+        &root,
+        "/api/v1/receipts?skill_hash=aa&offset=1&limit=1",
+        &[],
+    )
+    .await;
+    assert_eq!(page["total"], 2);
+    assert_eq!(page["items"][0]["id"], "filter-b");
+    let (_, _, unavailable) = request(&root, "/api/v1/receipts?status=unavailable", &[]).await;
+    assert_eq!(unavailable["total"], 2);
+    let (_, _, unknown_hash) = request(
+        &root,
+        "/api/v1/receipts?status=unavailable&skill_hash=aa",
+        &[],
+    )
+    .await;
+    assert_eq!(unknown_hash["total"], 0);
+    let (_, _, succeeded) = request(&root, "/api/v1/receipts?status=succeeded", &[]).await;
+    assert_eq!(succeeded["total"], 1);
+    assert_eq!(succeeded["items"][0]["id"], "filter-a");
+    for query in [
+        "status=cancelled",
+        "skill_hash=../private",
+        "skill_hash=AA",
+        &format!("skill_hash={}", "a".repeat(65)),
+    ] {
+        assert_eq!(
+            request(&root, &format!("/api/v1/receipts?{query}"), &[])
+                .await
+                .0,
+            StatusCode::BAD_REQUEST
+        );
+    }
+}
+
+#[tokio::test]
 async fn receipt_library_discovers_saved_files_without_sidecars_or_execution() {
     let (_temp, root) = fixture();
     let file = root.join(".skilltape/receipts/run-a.json");

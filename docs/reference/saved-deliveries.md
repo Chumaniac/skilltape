@@ -139,3 +139,11 @@ it does not re-execute Verify or claim a current package match. Selecting an ite
 reads the complete Receipt. Failed evidence cannot prepare an export command;
 the export CLI still checks authoritative package binding before any delivery.
 No saved Receipt or installed Skill is replaced.
+
+The library can filter by the four recorded Receipt statuses, unavailable metadata,
+and a lowercase Skill fingerprint prefix (up to 64 hexadecimal characters).
+Filtering precedes pagination; unavailable metadata never counts as successful or
+matches a fingerprint. A filtered request reads at most 1,000 bounded metadata
+files, retaining at most 50 result rows. An unfiltered request reads only its page.
+Apply changes explicitly; pagination uses the last successful criteria. Failed
+reads preserve those results and criteria. No replay, export or write is triggered.
