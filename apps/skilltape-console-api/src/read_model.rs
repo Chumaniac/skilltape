@@ -561,6 +561,21 @@ impl ConsoleReadModel {
         offset: usize,
         limit: usize,
     ) -> Result<Collection<ReceiptSummary>, ReadModelError> {
+        self.receipts_filtered(offset, limit, "", "")
+    }
+
+    pub fn receipts_filtered(
+        &self,
+        offset: usize,
+        limit: usize,
+        status: &str,
+        skill_hash: &str,
+    ) -> Result<Collection<ReceiptSummary>, ReadModelError> {
+        if !valid_receipt_filter(status, skill_hash) {
+            return Err(ReadModelError::InvalidDocument);
+        }
+        let (_, limit) = normalize_page(Some(offset), Some(limit))?;
+        let limit = limit.min(50);
         let root = self.storage_child("receipts")?;
         let entries = match fs::read_dir(&root) {
             Ok(v) => v,
@@ -590,10 +605,15 @@ impl ConsoleReadModel {
                 }
             }
         }
-        let total = ids.len();
-        let limit = limit.min(50);
+        let filtered = !status.is_empty() || !skill_hash.is_empty();
+        let mut total = if filtered { 0 } else { ids.len() };
         let mut items = Vec::new();
-        for id in ids.into_iter().skip(offset).take(limit) {
+        for (index, id) in ids.into_iter().enumerate() {
+            // Unfiltered pages read only their own metadata. Filtering scans at most
+            // 1,000 files, keeping one 64 KiB document and at most 50 rows in memory.
+            if !filtered && (index < offset || index >= offset.saturating_add(limit)) {
+                continue;
+            }
             let mut row = ReceiptSummary {
                 id: id.clone(),
                 metadata_state: "unavailable",
@@ -649,7 +669,30 @@ impl ConsoleReadModel {
                     }
                 }
             }
-            items.push(row);
+            if filtered {
+                let available = row.metadata_state == "available";
+                let status_matches = status.is_empty()
+                    || if status == "unavailable" {
+                        !available
+                    } else {
+                        available && row.status.as_deref() == Some(status)
+                    };
+                let hash_matches = skill_hash.is_empty()
+                    || (available
+                        && row
+                            .skill_hash
+                            .as_deref()
+                            .is_some_and(|hash| hash.starts_with(skill_hash)));
+                if !status_matches || !hash_matches {
+                    continue;
+                }
+                if total >= offset && items.len() < limit {
+                    items.push(row);
+                }
+                total += 1;
+            } else {
+                items.push(row);
+            }
         }
         Ok(collection(items, offset, limit, total))
     }
@@ -1181,6 +1224,16 @@ pub fn normalize_page(
         return Err(ReadModelError::InvalidDocument);
     }
     Ok((offset, limit))
+}
+
+pub(crate) fn valid_receipt_filter(status: &str, skill_hash: &str) -> bool {
+    matches!(
+        status,
+        "" | "succeeded" | "run_failed" | "assertion_failed" | "policy_denied" | "unavailable"
+    ) && skill_hash.len() <= 64
+        && skill_hash
+            .bytes()
+            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
 }
 
 pub fn validate_id(id: &str) -> Result<(), ReadModelError> {
