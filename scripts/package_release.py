@@ -2,6 +2,10 @@
 """Assemble a self-contained SkillTape CLI and Console release archive."""
 
 import argparse
+import hashlib
+import json
+import re
+import subprocess
 import shutil
 import sys
 import tarfile
@@ -54,6 +58,47 @@ def copy_ui(ui_dist: Path, destination: Path) -> None:
             raise ValueError(f"UI contains a non-regular entry: {source}")
     if not asset_files:
         raise ValueError("UI assets directory must contain at least one regular file")
+
+
+def validate_identities(version, target, cli, api, ui):
+    catalog = json.loads((Path(__file__).resolve().parents[1]/'product-capabilities.json').read_text())
+    keys = ['schema','version','sourceRevision','dirty','channel','capabilities']
+    if (not all(isinstance(info,dict) for info in [cli,api,ui])
+            or cli.get('schema') != 'skilltape.build-info/v1' or cli.get('version') != version
+            or not isinstance(cli.get('sourceRevision'),str)
+            or not re.fullmatch('[0-9a-f]{40}',cli['sourceRevision'])
+            or cli.get('dirty') is not False or cli.get('channel') not in {'source','release'}
+            or cli.get('capabilities') != catalog['capabilities']
+            or any(info.get(key) != cli.get(key) for info in [api,ui] for key in keys)
+            or cli.get('target') != target or api.get('target') != target):
+        raise ValueError('source, channel, capability or target mismatch; rebuild all components from one clean commit')
+    return {key:cli[key] for key in keys}
+
+
+def component_identity(path, args):
+    result = subprocess.run([str(path.resolve()),*args],capture_output=True,timeout=10,check=True)
+    if len(result.stdout)>16384:
+        raise ValueError('component build identity exceeds capacity')
+    return json.loads(result.stdout)
+
+
+def file_digest(path):
+    with path.open('rb') as stream:
+        return hashlib.file_digest(stream,'sha256').hexdigest()
+
+
+def verify_components(version,target,binary_dir,ui_dist):
+    suffix='.exe' if 'windows' in target else ''
+    for name in ['skilltape'+suffix,'skilltape-console-api'+suffix]:require_file(binary_dir/name,'component')
+    require_file(ui_dist/'build-info.json','UI build identity')
+    if (ui_dist/'build-info.json').stat().st_size>16384:raise ValueError('UI build identity exceeds capacity')
+    cli=component_identity(binary_dir/('skilltape'+suffix),['build-info'])
+    api=component_identity(binary_dir/('skilltape-console-api'+suffix),['--build-info'])
+    ui=json.loads((ui_dist/'build-info.json').read_text())
+    identity=validate_identities(version,target,cli,api,ui)
+    identity['components']={name:file_digest(binary_dir/name) for name in ['skilltape'+suffix,'skilltape-console-api'+suffix]}
+    identity['uiFiles']={str(p.relative_to(ui_dist)):file_digest(p) for p in ui_dist.rglob('*') if p.is_file()}
+    return identity
 
 
 def stage_release(
@@ -122,7 +167,7 @@ def write_archive(archive_root: Path, output: Path, windows: bool) -> None:
 
 
 def build_archive(
-    version: str, target: str, binary_dir: Path, ui_dist: Path, output_dir: Path
+    version: str, target: str, binary_dir: Path, ui_dist: Path, output_dir: Path, require_identity: bool = False
 ) -> Path:
     version = safe_component(version.removeprefix("v"), "version")
     target = safe_component(target, "target")
@@ -134,6 +179,9 @@ def build_archive(
     with tempfile.TemporaryDirectory(prefix="skilltape-release-") as temporary:
         staging_root = Path(temporary)
         archive_root = stage_release(version, target, binary_dir, ui_dist, staging_root)
+        if require_identity:
+            identity=verify_components(version,target,archive_root,archive_root/'console')
+            (archive_root/'build-identity.json').write_text(json.dumps(identity,sort_keys=True,indent=2)+'\n')
         write_archive(archive_root, output, "windows" in target)
     return output
 
@@ -145,6 +193,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--binary-dir", type=Path, required=True)
     parser.add_argument("--ui-dist", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--require-identity", action="store_true", help="Refuse mixed/dirty CLI, API and UI builds")
     return parser.parse_args()
 
 
@@ -152,9 +201,9 @@ def main() -> int:
     args = parse_args()
     try:
         archive = build_archive(
-            args.version, args.target, args.binary_dir, args.ui_dist, args.output_dir
+            args.version, args.target, args.binary_dir, args.ui_dist, args.output_dir, args.require_identity
         )
-    except (OSError, ValueError) as error:
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
         print(f"package release failed: {error}", file=sys.stderr)
         return 1
     print(archive)

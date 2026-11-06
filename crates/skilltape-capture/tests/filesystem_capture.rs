@@ -74,7 +74,13 @@ impl RunningWatcher {
         timeout(EVENT_TIMEOUT, async {
             loop {
                 let event = tokio::select! {
-                    event = self.events.recv() => event.expect("watcher channel stays open"),
+                    event = self.events.recv() => match event {
+                        Some(event) => event,
+                        None => {
+                            let result = (&mut self.task).await;
+                            panic!("watcher closed before expected event: {result:?}");
+                        }
+                    },
                     result = &mut self.task => panic!("watcher exited before event: {result:?}"),
                 };
                 if predicate(&event) {

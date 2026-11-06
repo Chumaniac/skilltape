@@ -35,6 +35,8 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Print source, channel and declared capabilities without reading a workspace.
+    BuildInfo,
     /// Prepare, execute and resume a bounded set of local verification cases.
     Batch {
         #[command(subcommand)]
@@ -157,6 +159,13 @@ pub fn run() -> ExitCode {
         None
     };
     match Cli::parse().command {
+        Command::BuildInfo => {
+            println!(
+                "{}",
+                skilltape_core::build_info::build_info(env!("CARGO_PKG_VERSION"))
+            );
+            ExitCode::SUCCESS
+        }
         Command::Batch { command } => batch_command::run(command),
         Command::Starter { command } => starter_command::run(command),
         Command::Preflight { skill_path, json } => preflight_command::run(skill_path, json),

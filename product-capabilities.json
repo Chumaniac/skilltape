@@ -1,0 +1,6 @@
+{
+  "schema": "skilltape.capabilities/v1",
+  "capabilities": ["local-starters/v1", "verification-batches/v1", "verify-attempts/v1", "receipt-comparison/v1", "readonly-console/v1"],
+  "executionPlatforms": ["macos", "linux"],
+  "windowsExecution": "unsupported-fail-closed"
+}

@@ -147,6 +147,17 @@ struct AppState {
 
 pub fn router_with_static(model: ConsoleReadModel, static_root: Option<PathBuf>) -> Router {
     Router::new()
+        .route(
+            "/api/v1/build-info",
+            get(|| async {
+                (
+                    [(header::CACHE_CONTROL, "no-store")],
+                    Json(skilltape_core::build_info::build_info(env!(
+                        "CARGO_PKG_VERSION"
+                    ))),
+                )
+            }),
+        )
         .route("/api/v1/workspaces", get(list_workspaces))
         .route("/api/v1/batch", get(batch_review))
         .route("/api/v1/workspaces/{id}/tapes", get(list_tapes))

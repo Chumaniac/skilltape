@@ -10,6 +10,7 @@ import { TimelinePage } from './pages/Timeline'
 import { DeliveriesPage } from './pages/Deliveries'
 import { BatchReviewPage } from './pages/BatchReview'
 import metadata from '../package.json'
+import { BuildIdentity } from './BuildIdentity'
 import './styles.css'
 
 type PageKey = 'timeline' | 'compile' | 'permissions' | 'receipt' | 'export' | 'deliveries' | 'batch' | 'not-found'
@@ -122,6 +123,7 @@ function App() {
           {route.page === 'export' ? <ExportTargetsPage key={route.skillId ?? ''} skillId={route.skillId} receiptId={route.receiptId} /> : null}
         </main>
 
+        <BuildIdentity />
         <footer className="app-footer">
           <span>SkillTape Console <span translate="no">v{metadata.version}</span></span>
           <span>Read-only · no commands run</span>

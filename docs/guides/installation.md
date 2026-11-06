@@ -108,3 +108,8 @@ To build the Console UI from source before running `skilltape console`, use:
 npm ci --prefix apps/skilltape-console
 npm --prefix apps/skilltape-console run build
 ```
+
+
+## Current-source candidates
+
+Use the [candidate identity guide](source-candidates.md) to build and inspect one clean source revision. `--require-identity` refuses mixed CLI/API/UI artifacts before packaging. This does not publish or update the fixed public release; retain old installations and successful data.
