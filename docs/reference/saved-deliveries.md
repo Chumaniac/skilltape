@@ -147,3 +147,41 @@ matches a fingerprint. A filtered request reads at most 1,000 bounded metadata
 files, retaining at most 50 result rows. An unfiltered request reads only its page.
 Apply changes explicitly; pagination uses the last successful criteria. Failed
 reads preserve those results and criteria. No replay, export or write is triggered.
+
+
+## Compare two saved Receipt outcomes
+
+The Receipt library can choose an earlier and later saved file directly, or take
+both filenames in the comparison form. `GET /api/v1/receipt-comparisons?before=ID&after=ID`
+reads their existing bytes; it does not replay, export or alter evidence. The
+separate collection path preserves the normal reader for a Receipt named `compare`.
+Changing either ID or cancelling clears pending evidence; obsolete replies cannot
+replace a later choice. Reading or exporting a single Receipt keeps its own gates.
+
+Comparison requires canonical Receipt v1 documents, bounded to 8 MiB each,
+1,000 rows of each kind and 4,096-byte metadata strings. The reader reuses the
+existing guarded sidecar path against the already-read Receipt bytes. The existing
+two-inspection service limit remains held until actual reads finish. Only 64 detail
+groups are shown, with full accepted counts and explicit truncation; labels longer
+than 240 Unicode characters are shortened. Reasons, raw stdout/stderr and original
+inputs are not returned by this endpoint.
+
+Steps use their unique step ID and recorded status/exit code. Repeated assertions
+with the same kind and target, and policy decisions with the same step/phase/code,
+are grouped and counted rather than overwritten. Counts separate newly observed,
+continuing, and no-longer-observed non-successes. A failure absent from the later
+record might mean a check was removed or execution stopped; it is not proof of a
+fix. The v1 result does not record every assertion criterion, so even matched
+metadata is not a controlled regression test.
+
+Package or recorded input/executor/platform/limit differences are labelled
+incomparable. Missing or invalid bound conditions are unknown. Matching recorded
+conditions remain local, non-authenticated metadata with no frozen-input guarantee.
+This follows [Inspect's saved-log review](https://inspect.aisi.org.uk/log-viewer.html)
+and [Qodana's baseline distinctions](https://www.jetbrains.com/help/qodana/baseline.html),
+while keeping this tool's narrower trust boundary.
+
+The library's status filter now follows the actual Receipt v1 enum: `succeeded`,
+`run_failed`, `cancelled`, and `assertion_failed`. Policy denials are policy/step
+outcomes, not an additional top-level Receipt status. Invalid historical metadata
+remains unavailable rather than being promoted to an approved execution.

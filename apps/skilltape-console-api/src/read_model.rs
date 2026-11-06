@@ -653,10 +653,7 @@ impl ConsoleReadModel {
                             .filter(|s| {
                                 matches!(
                                     *s,
-                                    "succeeded"
-                                        | "run_failed"
-                                        | "assertion_failed"
-                                        | "policy_denied"
+                                    "succeeded" | "run_failed" | "assertion_failed" | "cancelled"
                                 )
                             })
                             .map(str::to_owned);
@@ -710,22 +707,57 @@ impl ConsoleReadModel {
         let root = self.storage_child("receipts")?;
         let receipt =
             self.bounded_stored_file(&root.join(format!("{id}.json")), MAX_STORED_DOCUMENT_BYTES)?;
-        let review = |status: &str, context: Option<skilltape_verify::RunContext>| {
-            serde_json::json!({
-                "schema": "skilltape.dev/context-review/v1", "id": id, "status": status,
-                "context": context, "provenance": "not-authenticated"
-            })
-        };
+        let (status, context) = self.receipt_context_for_bytes(id, &receipt)?;
+        Ok(serde_json::json!({
+            "schema": "skilltape.dev/context-review/v1", "id": id, "status": status,
+            "context": context, "provenance": "not-authenticated"
+        }))
+    }
+
+    fn receipt_context_for_bytes(
+        &self,
+        id: &str,
+        receipt: &[u8],
+    ) -> Result<(&'static str, Option<skilltape_verify::RunContext>), ReadModelError> {
+        let root = self.storage_child("receipts")?;
         let bytes = match self.bounded_stored_file(&root.join(format!("{id}.json.context")), 4096) {
             Ok(bytes) => bytes,
-            Err(ReadModelError::NotFound) => return Ok(review("unrecorded", None)),
-            Err(ReadModelError::InvalidDocument) => return Ok(review("invalid", None)),
+            Err(ReadModelError::NotFound) => return Ok(("unrecorded", None)),
+            Err(ReadModelError::InvalidDocument) => return Ok(("invalid", None)),
             Err(error) => return Err(error),
         };
         match serde_json::from_slice::<skilltape_verify::RunContext>(&bytes) {
-            Ok(context) if context.binds_receipt(&receipt) => Ok(review("recorded", Some(context))),
-            _ => Ok(review("invalid", None)),
+            Ok(context) if context.binds_receipt(receipt) => Ok(("recorded", Some(context))),
+            _ => Ok(("invalid", None)),
         }
+    }
+
+    pub fn compare_receipts(
+        &self,
+        before: &str,
+        after: &str,
+    ) -> Result<crate::ReceiptComparison, ReadModelError> {
+        if before == after {
+            return Err(ReadModelError::InvalidDocument);
+        }
+        let load = |id: &str| {
+            validate_id(id)?;
+            if id.len() > 255 {
+                return Err(ReadModelError::UnsafeId);
+            }
+            let path = self.storage_child("receipts")?.join(format!("{id}.json"));
+            let bytes = self.bounded_stored_file(&path, MAX_STORED_DOCUMENT_BYTES)?;
+            let document = crate::receipt_comparison::parse(&bytes)?;
+            let (context_state, context) = self.receipt_context_for_bytes(id, &bytes)?;
+            Ok(crate::receipt_comparison::SavedReceipt {
+                id: id.into(),
+                document,
+                sha256: sha256(&bytes),
+                context_state,
+                context,
+            })
+        };
+        crate::receipt_comparison::compare(load(before)?, load(after)?)
     }
 
     pub fn batch_review(&self) -> Result<skilltape_core::batch::BatchReview, ReadModelError> {
@@ -1229,7 +1261,7 @@ pub fn normalize_page(
 pub(crate) fn valid_receipt_filter(status: &str, skill_hash: &str) -> bool {
     matches!(
         status,
-        "" | "succeeded" | "run_failed" | "assertion_failed" | "policy_denied" | "unavailable"
+        "" | "succeeded" | "run_failed" | "assertion_failed" | "cancelled" | "unavailable"
     ) && skill_hash.len() <= 64
         && skill_hash
             .bytes()

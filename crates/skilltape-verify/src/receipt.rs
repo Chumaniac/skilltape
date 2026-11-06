@@ -50,6 +50,13 @@ pub struct Receipt {
     pub policy_decisions: Vec<PolicyDecisionSummary>,
 }
 
+impl Receipt {
+    /// Schema validity only; this does not authenticate a saved document or execution.
+    pub fn matches_schema(value: &Value) -> bool {
+        validate_receipt_value(value).is_ok()
+    }
+}
+
 #[derive(Debug, Error)]
 pub(crate) enum ReceiptError {
     #[error("receipt schema validation failed: {message}")]
