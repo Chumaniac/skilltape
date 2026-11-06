@@ -246,9 +246,10 @@ pub async fn watch_workspace(
         notify: Notify::new(),
     });
     let callback_state = Arc::clone(&raw_state);
+    let callback_root = canonical_root.clone();
     let mut watcher = PollWatcher::new(
         move |event| {
-            enqueue_raw_event(&raw_tx, &callback_state, event);
+            enqueue_scoped_raw_event(&callback_root, &raw_tx, &callback_state, event);
         },
         Config::default()
             .with_poll_interval(WATCH_POLL_INTERVAL)
@@ -299,6 +300,33 @@ pub async fn watch_workspace(
 
     drop(watcher);
     Ok(())
+}
+
+fn enqueue_scoped_raw_event(
+    root: &Path,
+    raw_tx: &mpsc::Sender<Result<Event, notify::Error>>,
+    raw_state: &RawEventState,
+    event: Result<Event, notify::Error>,
+) {
+    // PollWatcher emits an I/O miss if a child vanishes between read_dir and
+    // metadata, then emits the normal Remove diff. Keep that diff, not a fatal
+    // shutdown. Missing roots, escapes and all other I/O errors stay fatal.
+    if let Err(error) = &event {
+        if matches!(&error.kind, notify::ErrorKind::Io(source) if source.kind() == std::io::ErrorKind::NotFound)
+            && !error.paths.is_empty()
+            && error.paths.len() <= RAW_EVENT_CAPACITY
+            && error.paths.iter().all(|path| {
+                path != root
+                    && path.starts_with(root)
+                    && !path.components().any(|part| matches!(part, Component::ParentDir))
+                    && matches!(std::fs::symlink_metadata(path), Err(source) if source.kind() == std::io::ErrorKind::NotFound)
+                    && normalize_workspace_path(root, path).is_ok()
+            })
+        {
+            return;
+        }
+    }
+    enqueue_raw_event(raw_tx, raw_state, event);
 }
 
 fn enqueue_raw_event(
@@ -879,6 +907,70 @@ mod tests {
             normalize_workspace_path(&root, &root.join("..")),
             Err(FilesystemCaptureError::PathOutsideRoot(path)) if path == root.join("..")
         ));
+    }
+
+    #[test]
+    fn poller_child_disappearing_during_metadata_scan_keeps_normal_deletion() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        let child = root.join("already-removed");
+        let (tx, mut rx) = mpsc::channel(2);
+        let state = RawEventState {
+            overflowed: AtomicBool::new(false),
+            notify: Notify::new(),
+        };
+        let missing = notify::Error::io(std::io::Error::from(std::io::ErrorKind::NotFound))
+            .add_path(child.clone());
+        enqueue_scoped_raw_event(&root, &tx, &state, Err(missing));
+        assert!(
+            rx.try_recv().is_err(),
+            "the scoped metadata race is followed by PollWatcher's normal Remove event"
+        );
+        let removed =
+            Event::new(EventKind::Remove(notify::event::RemoveKind::File)).add_path(child);
+        enqueue_scoped_raw_event(&root, &tx, &state, Ok(removed));
+        assert!(matches!(
+            rx.try_recv().unwrap().unwrap().kind,
+            EventKind::Remove(_)
+        ));
+    }
+
+    #[test]
+    fn root_escape_recreated_file_and_other_io_errors_are_still_forwarded() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let root = temp.path().join("workspace");
+        std::fs::create_dir(&root).unwrap();
+        let root = root.canonicalize().unwrap();
+        let existing = root.join("recreated");
+        std::fs::write(&existing, b"unchanged").unwrap();
+        let state = RawEventState {
+            overflowed: AtomicBool::new(false),
+            notify: Notify::new(),
+        };
+        for (path, kind) in [
+            (root.clone(), std::io::ErrorKind::NotFound),
+            (
+                root.parent().unwrap().join("outside"),
+                std::io::ErrorKind::NotFound,
+            ),
+            (root.join("../outside"), std::io::ErrorKind::NotFound),
+            (existing, std::io::ErrorKind::NotFound),
+            (root.join("missing"), std::io::ErrorKind::PermissionDenied),
+        ] {
+            let (tx, mut rx) = mpsc::channel(1);
+            let error = notify::Error::io(std::io::Error::from(kind)).add_path(path);
+            enqueue_scoped_raw_event(&root, &tx, &state, Err(error));
+            assert!(rx.try_recv().unwrap().is_err());
+        }
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(root.parent().unwrap(), root.join("escape")).unwrap();
+            let (tx, mut rx) = mpsc::channel(1);
+            let error = notify::Error::io(std::io::Error::from(std::io::ErrorKind::NotFound))
+                .add_path(root.join("escape/absent"));
+            enqueue_scoped_raw_event(&root, &tx, &state, Err(error));
+            assert!(rx.try_recv().unwrap().is_err());
+        }
     }
 
     #[tokio::test]
