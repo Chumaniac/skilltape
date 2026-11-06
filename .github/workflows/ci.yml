@@ -30,13 +30,27 @@ jobs:
         run: ./scripts/test_install.ps1
 
   rust:
-    name: Rust (${{ matrix.os }})
+    name: Rust (${{ matrix.context }})
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-14]
-    runs-on: ${{ matrix.os }}
+        include:
+          - context: ubuntu-latest
+            runner: ubuntu-latest
+          # Keep the existing required-check identifier; this is NOT the host OS.
+          # macOS 14 retired: https://github.blog/changelog/2026-10-01-github-actions-macos-14-runner-image-retirement/
+          - context: macos-14
+            runner: macos-15
+    runs-on: ${{ matrix.runner }}
     steps:
+      - name: Record actual macOS 15 runner (legacy required-check identifier)
+        if: matrix.runner == 'macos-15'
+        run: |
+          sw_vers
+          uname -m
+          test "$(sw_vers -productVersion | cut -d. -f1)" = "15"
+          test "$(uname -m)" = "arm64"
+
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -47,7 +61,7 @@ jobs:
           components: rustfmt, clippy
 
       - name: Install Linux replay sandbox
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.runner == 'ubuntu-latest'
         run: |
           sudo apt-get update
           sudo apt-get install --yes bubblewrap
@@ -80,7 +94,7 @@ jobs:
             /bin/true
 
       - name: Check macOS replay sandbox
-        if: matrix.os == 'macos-14'
+        if: matrix.runner == 'macos-15'
         run: |
           test -x /usr/bin/sandbox-exec
           /usr/bin/sandbox-exec -p '(version 1) (import "system.sb") (allow process-exec)' /usr/bin/true

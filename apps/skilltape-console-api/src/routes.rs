@@ -57,6 +57,12 @@ struct ReceiptQuery {
     skill_hash: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct ReceiptComparisonQuery {
+    before: String,
+    after: String,
+}
+
 #[derive(Clone, Debug, Serialize)]
 struct ErrorResponse {
     schema: &'static str,
@@ -152,6 +158,7 @@ pub fn router_with_static(model: ConsoleReadModel, static_root: Option<PathBuf>)
         .route("/api/v1/skills/{id}/diff", get(skill_diff))
         .route("/api/v1/runs/{id}", get(run_document))
         .route("/api/v1/receipts", get(list_receipts))
+        .route("/api/v1/receipt-comparisons", get(compare_receipts))
         .route("/api/v1/receipts/{id}", get(receipt_document))
         .route("/api/v1/receipts/{id}/context", get(receipt_context))
         .route("/api/v1/runs/{id}/events", get(run_events))
@@ -313,6 +320,28 @@ async fn list_receipts(
         state
             .model
             .receipts_filtered(offset, limit, &status, &skill_hash)
+    })
+    .await?;
+    Ok(Json(result))
+}
+
+async fn compare_receipts(
+    State(state): State<AppState>,
+    Query(query): Query<ReceiptComparisonQuery>,
+) -> Result<Json<crate::ReceiptComparison>, ApiError> {
+    if query.before == query.after
+        || [&query.before, &query.after]
+            .iter()
+            .any(|id| id.len() > 255 || crate::read_model::validate_id(id).is_err())
+    {
+        return Err(ApiError::BadRequest {
+            code: "invalid_receipt_pair",
+            message: "Choose two different saved Receipt filenames, not paths",
+        });
+    }
+    let permit = inspection_permit(&state)?;
+    let (result, _permit) = inspect(permit, move || {
+        state.model.compare_receipts(&query.before, &query.after)
     })
     .await?;
     Ok(Json(result))

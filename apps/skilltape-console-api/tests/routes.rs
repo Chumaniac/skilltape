@@ -940,7 +940,7 @@ async fn receipt_library_filters_metadata_status_and_skill_digest_before_paging(
     for (id, status, hash) in [
         ("filter-a", "succeeded", "a".repeat(64)),
         ("filter-b", "run_failed", "a".repeat(64)),
-        ("filter-c", "policy_denied", "b".repeat(64)),
+        ("filter-c", "cancelled", "b".repeat(64)),
     ] {
         fs::write(root.join(format!(".skilltape/receipts/{id}.json")), serde_json::to_vec(&json!({
             "schema":"skilltape.dev/receipt/v1","status":status,"skill_hash":hash,"run_id":"c".repeat(64),
@@ -979,7 +979,7 @@ async fn receipt_library_filters_metadata_status_and_skill_digest_before_paging(
     assert_eq!(succeeded["total"], 1);
     assert_eq!(succeeded["items"][0]["id"], "filter-a");
     for query in [
-        "status=cancelled",
+        "status=policy_denied",
         "skill_hash=../private",
         "skill_hash=AA",
         &format!("skill_hash={}", "a".repeat(65)),

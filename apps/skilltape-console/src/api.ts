@@ -1,3 +1,4 @@
+import {validReceiptComparison, type ReceiptComparison} from './receipt-comparison'
 import { validContextReview } from './run-context'
 import { validBatchReview } from './batch'
 import type {
@@ -176,7 +177,7 @@ function isRunDocument(value: unknown, id: string): value is StoredDocument {
       text(item.step_id) && text(item.code) && text(item.reason) && text(item.phase) && ['before', 'after'].includes(item.phase) &&
       typeof item.allowed === 'boolean' && text(item.risk) && ['low', 'medium', 'high', 'critical'].includes(item.risk))) return false
   if (document.failure != null && (!isRecord(document.failure) || !keys(document.failure, ['kind', 'step_id', 'status']) ||
-    !text(document.failure.kind) || !['policy_denied', 'step_failed'].includes(document.failure.kind) || !text(document.failure.step_id) ||
+    !text(document.failure.kind) || !['cancelled', 'step_failed'].includes(document.failure.kind) || !text(document.failure.step_id) ||
     document.failure.status !== null && typeof document.failure.status !== 'string')) return false
   return document.status !== 'succeeded' || document.failure == null && document.steps.every(item => item.status === 'succeeded') &&
     document.policy_decisions.every(item => item.allowed === true)
@@ -362,12 +363,20 @@ export async function getTapePackages(tapeId:string,signal?:AbortSignal,offset=0
 }
 
 export interface ReceiptSummary {id:string;metadata_state:'available'|'unavailable';status:string|null;skill_hash:string|null;run_id:string|null;bytes:number|null;modified_at_ms:number|null}
-export interface ReceiptFilters {status:''|'succeeded'|'run_failed'|'assertion_failed'|'policy_denied'|'unavailable';skillHash:string}
+export interface ReceiptFilters {status:''|'succeeded'|'run_failed'|'assertion_failed'|'cancelled'|'unavailable';skillHash:string}
 export async function getReceipts(signal?:AbortSignal,offset=0,filters?:ReceiptFilters):Promise<Collection<ReceiptSummary>>{
  const query=new URLSearchParams({limit:'50',offset:String(offset)})
  if(filters?.status)query.set('status',filters.status)
  if(filters?.skillHash)query.set('skill_hash',filters.skillHash)
  const value=await get<unknown>('/receipts?'+query,signal)
- if(!isCollection(value,50,(row:unknown):row is ReceiptSummary=>{if(!row||typeof row!=='object')return false;const v=row as ReceiptSummary;return typeof v.id==='string'&&isSavedEvidenceId(v.id)&&['available','unavailable'].includes(v.metadata_state)&&(v.status===null||['succeeded','run_failed','assertion_failed','policy_denied'].includes(v.status))&&[v.skill_hash,v.run_id].every(hash=>hash===null||typeof hash==='string'&&/^[a-f0-9]{64}$/.test(hash))&&[v.bytes,v.modified_at_ms].every(n=>n===null||Number.isSafeInteger(n)&&n>=0)&&(v.metadata_state!=='available'||v.status!==null&&v.skill_hash!==null&&v.run_id!==null)}))throw new ApiError('Saved Receipt list is invalid. Retry or open a known filename.',502,'invalid_receipt_list')
+ if(!isCollection(value,50,(row:unknown):row is ReceiptSummary=>{if(!row||typeof row!=='object')return false;const v=row as ReceiptSummary;return typeof v.id==='string'&&isSavedEvidenceId(v.id)&&['available','unavailable'].includes(v.metadata_state)&&(v.status===null||['succeeded','run_failed','assertion_failed','cancelled'].includes(v.status))&&[v.skill_hash,v.run_id].every(hash=>hash===null||typeof hash==='string'&&/^[a-f0-9]{64}$/.test(hash))&&[v.bytes,v.modified_at_ms].every(n=>n===null||Number.isSafeInteger(n)&&n>=0)&&(v.metadata_state!=='available'||v.status!==null&&v.skill_hash!==null&&v.run_id!==null)}))throw new ApiError('Saved Receipt list is invalid. Retry or open a known filename.',502,'invalid_receipt_list')
+ return value
+}
+
+
+export async function getReceiptComparison(before:string,after:string,signal?:AbortSignal):Promise<ReceiptComparison> {
+ if(!isSavedEvidenceId(before)||!isSavedEvidenceId(after)||before===after)throw new ApiError('Choose two different saved Receipt filenames, not paths.',400,'invalid_receipt_pair')
+ const value=await get<unknown>('/receipt-comparisons?'+new URLSearchParams({before,after}),signal)
+ if(!validReceiptComparison(value,before,after))throw new ApiError('Saved Receipt comparison is invalid or incomplete.',502,'invalid_receipt_comparison')
  return value
 }

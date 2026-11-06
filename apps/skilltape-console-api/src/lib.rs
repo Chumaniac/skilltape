@@ -3,10 +3,12 @@
 mod coverage;
 mod deliveries;
 mod read_model;
+mod receipt_comparison;
 pub mod routes;
 
 pub use coverage::TapeCoverage;
 pub use read_model::{ConsoleReadModel, ReadModelError};
+pub use receipt_comparison::ReceiptComparison;
 pub use routes::{router, router_with_static, ApiError};
 
 use std::net::SocketAddr;

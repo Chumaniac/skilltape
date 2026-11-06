@@ -4,7 +4,7 @@ import type {Collection} from '../types'
 
 const emptyFilters: ReceiptFilters = {status: '', skillHash: ''}
 
-export function SavedReceipts({onRead}: {onRead: (id: string) => void}) {
+export function SavedReceipts({onRead, onCompare}: {onRead: (id: string) => void; onCompare?: (side: 'before' | 'after', id: string) => void}) {
   const [data, setData] = useState<Collection<ReceiptSummary> | null>(null)
   const [draft, setDraft] = useState(emptyFilters)
   const [applied, setApplied] = useState(emptyFilters)
@@ -47,7 +47,7 @@ export function SavedReceipts({onRead}: {onRead: (id: string) => void}) {
       <fieldset className="saved-receipt-filters" disabled={busy}>
         <legend>Find saved Receipts</legend>
         <label>Recorded Receipt status<select value={draft.status} onChange={event => setDraft({...draft, status: event.target.value as ReceiptFilters['status']})}>
-          <option value="">All recorded statuses</option><option value="succeeded">Succeeded</option><option value="run_failed">Run failed</option><option value="assertion_failed">Assertion failed</option><option value="policy_denied">Policy denied</option><option value="unavailable">Metadata unavailable</option>
+          <option value="">All recorded statuses</option><option value="succeeded">Succeeded</option><option value="run_failed">Run failed</option><option value="assertion_failed">Assertion failed</option><option value="cancelled">Cancelled</option><option value="unavailable">Metadata unavailable</option>
         </select></label>
         <label>Skill fingerprint prefix<input value={draft.skillHash} maxLength={64} spellCheck={false} autoComplete="off" onChange={event => setDraft({...draft, skillHash: event.target.value})}/></label>
         <button type="submit" className="button">Apply Receipt filters</button>
@@ -58,7 +58,8 @@ export function SavedReceipts({onRead}: {onRead: (id: string) => void}) {
     <p role="status">{error || (!data ? '' : data.total ? `${data.total} matching Receipt files. Recorded status is not execution or export approval.` : 'No saved Receipt files match these filters.')}</p>
     {data ? <><ul className="saved-receipt-list">{data.items.map(row => <li key={row.id}>
       <div><strong>{row.id}</strong><span>{row.metadata_state === 'available' ? row.status : 'Read to inspect; metadata unavailable'}{row.modified_at_ms ? ' · File updated ' + formatDate(row.modified_at_ms) : ''}</span>{row.skill_hash ? <code>Package fingerprint {row.skill_hash.slice(0, 16)}…</code> : null}</div>
-      <button type="button" className="button" disabled={busy} onClick={() => onRead(row.id)}>Read Receipt {row.id}</button>
+      <div className="receipt-row-actions"><button type="button" className="button" disabled={busy} aria-label={'Read Receipt ' + row.id} onClick={() => onRead(row.id)}>Read</button>
+        {onCompare ? <><button type="button" className="button" disabled={busy} aria-label={'Use ' + row.id + ' as earlier Receipt'} onClick={() => onCompare('before', row.id)}>Use as earlier</button><button type="button" className="button" disabled={busy} aria-label={'Use ' + row.id + ' as later Receipt'} onClick={() => onCompare('after', row.id)}>Use as later</button></> : null}</div>
     </li>)}</ul><nav className="page-navigation" aria-label="Saved Receipt pagination">
       <button className="button" disabled={busy || data.offset === 0} onClick={() => load(Math.max(0, data.offset - 50))}>Previous Receipts</button>
       <button className="button" disabled={busy || data.next_offset === null} onClick={() => load(data.next_offset!)}>Next Receipts</button>
