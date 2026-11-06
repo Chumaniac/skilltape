@@ -295,16 +295,19 @@ fn pipeline(source: &Path, output: &Path, yes: bool) -> io::Result<()> {
     let delivery = target.join("delivery");
     step(
         "Verify",
-        super::run_command::verify(super::run_command::VerifyConfig {
-            skill_path: package.clone(),
-            input: Some(workspace.join("inputs")),
-            receipt: None,
-            context: Some(target.join(".skilltape/receipts/task.json.context")),
-            delivery_dir: Some(delivery.clone()),
-            expected_files: vec![],
-            expected_hashes: vec![format!("report.json={expected}")],
-            json: false,
-        }),
+        super::run_command::verify(
+            super::run_command::VerifyConfig {
+                skill_path: package.clone(),
+                input: Some(workspace.join("inputs")),
+                receipt: None,
+                context: Some(target.join(".skilltape/receipts/task.json.context")),
+                delivery_dir: Some(delivery.clone()),
+                expected_files: vec![],
+                expected_hashes: vec![format!("report.json={expected}")],
+                json: false,
+            },
+            None,
+        ),
     )?;
     // Console indexes the exact real Receipt in its standard storage directory.
     // Keep the delivery's original evidence bytes unchanged.

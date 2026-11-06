@@ -2,6 +2,7 @@ import {useEffect, useRef, useState} from 'react'
 import {getReceiptComparison, isSavedEvidenceId} from '../api'
 import type {ReceiptComparison, ReceiptDelta} from '../receipt-comparison'
 import {SavedReceipts} from './SavedReceipts'
+import {VerifyAttempts} from './VerifyAttempts'
 
 const findingLabels:Record<string,string>={package_changed:'Package changed',input_changed:'Input snapshot changed',executor_changed:'Executor changed',platform_changed:'Platform changed',limits_changed:'Resource limits changed',context_invalid:'A condition binding failed',conditions_unrecorded:'Conditions were not recorded'}
 function recorded(rows:ReceiptDelta['before']) {return rows.length?rows.map(row=>row.status+(row.exit_code===null?'':` (exit ${row.exit_code})`)+` × ${row.count}`).join(' · '):'Not observed'}
@@ -19,7 +20,7 @@ export function ReceiptLibrary({onRead}:{onRead:(id:string)=>void}) {
   catch(reason){if(!pending.signal.aborted)setError(reason instanceof Error?reason.message:'Both saved Receipts could not be compared.')}
   finally{if(controller.current===pending){controller.current=null;setBusy(false)}}
  }
- return <><SavedReceipts onRead={onRead} onCompare={change}/><section className="panel receipt-comparison" aria-label="Compare saved Receipts">
+ return <><SavedReceipts onRead={onRead} onCompare={change}/><VerifyAttempts/><section className="panel receipt-comparison" aria-label="Compare saved Receipts">
   <h2>Compare saved outcomes</h2><p>Choose two existing filenames. The comparison reads recorded steps, checks and policy outcomes.</p>
   <form className="receipt-comparison-fields" onSubmit={event=>{event.preventDefault();void compare()}}>
    <label>Earlier Receipt ID<input value={ids.before} maxLength={255} required autoComplete="off" spellCheck={false} onChange={event=>change('before',event.target.value)}/></label>

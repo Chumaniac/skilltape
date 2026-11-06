@@ -59,6 +59,170 @@ fn file_package() -> (TempDir, PathBuf, PathBuf) {
     (temp, skill, input)
 }
 
+#[test]
+fn explicit_attempt_journal_retains_a_private_preparation_failure() {
+    let temp = TempDir::new().unwrap();
+    let journal = temp.path().join("journal");
+    let missing = temp.path().join("missing-private-skill");
+    let output = Command::cargo_bin("skilltape")
+        .unwrap()
+        .arg("verify")
+        .arg(&missing)
+        .arg("--attempt-dir")
+        .arg(&journal)
+        .arg("--json")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
+    assert!(
+        journal.is_dir(),
+        "explicit attempt metadata must survive preparation failure"
+    );
+    let names: Vec<_> = fs::read_dir(&journal)
+        .unwrap()
+        .map(|p| p.unwrap().path())
+        .collect();
+    let start = names
+        .iter()
+        .find(|p| p.to_string_lossy().ends_with(".started.json"))
+        .unwrap();
+    let finish = names
+        .iter()
+        .find(|p| p.to_string_lossy().ends_with(".finished.json"))
+        .unwrap();
+    let raw = fs::read_to_string(start).unwrap() + &fs::read_to_string(finish).unwrap();
+    assert!(!raw.contains(missing.to_str().unwrap()));
+    let end: Value = serde_json::from_slice(&fs::read(finish).unwrap()).unwrap();
+    assert_eq!(end["outcome"], "preparation_failed");
+    assert!(end["receipt"].is_null());
+}
+
+#[test]
+fn attempt_receipt_is_bound_without_copying_input_or_overwriting_prior_records() {
+    let (temp, skill, input) = file_package();
+    let journal = temp.path().join("journal");
+    let receipt = temp.path().join("receipt.json");
+    let output = Command::cargo_bin("skilltape")
+        .unwrap()
+        .arg("verify")
+        .arg(&skill)
+        .arg("--input")
+        .arg(&input)
+        .arg("--attempt-dir")
+        .arg(&journal)
+        .arg("--receipt")
+        .arg(&receipt)
+        .arg("--json")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let end_path = fs::read_dir(&journal)
+        .unwrap()
+        .map(|p| p.unwrap().path())
+        .find(|p| p.to_string_lossy().ends_with(".finished.json"))
+        .unwrap();
+    let saved = fs::read(&end_path).unwrap();
+    let end: Value = serde_json::from_slice(&saved).unwrap();
+    assert_eq!(end["outcome"], "receipt_produced");
+    assert_eq!(end["receipt"]["status"], "succeeded");
+    let digest = skilltape_verify::attempt::digest(&fs::read(&receipt).unwrap());
+    assert_eq!(end["receipt"]["receipt_sha256"], digest);
+    assert!(!String::from_utf8_lossy(&saved).contains("secret-cli-value"));
+    let again = Command::cargo_bin("skilltape")
+        .unwrap()
+        .arg("verify")
+        .arg(&skill)
+        .arg("--input")
+        .arg(&input)
+        .arg("--attempt-dir")
+        .arg(&journal)
+        .arg("--receipt")
+        .arg(&receipt)
+        .arg("--json")
+        .output()
+        .unwrap();
+    assert_eq!(again.status.code(), Some(2));
+    assert_eq!(fs::read(&end_path).unwrap(), saved);
+    let count = fs::read_dir(&journal)
+        .unwrap()
+        .filter(|p| {
+            p.as_ref()
+                .unwrap()
+                .path()
+                .to_string_lossy()
+                .ends_with(".started.json")
+        })
+        .count();
+    assert_eq!(
+        count, 2,
+        "explicit new command gets its own attempt; old success remains immutable"
+    );
+}
+
+#[test]
+fn journals_cannot_modify_skill_or_input_trees_or_use_unsafe_storage() {
+    let (temp, skill, input) = file_package();
+    for journal in [
+        skill.join("journal"),
+        input.join("journal"),
+        temp.path().join("receipt.json"),
+    ] {
+        if journal.file_name().unwrap() == "receipt.json" {
+            fs::write(&journal, "keep").unwrap();
+        }
+        let output = Command::cargo_bin("skilltape")
+            .unwrap()
+            .arg("verify")
+            .arg(&skill)
+            .arg("--input")
+            .arg(&input)
+            .arg("--attempt-dir")
+            .arg(&journal)
+            .arg("--json")
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(4));
+        assert!(output.stdout.is_empty());
+        if journal.file_name().unwrap() == "receipt.json" {
+            assert_eq!(fs::read(&journal).unwrap(), b"keep");
+        } else {
+            assert!(!journal.exists());
+        }
+    }
+}
+
+#[test]
+fn changed_journal_evidence_blocks_a_new_verification() {
+    let temp = TempDir::new().unwrap();
+    let journal = temp.path().join("journal");
+    let missing = temp.path().join("missing");
+    let run = || {
+        Command::cargo_bin("skilltape")
+            .unwrap()
+            .arg("verify")
+            .arg(&missing)
+            .arg("--attempt-dir")
+            .arg(&journal)
+            .arg("--json")
+            .output()
+            .unwrap()
+    };
+    assert_eq!(run().status.code(), Some(2));
+    let start = fs::read_dir(&journal)
+        .unwrap()
+        .map(|p| p.unwrap().path())
+        .find(|p| p.to_string_lossy().ends_with(".started.json"))
+        .unwrap();
+    fs::write(&start, b"{}").unwrap();
+    assert_eq!(run().status.code(), Some(4));
+    assert_eq!(fs::read(&start).unwrap(), b"{}");
+}
+
 fn empty_tape(path: &Path) {
     let store = TapeStore::create(
         path,

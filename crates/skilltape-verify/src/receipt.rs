@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use skilltape_runner::{PolicyDecisionRecord, RunEvent, RunStatus, RunSummary, StepStatus};
@@ -7,7 +7,7 @@ use thiserror::Error;
 pub const RECEIPT_SCHEMA_V1: &str = "skilltape.dev/receipt/v1";
 pub const RUN_SCHEMA_V1: &str = "skilltape.dev/run/v1";
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReceiptStatus {
     Succeeded,

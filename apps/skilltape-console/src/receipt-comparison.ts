@@ -1,5 +1,8 @@
 export type Comparability = 'same-recorded-conditions' | 'incomparable' | 'unknown'
-interface Identity {id:string;receipt_sha256:string;run_id:string;skill_hash:string;status:'succeeded'|'run_failed'|'cancelled'|'assertion_failed';context_state:'recorded'|'unrecorded'|'invalid'}
+export const recordedReceiptStatuses=['succeeded','run_failed','cancelled','assertion_failed'] as const
+export type RecordedReceiptStatus=typeof recordedReceiptStatuses[number]
+export function isRecordedReceiptStatus(value:unknown):value is RecordedReceiptStatus{return typeof value==='string'&&(recordedReceiptStatuses as readonly string[]).includes(value)}
+interface Identity {id:string;receipt_sha256:string;run_id:string;skill_hash:string;status:RecordedReceiptStatus;context_state:'recorded'|'unrecorded'|'invalid'}
 interface Outcome {status:string;exit_code:number|null;count:number}
 export interface ReceiptDelta {key:string;category:'step'|'assertion'|'policy';kind:string;target:string;phase:string|null;label_truncated:boolean;before:Outcome[];after:Outcome[]}
 export interface ReceiptComparison {
@@ -14,7 +17,7 @@ const count=(v:unknown,max:number)=>typeof v==='number'&&Number.isSafeInteger(v)
 const hash=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v)
 const text=(v:unknown)=>typeof v==='string'&&v.length>0&&v.length<=482
 function identity(v:unknown,id:string):v is Identity {
- return record(v)&&keys(v,['id','receipt_sha256','run_id','skill_hash','status','context_state'])&&v.id===id&&[v.receipt_sha256,v.run_id,v.skill_hash].every(hash)&&['succeeded','run_failed','cancelled','assertion_failed'].includes(String(v.status))&&['recorded','unrecorded','invalid'].includes(String(v.context_state))
+ return record(v)&&keys(v,['id','receipt_sha256','run_id','skill_hash','status','context_state'])&&v.id===id&&[v.receipt_sha256,v.run_id,v.skill_hash].every(hash)&&isRecordedReceiptStatus(v.status)&&['recorded','unrecorded','invalid'].includes(String(v.context_state))
 }
 function outcomes(v:unknown,category:string):boolean {
  if(!Array.isArray(v)||v.length>(category==='step'?1:2))return false
