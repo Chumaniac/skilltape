@@ -1,4 +1,5 @@
 import {validReceiptComparison, type ReceiptComparison} from './receipt-comparison'
+import {validVerifyAttempt,type VerifyAttempt} from './verify-attempts'
 import { validContextReview } from './run-context'
 import { validBatchReview } from './batch'
 import type {
@@ -378,5 +379,17 @@ export async function getReceiptComparison(before:string,after:string,signal?:Ab
  if(!isSavedEvidenceId(before)||!isSavedEvidenceId(after)||before===after)throw new ApiError('Choose two different saved Receipt filenames, not paths.',400,'invalid_receipt_pair')
  const value=await get<unknown>('/receipt-comparisons?'+new URLSearchParams({before,after}),signal)
  if(!validReceiptComparison(value,before,after))throw new ApiError('Saved Receipt comparison is invalid or incomplete.',502,'invalid_receipt_comparison')
+ return value
+}
+
+export async function getVerifyAttempts(signal?:AbortSignal,offset=0):Promise<Collection<VerifyAttempt>>{
+ const value=await get<unknown>('/verify-attempts?'+new URLSearchParams({limit:'12',offset:String(offset)}),signal)
+ if(!isCollection(value,12,validVerifyAttempt)||value.total>256||value.offset!==offset||new Set(value.items.map(v=>v.id)).size!==value.items.length)throw new ApiError('Single attempt records are invalid or incomplete. Saved files were not changed.',502,'invalid_attempts')
+ return value
+}
+export async function getVerifyAttempt(id:string,signal?:AbortSignal):Promise<VerifyAttempt>{
+ if(!/^[a-f0-9]{64}$/.test(id))throw new ApiError('Choose an existing attempt identifier, not a path.',400,'invalid_attempt_id')
+ const value=await get<unknown>('/verify-attempts/'+encodeURIComponent(id),signal)
+ if(!validVerifyAttempt(value)||value.id!==id)throw new ApiError('Single attempt metadata could not be checked. Saved files were not changed.',502,'invalid_attempt')
  return value
 }

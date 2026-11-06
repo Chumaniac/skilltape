@@ -86,6 +86,7 @@ impl From<ReadModelError> for ApiError {
             ReadModelError::NotFound => Self::NotFound,
             ReadModelError::InvalidDocument => Self::InvalidDocument,
             ReadModelError::DiscoveryCapacity => Self::Unavailable { code: "package_discovery_capacity", message: "Saved-evidence discovery is limited to 1000 entries. Open a known saved ID directly." },
+            ReadModelError::AttemptCapacity => Self::Unavailable { code: "attempt_discovery_capacity", message: "Single verification attempt inspection is limited to 256 attempts and 514 metadata entries. Original records were not changed." },
             ReadModelError::UnsupportedPlatform => Self::Unavailable {
                 code: "unsupported_delivery_platform",
                 message: "File integrity inspection is unavailable on this platform.",
@@ -159,6 +160,8 @@ pub fn router_with_static(model: ConsoleReadModel, static_root: Option<PathBuf>)
         .route("/api/v1/runs/{id}", get(run_document))
         .route("/api/v1/receipts", get(list_receipts))
         .route("/api/v1/receipt-comparisons", get(compare_receipts))
+        .route("/api/v1/verify-attempts", get(list_verify_attempts))
+        .route("/api/v1/verify-attempts/{id}", get(verify_attempt))
         .route("/api/v1/receipts/{id}", get(receipt_document))
         .route("/api/v1/receipts/{id}/context", get(receipt_context))
         .route("/api/v1/runs/{id}/events", get(run_events))
@@ -322,6 +325,25 @@ async fn list_receipts(
             .receipts_filtered(offset, limit, &status, &skill_hash)
     })
     .await?;
+    Ok(Json(result))
+}
+
+async fn list_verify_attempts(
+    State(state): State<AppState>,
+    Query(query): Query<PageQuery>,
+) -> Result<Json<Collection<crate::read_model::VerifyAttemptView>>, ApiError> {
+    let (offset, limit) = page(&query)?;
+    let permit = inspection_permit(&state)?;
+    let (result, _permit) =
+        inspect(permit, move || state.model.verify_attempts(offset, limit)).await?;
+    Ok(Json(result))
+}
+async fn verify_attempt(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<crate::read_model::VerifyAttemptView>, ApiError> {
+    let permit = inspection_permit(&state)?;
+    let (result, _permit) = inspect(permit, move || state.model.verify_attempt(&id)).await?;
     Ok(Json(result))
 }
 

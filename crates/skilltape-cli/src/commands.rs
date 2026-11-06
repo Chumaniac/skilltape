@@ -120,6 +120,9 @@ enum Command {
         /// Optional JSON run context; use RECEIPT.json.context for Console discovery.
         #[arg(long)]
         context: Option<PathBuf>,
+        /// Record content-free start/completion metadata in a separate private directory.
+        #[arg(long)]
+        attempt_dir: Option<PathBuf>,
         #[arg(long, conflicts_with = "receipt")]
         delivery_dir: Option<PathBuf>,
         /// Require a regular file relative to the output root; repeat up to 64 times.
@@ -220,20 +223,24 @@ pub fn run() -> ExitCode {
             input,
             receipt,
             context,
+            attempt_dir,
             delivery_dir,
             expected_files,
             expected_hashes,
             json,
-        } => run_command::verify(run_command::VerifyConfig {
-            skill_path,
-            input,
-            receipt,
-            context,
-            delivery_dir,
-            expected_files,
-            expected_hashes,
-            json,
-        }),
+        } => run_command::verify(
+            run_command::VerifyConfig {
+                skill_path,
+                input,
+                receipt,
+                context,
+                delivery_dir,
+                expected_files,
+                expected_hashes,
+                json,
+            },
+            attempt_dir,
+        ),
         Command::Export {
             skill_path,
             target,

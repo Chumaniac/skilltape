@@ -28,6 +28,8 @@ const POLICY_ERROR_EXIT_CODE: u8 = 3;
 const RUNTIME_ERROR_EXIT_CODE: u8 = 4;
 const CANCELLED_EXIT_CODE: u8 = 5;
 
+#[path = "verify_attempt.rs"]
+mod attempt;
 #[path = "delivery.rs"]
 mod delivery;
 
@@ -152,51 +154,54 @@ pub(crate) fn replay(config: ReplayConfig) -> ExitCode {
     }
 }
 
-pub(crate) fn verify(config: VerifyConfig) -> ExitCode {
+pub(crate) fn verify(config: VerifyConfig, attempt_dir: Option<PathBuf>) -> ExitCode {
     let json = config.json;
+    let journal = match attempt_dir
+        .as_deref()
+        .map(|path| attempt::AttemptJournal::begin(path, &config))
+        .transpose()
+    {
+        Ok(value) => value,
+        Err(_) => {
+            eprintln!("Attempt journal unavailable. Use a separate private directory; verification was not submitted.");
+            return ExitCode::from(4);
+        }
+    };
     let receipt_path = config.receipt.clone();
     let context_path = config.context.clone();
-    for path in [receipt_path.as_ref(), context_path.as_ref()]
-        .into_iter()
-        .flatten()
-    {
-        if let Err(error) = preflight_receipt(path) {
-            eprintln!("{error}");
-            return error_exit_code(&error);
+    let mut invoked = false;
+    let result: Result<_, RunCommandError> = (|| {
+        for path in [receipt_path.as_ref(), context_path.as_ref()]
+            .into_iter()
+            .flatten()
+        {
+            preflight_receipt(path)?;
+        }
+        if receipt_path.is_some() && receipt_path == context_path {
+            return Err(VerifyError::InvalidAssertion {
+                message: "Receipt and context must use different files.".into(),
+            }
+            .into());
+        }
+        let (receipt, context) = execute_verify_observed(config, || invoked = true)?;
+        let document = serde_json::to_string(&receipt)?;
+        if let Some(path) = receipt_path {
+            write_receipt(&path, &document)?;
+        }
+        if let Some(path) = context_path {
+            write_receipt(&path, &serde_json::to_string(&context)?)?;
+        }
+        Ok((receipt, context, document))
+    })();
+    if let Some(journal) = journal {
+        let evidence = result.as_ref().ok().map(|(r, c, d)| (r, c, d.as_str()));
+        if journal.finish(evidence, invoked).is_err() {
+            eprintln!("Attempt completion could not be recorded. Check retained records and outputs before any new verification.");
+            return ExitCode::from(4);
         }
     }
-    if receipt_path.is_some() && receipt_path == context_path {
-        eprintln!("Receipt and context must use different files.");
-        return ExitCode::from(2);
-    }
-    match execute_verify(config) {
-        Ok((receipt, context)) => {
-            let document = match serde_json::to_string(&receipt) {
-                Ok(document) => document,
-                Err(error) => {
-                    eprintln!("verification output failed: {error}");
-                    return ExitCode::from(RUNTIME_ERROR_EXIT_CODE);
-                }
-            };
-            if let Some(path) = receipt_path {
-                if let Err(error) = write_receipt(&path, &document) {
-                    eprintln!("{error}");
-                    return error_exit_code(&error);
-                }
-            }
-            if let Some(path) = context_path {
-                let output = match serde_json::to_string(&context) {
-                    Ok(v) => v,
-                    Err(error) => {
-                        eprintln!("{error}");
-                        return ExitCode::from(4);
-                    }
-                };
-                if let Err(error) = write_receipt(&path, &output) {
-                    eprintln!("{error}");
-                    return error_exit_code(&error);
-                }
-            }
+    match result {
+        Ok((receipt, _, document)) => {
             if json {
                 println!("{document}");
             } else {
@@ -234,6 +239,13 @@ fn execute_replay(config: ReplayConfig) -> Result<RunSummary, RunCommandError> {
 
 pub(super) fn execute_verify(
     config: VerifyConfig,
+) -> Result<(Receipt, RunContext), RunCommandError> {
+    execute_verify_observed(config, || {})
+}
+
+fn execute_verify_observed(
+    config: VerifyConfig,
+    before_run: impl FnOnce(),
 ) -> Result<(Receipt, RunContext), RunCommandError> {
     if config.expected_files.len() + config.expected_hashes.len() > 64
         || config.expected_files.iter().any(|path| path.len() > 1024)
@@ -289,6 +301,7 @@ pub(super) fn execute_verify(
         .build()
         .map_err(|error| RunCommandError::Task(error.to_string()))?;
     let cancel = CancellationToken::new();
+    before_run();
     let (receipt, context) = runtime
         .block_on(crate::interrupt::cancellable(
             verify_run_with_context(

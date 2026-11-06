@@ -185,3 +185,10 @@ The library's status filter now follows the actual Receipt v1 enum: `succeeded`,
 `run_failed`, `cancelled`, and `assertion_failed`. Policy denials are policy/step
 outcomes, not an additional top-level Receipt status. Invalid historical metadata
 remains unavailable rather than being promoted to an approved execution.
+
+
+## Standalone verification attempts (current source)
+
+The Receipt library also reads [explicit single-attempt records](../verify-attempts.md). Start/completion metadata and its recorded Receipt fingerprint stay separate from saved Receipt verification, authorship and export approval. A missing completion remains unconfirmed, including after restart; the panel never executes or retries a command.
+
+Local validation for this source slice:208 affected CLI/API/verify checks, strict affected Clippy and builds, and78 Chrome UI checks passed. Native synthetic CLI cases cover preparation failure, generated Receipt binding, concurrent writer refusal, SIGINT cancellation and SIGKILL start-only recovery. The real compiled Console read these records without changing9 evidence files at390px. No Provider call, Windows execution, formal release or deployment was performed.

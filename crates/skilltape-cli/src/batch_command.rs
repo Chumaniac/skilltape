@@ -84,7 +84,7 @@ fn sha(bytes: &[u8]) -> String {
 // Batch paths have a deliberately narrow spelling. Construct the path from the
 // checked text, so every filesystem caller receives the validated value rather
 // than the original CLI/descriptor path. Links are checked separately below.
-fn checked_path(path: &Path) -> io::Result<PathBuf> {
+pub(super) fn checked_path(path: &Path) -> io::Result<PathBuf> {
     let text = path
         .to_str()
         .ok_or_else(|| fail("batch paths must be UTF-8"))?;
@@ -95,13 +95,13 @@ fn checked_path(path: &Path) -> io::Result<PathBuf> {
     }
     Ok(PathBuf::from(text))
 }
-fn safe(path: &Path) -> io::Result<()> {
+pub(super) fn safe(path: &Path) -> io::Result<()> {
     if !run_command::ancestors_are_safe(path) {
         return Err(fail("unsafe batch path or link"));
     }
     Ok(())
 }
-fn directory(path: &Path) -> io::Result<PathBuf> {
+pub(super) fn directory(path: &Path) -> io::Result<PathBuf> {
     let path = checked_path(path)?;
     safe(&path)?;
     let info = fs::symlink_metadata(&path)?;
@@ -180,7 +180,7 @@ fn opened(path: &Path, limit: u64) -> io::Result<(File, fs::Metadata)> {
     }
     Ok((file, before))
 }
-fn read(path: &Path, limit: u64) -> io::Result<Vec<u8>> {
+pub(super) fn read(path: &Path, limit: u64) -> io::Result<Vec<u8>> {
     let path = checked_path(path)?;
     let (mut file, before) = opened(&path, limit)?;
     let mut bytes = Vec::new();
@@ -292,13 +292,14 @@ fn load(root: &Path) -> io::Result<(BatchPlan, BatchState)> {
     }
     Ok((plan, state))
 }
-struct BatchLock {
+pub(super) struct BatchLock {
     file: File,
     root: PathBuf,
     metadata: fs::Metadata,
+    lock_path: PathBuf,
 }
 impl BatchLock {
-    fn check(&self) -> io::Result<()> {
+    pub(super) fn check(&self) -> io::Result<()> {
         let root = checked_path(&self.root)?;
         safe(&root)?;
         let current = fs::symlink_metadata(&root)?;
@@ -318,7 +319,7 @@ impl BatchLock {
         }
         if !same(
             &self.file.metadata()?,
-            &fs::symlink_metadata(root.join(".skilltape/batch.lock"))?,
+            &fs::symlink_metadata(&self.lock_path)?,
         ) {
             return Err(fail("batch lock was replaced"));
         }
@@ -326,9 +327,18 @@ impl BatchLock {
     }
 }
 fn lock(root: &Path) -> io::Result<BatchLock> {
+    lock_named(root, ".skilltape/batch.lock")
+}
+pub(super) fn lock_named(root: &Path, name: &str) -> io::Result<BatchLock> {
+    if Path::new(name)
+        .components()
+        .any(|part| !matches!(part, std::path::Component::Normal(_)))
+    {
+        return Err(fail("unsafe workspace lock name"));
+    }
     let root = checked_path(root)?;
     let metadata = fs::symlink_metadata(&root)?;
-    let path = root.join(".skilltape/batch.lock");
+    let path = root.join(name);
     safe(&path)?;
     let mut options = OpenOptions::new();
     options.read(true).write(true).create(true).truncate(false);
@@ -339,7 +349,7 @@ fn lock(root: &Path) -> io::Result<BatchLock> {
             .mode(0o600)
             .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
     }
-    let file = options.open(path)?;
+    let file = options.open(&path)?;
     if !file.metadata()?.is_file() {
         return Err(fail("invalid batch lock"));
     }
@@ -349,6 +359,7 @@ fn lock(root: &Path) -> io::Result<BatchLock> {
         file,
         root: root.to_owned(),
         metadata,
+        lock_path: path,
     };
     guard.check()?;
     Ok(guard)

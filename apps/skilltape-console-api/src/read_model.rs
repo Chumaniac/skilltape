@@ -10,6 +10,10 @@ use skilltape_core::{DiagnosticLevel, LoadedSkillPackage, SkillPackage};
 use skilltape_tape::{TapeEvent, TapeStore, TapeStoreError};
 use thiserror::Error;
 
+#[path = "verify_attempts.rs"]
+mod verify_attempts;
+pub use verify_attempts::VerifyAttemptView;
+
 pub const CONSOLE_SCHEMA_V1: &str = "skilltape.dev/console/v1";
 pub const WORKSPACE_ID: &str = "default";
 
@@ -55,6 +59,8 @@ pub enum ReadModelError {
     UnsupportedPlatform,
     #[error("package discovery capacity exceeded")]
     DiscoveryCapacity,
+    #[error("single verification attempt discovery capacity exceeded")]
+    AttemptCapacity,
     #[error("stored resource could not be read")]
     Io(#[from] io::Error),
 }
@@ -847,6 +853,15 @@ impl ConsoleReadModel {
         path: &Path,
         limit: u64,
     ) -> Result<(Vec<u8>, fs::Metadata), ReadModelError> {
+        self.bounded_stored_file_info_checked(path, limit, |_| true)
+    }
+
+    fn bounded_stored_file_info_checked(
+        &self,
+        path: &Path,
+        limit: u64,
+        accept: impl FnOnce(&fs::Metadata) -> bool,
+    ) -> Result<(Vec<u8>, fs::Metadata), ReadModelError> {
         self.ensure_safe_path(path)?;
         let mut options = fs::OpenOptions::new();
         options.read(true);
@@ -862,6 +877,9 @@ impl ConsoleReadModel {
         let metadata = file.metadata()?;
         if !metadata.is_file() || metadata.len() > limit {
             return Err(ReadModelError::InvalidDocument);
+        }
+        if !accept(&metadata) {
+            return Err(ReadModelError::UnsafePath);
         }
         let mut bytes = Vec::new();
         file.take(limit + 1).read_to_end(&mut bytes)?;
