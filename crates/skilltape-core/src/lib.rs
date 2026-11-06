@@ -1,5 +1,6 @@
 mod artifact_limits;
 pub mod batch;
+pub mod build_info;
 mod diagnostic;
 mod package;
 mod template;

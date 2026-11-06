@@ -6,6 +6,8 @@ use clap::Parser;
 #[derive(Debug, Parser)]
 #[command(name = "skilltape-console-api")]
 struct Args {
+    #[arg(long)]
+    build_info: bool,
     #[arg(long, default_value = ".")]
     workspace: PathBuf,
     #[arg(long, default_value = "127.0.0.1")]
@@ -19,6 +21,13 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<(), skilltape_console_api::ServeError> {
     let args = Args::parse();
+    if args.build_info {
+        println!(
+            "{}",
+            skilltape_core::build_info::build_info(env!("CARGO_PKG_VERSION"))
+        );
+        return Ok(());
+    }
     skilltape_console_api::serve_with_static(
         &args.workspace,
         SocketAddr::new(args.bind, args.port),

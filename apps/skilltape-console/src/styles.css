@@ -1276,3 +1276,6 @@ tbody code {
 .saved-receipt-list .receipt-row-actions{display:flex;flex-wrap:wrap;gap:8px;max-width:100%;min-width:0}.receipt-row-actions button{max-width:100%;overflow-wrap:anywhere}.receipt-comparison{min-width:0}.receipt-comparison-fields{display:flex;flex-wrap:wrap;align-items:end;gap:12px;margin:16px 0}.receipt-comparison-fields label{display:grid;gap:6px;flex:1 1 220px;min-width:0;max-width:100%}.receipt-comparison-fields input{width:100%;min-height:44px}.comparison-counts{display:flex;gap:20px;flex-wrap:wrap;margin:16px 0}.comparison-counts div{min-width:120px;max-width:100%}.comparison-counts dt{font-size:13px}.comparison-counts dd{font-size:24px;margin:6px 0}.receipt-comparison th code,.receipt-comparison th small{display:block;overflow-wrap:anywhere}.receipt-comparison th{max-width:360px;overflow-wrap:anywhere}
 
 .attempt-list{list-style:none;padding:0;display:grid;gap:12px}.attempt-list li{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}.attempt-list li>div{display:grid;gap:4px;min-width:0}.attempt-list code,.attempt-id{overflow-wrap:anywhere;word-break:break-word}.attempt-list button{flex-shrink:0}
+
+.build-identity { margin: 0 24px 18px; max-width: 64rem; overflow-wrap: anywhere; font-size: 0.8rem; color: var(--muted-foreground, #64748b); }
+.build-identity summary { cursor: pointer; min-height: 32px; }

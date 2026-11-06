@@ -11,6 +11,8 @@ configuration file.
 
 [Watch the 30-second terminal demo](docs/assets/quickstart-terminal.txt) · [Download v0.4.1](https://github.com/Chumaniac/skilltape/releases/tag/v0.4.1)
 
+Current source can compare [installed CLI/API/UI identity and capabilities](docs/guides/source-candidates.md). Expand Console installation details or run `skilltape build-info`; source candidates and public downloads remain separate.
+
 ## Local starter tasks (main)
 
 Current source also supports [single Verify attempt records](docs/verify-attempts.md): explicitly retain content-free preparation/completion metadata, then inspect interrupted or completed attempts in Console without rerunning a command. Existing downloads remain versioned independently.
