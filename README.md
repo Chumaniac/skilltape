@@ -193,3 +193,14 @@ environment values, and cannot authenticate execution or freeze mutable inputs.
 Old receipts show **Not recorded**; invalid or mismatched contexts are withheld.
 The viewer reads at most 4 KiB of context and 8 MiB of receipt, with two bounded
 inspections at a time. Existing output-file comparison remains available.
+
+
+### Hosted macOS checks
+
+GitHub retired macOS 14 runners on November 2, 2026. The protected context
+`Rust (macos-14)` remains a **legacy check identifier** so existing branch
+protection is honored; its actual runner is now macOS 15 arm64, recorded and
+asserted by the first job step. It does not claim macOS 14 test coverage. All
+sandbox, formatting, Clippy, workspace and product gates remain. The arm64
+release build also uses macOS 15; no release is triggered by this migration.
+See the [official retirement notice](https://github.blog/changelog/2026-10-01-github-actions-macos-14-runner-image-retirement/).
