@@ -9,11 +9,12 @@ import { ReceiptViewPage } from './pages/ReceiptView'
 import { TimelinePage } from './pages/Timeline'
 import { DeliveriesPage } from './pages/Deliveries'
 import { BatchReviewPage } from './pages/BatchReview'
+import { LocalTaskPage } from './pages/LocalTask'
 import metadata from '../package.json'
 import { BuildIdentity } from './BuildIdentity'
 import './styles.css'
 
-type PageKey = 'timeline' | 'compile' | 'permissions' | 'receipt' | 'export' | 'deliveries' | 'batch' | 'not-found'
+type PageKey = 'task' | 'timeline' | 'compile' | 'permissions' | 'receipt' | 'export' | 'deliveries' | 'batch' | 'not-found'
 
 interface RouteState {
   page: PageKey
@@ -35,7 +36,7 @@ function readRoute(): RouteState {
   const hash = window.location.hash.replace(/^#/, '') || 'timeline'
   const [pageValue, query] = hash.split('?')
   const page: PageKey =
-    pageValue === 'timeline' || pageValue === 'compile' || pageValue === 'permissions' || pageValue === 'receipt' || pageValue === 'export' || pageValue === 'deliveries' || pageValue === 'batch'
+    pageValue === 'task' || pageValue === 'timeline' || pageValue === 'compile' || pageValue === 'permissions' || pageValue === 'receipt' || pageValue === 'export' || pageValue === 'deliveries' || pageValue === 'batch'
       ? pageValue
       : 'not-found'
   const params = new URLSearchParams(query)
@@ -80,7 +81,7 @@ function App() {
         </a>
         <div className="sidebar-rule" />
         <nav aria-label="Console sections">
-          <p className="nav-label">Inspect</p>
+          <p className="nav-label">Work</p><NavLink href="#task" active={route.page === 'task'} label="Reconcile quantities" /><p className="nav-label">Inspect</p>
           <NavLink href="#batch" active={route.page === 'batch'} label="Verification batch" />
           <NavLink href="#deliveries" active={route.page === 'deliveries'} label="Delivery workbench" />
           <NavLink href="#timeline" active={route.page === 'timeline'} label="Capture timeline" />
@@ -114,6 +115,7 @@ function App() {
 
         <main id="main-content" className="main-content" tabIndex={-1}>
           {route.page === 'not-found' ? <section className="page-section"><header className="page-heading"><div><h1>Page not found</h1><p className="page-description">This link does not name a Console view. Choose a section from navigation or return to your captures.</p></div></header><p><a className="button" href="#timeline">Open capture timeline</a></p></section> : null}
+          {route.page === 'task' ? <LocalTaskPage /> : null}
           {route.page === 'batch' ? <BatchReviewPage /> : null}
           {route.page === 'deliveries' ? <DeliveriesPage deliveryId={route.deliveryId} offset={route.deliveryOffset} /> : null}
           {route.page === 'timeline' ? <TimelinePage tapeId={route.tapeId} tapeOffset={route.tapeOffset} eventOffset={route.eventOffset} /> : null}
@@ -126,7 +128,7 @@ function App() {
         <BuildIdentity />
         <footer className="app-footer">
           <span>SkillTape Console <span translate="no">v{metadata.version}</span></span>
-          <span>Read-only · no commands run</span>
+          <span>Local calculations · saved evidence stays read-only</span>
         </footer>
       </div>
     </div></>
@@ -150,6 +152,7 @@ function NavLink({
 }
 
 function pageLabel(page: PageKey): string {
+  if (page === 'task') return 'Reconcile quantities'
   if (page === 'not-found') return 'Page not found'
   if (page === 'batch') return 'Verification batch'
   if (page === 'deliveries') return 'Delivery workbench'
