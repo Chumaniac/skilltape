@@ -1,5 +1,12 @@
 import { useRef, useState } from "react";
 import { example, reconcile, type Request } from "../reconcile";
+type FormRow = { item: string; expected: string; received: string };
+const formRowsFor = (request: Request): FormRow[] =>
+  reconcile(request).rows.map((r) => ({
+    item: r.item,
+    expected: String(r.expected),
+    received: String(r.received),
+  }));
 type Result = ReturnType<typeof reconcile>;
 type Saved = { id: string; at: string; input: Request; result: Result };
 const key = "skilltape.local-reconciliation.v1";
@@ -47,10 +54,42 @@ export function LocalTaskPage() {
   const [initial] = useState(read),
     [history, setHistory] = useState(initial.items),
     [input, setInput] = useState(JSON.stringify(example, null, 2)),
+    [formRows, setFormRows] = useState<FormRow[]>(() => formRowsFor(example)),
+    [jsonMode, setJsonMode] = useState(false),
     [result, setResult] = useState<Result | null>(null),
     [message, setMessage] = useState(initial.error),
     [busy, setBusy] = useState(false),
     generation = useRef(0);
+  function editRows(next: FormRow[]) {
+    setFormRows(next);
+    const number = (v: string) => (v.trim() === "" ? null : Number(v));
+    setInput(
+      JSON.stringify(
+        {
+          expected: next.map((r) => ({
+            item: r.item,
+            quantity: number(r.expected),
+          })),
+          received: next.map((r) => ({
+            item: r.item,
+            quantity: number(r.received),
+          })),
+        },
+        null,
+        2,
+      ),
+    );
+    setResult(null);
+    setMessage("Input changed. Calculate again to refresh the result.");
+  }
+  function showForm() {
+    try {
+      setFormRows(formRowsFor(JSON.parse(input)));
+      setJsonMode(false);
+    } catch {
+      setMessage("Correct the JSON input before opening the item editor.");
+    }
+  }
   function run() {
     setResult(null);
     setBusy(true);
@@ -120,29 +159,143 @@ export function LocalTaskPage() {
             disabled={busy}
             onClick={() => {
               setInput(JSON.stringify(example, null, 2));
+              setFormRows(formRowsFor(example));
+              setJsonMode(false);
               setResult(null);
               setMessage("Example filled. No calculation has run.");
             }}
           >
             Fill example
           </button>
-          <label htmlFor="task-input">
-            Expected and received quantities (JSON)
-          </label>
-          <textarea
-            id="task-input"
-            rows={15}
-            maxLength={256000}
-            value={input}
-            disabled={busy}
-            onChange={(e) => {
-              setInput(e.target.value);
-              setResult(null);
-              setMessage(
-                "Input changed. Calculate again to refresh the result.",
-              );
-            }}
-          />
+          <div className="task-actions">
+            <button
+              type="button"
+              disabled={busy || !jsonMode}
+              onClick={showForm}
+            >
+              Edit items
+            </button>
+            <button
+              type="button"
+              disabled={busy || jsonMode}
+              onClick={() => setJsonMode(true)}
+            >
+              Edit JSON
+            </button>
+          </div>
+          {!jsonMode ? (
+            <>
+              <div className="quantity-editor">
+                {formRows.map((row, index) => (
+                  <fieldset key={index} disabled={busy}>
+                    <legend>Item {index + 1}</legend>
+                    <label>
+                      Item name
+                      <input
+                        aria-label={"Item name " + (index + 1)}
+                        value={row.item}
+                        maxLength={128}
+                        onChange={(e) =>
+                          editRows(
+                            formRows.map((r, i) =>
+                              i === index ? { ...r, item: e.target.value } : r,
+                            ),
+                          )
+                        }
+                      />
+                    </label>
+                    <label>
+                      Expected
+                      <input
+                        aria-label={"Expected " + (index + 1)}
+                        type="number"
+                        min="0"
+                        max="1000000000"
+                        step="1"
+                        value={row.expected}
+                        onChange={(e) =>
+                          editRows(
+                            formRows.map((r, i) =>
+                              i === index
+                                ? { ...r, expected: e.target.value }
+                                : r,
+                            ),
+                          )
+                        }
+                      />
+                    </label>
+                    <label>
+                      Received
+                      <input
+                        aria-label={"Received " + (index + 1)}
+                        type="number"
+                        min="0"
+                        max="1000000000"
+                        step="1"
+                        value={row.received}
+                        onChange={(e) =>
+                          editRows(
+                            formRows.map((r, i) =>
+                              i === index
+                                ? { ...r, received: e.target.value }
+                                : r,
+                            ),
+                          )
+                        }
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      aria-label={"Remove item " + (index + 1)}
+                      disabled={formRows.length <= 1}
+                      onClick={() =>
+                        editRows(formRows.filter((_, i) => i !== index))
+                      }
+                    >
+                      Remove
+                    </button>
+                  </fieldset>
+                ))}
+              </div>
+              <button
+                type="button"
+                disabled={busy || formRows.length >= 1000}
+                onClick={() =>
+                  editRows([
+                    ...formRows,
+                    { item: "", expected: "0", received: "0" },
+                  ])
+                }
+              >
+                Add item
+              </button>
+              <p>
+                Enter item names and whole quantities. Use JSON for existing
+                starter inputs.
+              </p>
+            </>
+          ) : null}
+          {jsonMode ? (
+            <>
+              <label htmlFor="task-input">
+                Expected and received quantities (JSON)
+              </label>
+              <textarea
+                id="task-input"
+                rows={15}
+                maxLength={256000}
+                value={input}
+                disabled={busy}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  setResult(null);
+                  setMessage(
+                    "Input changed. Calculate again to refresh the result.",
+                  );
+                }}
+              />
+            </>
+          ) : null}
           <p>
             Duplicate item names are added together. Quantities must be whole,
             nonnegative numbers.
@@ -243,6 +396,8 @@ export function LocalTaskPage() {
                     )
                   ) {
                     setInput(JSON.stringify(item.input, null, 2));
+                    setFormRows(formRowsFor(item.input));
+                    setJsonMode(false);
                     setResult(item.result);
                     setMessage("Opened a saved local calculation.");
                   }
