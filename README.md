@@ -209,9 +209,6 @@ sandbox, formatting, Clippy, workspace and product gates remain. The arm64
 release build also uses macOS 15; no release is triggered by this migration.
 See the [official retirement notice](https://github.blog/changelog/2026-10-01-github-actions-macos-14-runner-image-retirement/).
 
+## Local workbench update (2026-11-09)
 
-## 本地工作台体验更新（2026-11-09）
-
-从只读证据台补充浏览器本地数量对账：示例→编辑JSON→确定性计算→差异表→主动保存→结果及starter输入导出。去重汇总、整数/长度/数量验证，失败清除旧结果。
-
-实现范围、启动方式与验证边界见 [体验改造说明](docs/PRODUCT_EXPERIENCE.md)。
+Use the guided quantity editor for a local reconciliation task, review differences and save or export the result. Captured runs and verified Receipts retain their existing evidence boundaries. See [Product experience](docs/PRODUCT_EXPERIENCE.md) for scope, startup and validation.
