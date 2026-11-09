@@ -208,3 +208,7 @@ asserted by the first job step. It does not claim macOS 14 test coverage. All
 sandbox, formatting, Clippy, workspace and product gates remain. The arm64
 release build also uses macOS 15; no release is triggered by this migration.
 See the [official retirement notice](https://github.blog/changelog/2026-10-01-github-actions-macos-14-runner-image-retirement/).
+
+## Local workbench update (2026-11-09)
+
+Use the guided quantity editor for a local reconciliation task, review differences and save or export the result. Captured runs and verified Receipts retain their existing evidence boundaries. See [Product experience](docs/PRODUCT_EXPERIENCE.md) for scope, startup and validation.
