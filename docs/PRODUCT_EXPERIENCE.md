@@ -37,3 +37,7 @@ npm run dev -- --host 127.0.0.1
 ```
 
 Choose **Reconcile quantities**. Follow the root README for the existing local evidence service and CLI capture workflow.
+
+## Live local Console follow-up
+
+A real local starter run exposed a navigation issue: opening a saved Receipt left its result below the search and comparison panels. The loaded result now receives focus and scrolls into view immediately. The document picker and read-only evidence boundaries remain available. Regression coverage checks the visible result at desktop, 390px and 320px widths.

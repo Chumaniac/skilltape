@@ -1,7 +1,7 @@
 import {ReceiptLibrary} from './ReceiptLibrary'
 import { RunConditions } from './RunConditions'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { formatNumber, getReceipt, isSavedEvidenceId } from '../api'
 import type { Receipt } from '../types'
@@ -44,6 +44,7 @@ export function ReceiptViewPage({ receiptId = '', skillId = '' }: ReceiptViewPro
   const [loading, setLoading] = useState(true)
   const [reload, setReload] = useState(0)
   const [failedOnly, setFailedOnly] = useState(false)
+  const resultHeading = useRef<HTMLHeadingElement>(null)
 
   useEffect(() => {
     if (!receiptId) { setLoading(false); return }
@@ -68,6 +69,12 @@ export function ReceiptViewPage({ receiptId = '', skillId = '' }: ReceiptViewPro
       })
     return () => controller.abort()
   }, [receiptId, reload])
+
+  useEffect(() => {
+    if (loading || error || !receipt) return
+    resultHeading.current?.focus({ preventScroll: true })
+    resultHeading.current?.scrollIntoView({ block: 'start', behavior: 'instant' })
+  }, [receipt, loading, error])
 
   const picker = <><ReceiptLibrary onRead={id=>{window.location.hash='receipt?run='+encodeURIComponent(id)+(skillId?'&skill='+encodeURIComponent(skillId):'');if(id===receiptId)setReload(value=>value+1)}}/><ReceiptPicker key={receiptId} receiptId={receiptId} onOpen={(id) => {
     if (id === receiptId) setReload(value => value + 1)
@@ -102,7 +109,7 @@ export function ReceiptViewPage({ receiptId = '', skillId = '' }: ReceiptViewPro
       <header className="page-heading">
         <div>
           <p className="eyebrow">Saved run</p>
-          <h1>Verification receipt</h1>
+          <h1 id="receipt-result-title" ref={resultHeading} tabIndex={-1}>Verification receipt</h1>
           <p className="page-description">
             Step outcomes, output checks and policy decisions recorded for this run.
           </p>

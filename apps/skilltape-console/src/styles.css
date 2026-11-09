@@ -1291,3 +1291,5 @@ button,input,select,textarea{font:inherit}button,a,input,select,textarea,summary
 .skip-link:not(:focus){clip-path:inset(50%);width:1px;height:1px;overflow:hidden;white-space:nowrap;padding:0}
 
 .quantity-editor{max-height:520px;overflow:auto}.quantity-editor fieldset{min-width:0;display:grid;grid-template-columns:minmax(120px,2fr) 1fr 1fr;gap:10px;border:1px solid var(--line);border-radius:6px;margin:16px 0;padding:12px}.quantity-editor label{margin:0!important;font-size:13px}.quantity-editor input{width:100%;min-height:44px;border:1px solid var(--line);border-radius:4px;background:#fff;color:var(--text);padding:8px}.quantity-editor fieldset button{justify-self:start;grid-column:1/-1}@media(max-width:600px){.quantity-editor fieldset{grid-template-columns:1fr 1fr}.quantity-editor label:first-of-type{grid-column:1/-1}}
+
+#receipt-result-title{scroll-margin-top:24px}
