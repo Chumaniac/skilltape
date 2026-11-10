@@ -17,7 +17,7 @@ struct BackendChecks {
   static func main() throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(
       "backend-check-" + UUID().uuidString)
-    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
     defer { try? FileManager.default.removeItem(at: root) }
     let fixture = URL(fileURLWithPath: CommandLine.arguments[1]).path
     func configuration(mode: String, path: String = "health") throws -> (
