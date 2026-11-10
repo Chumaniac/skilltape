@@ -212,3 +212,7 @@ See the [official retirement notice](https://github.blog/changelog/2026-10-01-gi
 ## Local workbench update (2026-11-09)
 
 Use the guided quantity editor for a local reconciliation task, review differences and save or export the result. Captured runs and verified Receipts retain their existing evidence boundaries. See [Product experience](docs/PRODUCT_EXPERIENCE.md) for scope, startup and validation.
+
+## macOS window application
+
+The local Console can also open as an independent macOS window with its own Dock identity, workspace selection and existing read-only API. See [desktop/README.md](desktop/README.md). Quantity tasks explicitly saved inside that window persist across app restarts; browser-only use retains its original tab-session policy. Capture, execution and signed evidence boundaries remain unchanged. The loopback server checks Host and Origin; foreign-site requests do not gain access to the selected evidence workspace.

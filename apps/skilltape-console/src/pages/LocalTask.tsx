@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { example, reconcile, type Request } from "../reconcile";
 type FormRow = { item: string; expected: string; received: string };
 const formRowsFor = (request: Request): FormRow[] =>
@@ -10,9 +10,12 @@ const formRowsFor = (request: Request): FormRow[] =>
 type Result = ReturnType<typeof reconcile>;
 type Saved = { id: string; at: string; input: Request; result: Result };
 const key = "skilltape.local-reconciliation.v1";
+const nativeWorkspace = () => typeof window !== "undefined" && (window as Window & { __NATIVE_WORKSPACE__?: boolean }).__NATIVE_WORKSPACE__ === true;
+// Native saves survive application restarts; browser retention remains session-only.
+const savedStorage = () => nativeWorkspace() ? localStorage : sessionStorage;
 function read() {
   try {
-    const raw = sessionStorage.getItem(key);
+    const raw = savedStorage().getItem(key);
     if (!raw) return { items: [] as Saved[], error: "" };
     if (raw.length > 512000) throw Error();
     const data = JSON.parse(raw);
@@ -59,8 +62,16 @@ export function LocalTaskPage() {
     [result, setResult] = useState<Result | null>(null),
     [message, setMessage] = useState(initial.error),
     [busy, setBusy] = useState(false),
+    [unsaved, setUnsaved] = useState(false),
     generation = useRef(0);
+  useEffect(() => {
+    const protect = (event: BeforeUnloadEvent) => { if (unsaved) { event.preventDefault(); event.returnValue = ""; } };
+    window.addEventListener("beforeunload", protect);
+    return () => window.removeEventListener("beforeunload", protect);
+  }, [unsaved]);
+  useEffect(() => () => { generation.current += 1; }, []);
   function editRows(next: FormRow[]) {
+    setUnsaved(true);
     setFormRows(next);
     const number = (v: string) => (v.trim() === "" ? null : Number(v));
     setInput(
@@ -91,6 +102,7 @@ export function LocalTaskPage() {
     }
   }
   function run() {
+    setUnsaved(true);
     setResult(null);
     setBusy(true);
     setMessage("Checking quantities…");
@@ -126,9 +138,10 @@ export function LocalTaskPage() {
         throw Error(
           "Local history is full. Export this result before removing old records.",
         );
-      sessionStorage.setItem(key, raw);
+      savedStorage().setItem(key, raw);
       setHistory(next);
-      setMessage("Saved in this tab. Export before closing it.");
+      setUnsaved(false);
+      setMessage(nativeWorkspace() ? "Saved in this app." : "Saved in this tab. Export before closing it.");
     } catch (e) {
       setMessage(
         e instanceof Error
@@ -149,7 +162,7 @@ export function LocalTaskPage() {
         </div>
       </header>
       <p className="task-scope">
-        Runs in this browser. This calculation is separate from captured runs
+        Runs on this device. This calculation is separate from captured runs
         and verified Receipts.
       </p>
       <div className="local-task-grid">
@@ -287,6 +300,7 @@ export function LocalTaskPage() {
                 value={input}
                 disabled={busy}
                 onChange={(e) => {
+                  setUnsaved(true);
                   setInput(e.target.value);
                   setResult(null);
                   setMessage(
@@ -345,8 +359,8 @@ export function LocalTaskPage() {
                 </table>
               </div>
               <div className="task-actions">
-                <button onClick={save} disabled={!!initial.error}>
-                  Save in this tab
+                <button onClick={save} disabled={!!initial.error} data-desktop-save="calculation">
+                  {nativeWorkspace() ? "Save in this app" : "Save in this tab"}
                 </button>
                 <button
                   onClick={() => download(result, "reconciliation-result.json")}
@@ -376,11 +390,10 @@ export function LocalTaskPage() {
         </section>
       </div>
       <section className="task-panel">
-        <h2>3. Saved in this tab</h2>
-        <p>
-          Up to 20 records / 512 KB. Explicit saves only; closing this tab
-          clears its session storage.
-        </p>
+        <h2>{nativeWorkspace() ? "3. Saved in this app" : "3. Saved in this tab"}</h2>
+        <p>{nativeWorkspace()
+          ? "Up to 20 records / 512 KB. Explicit saves stay in this app until removed; local calculations remain separate from workspace evidence."
+          : "Up to 20 records / 512 KB. Explicit saves only; closing this tab clears its session storage."}</p>
         {history.length ? (
           history.map((item) => (
             <div className="saved-task" key={item.id}>
@@ -399,6 +412,7 @@ export function LocalTaskPage() {
                     setFormRows(formRowsFor(item.input));
                     setJsonMode(false);
                     setResult(item.result);
+                    setUnsaved(false);
                     setMessage("Opened a saved local calculation.");
                   }
                 }}
@@ -415,7 +429,7 @@ export function LocalTaskPage() {
                   if (window.confirm("Remove this saved local task?")) {
                     try {
                       const next = history.filter((n) => n.id !== item.id);
-                      sessionStorage.setItem(
+                      savedStorage().setItem(
                         key,
                         JSON.stringify({ version: 1, items: next }),
                       );
