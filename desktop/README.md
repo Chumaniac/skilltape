@@ -18,3 +18,5 @@ Explicitly saved quantity calculations persist in this application's local stora
 Only the API process started by this application is stopped on exit. Listener ownership is verified before loading the origin; other project services are not reused or killed. Startup and isolated native-window checks use different ports (19001 and 19011) and separate workspaces. The same App ID and normal port should remain stable across upgrades.
 
 `--smoke-check /private/result.json --snapshot /private/view.png` uses nonpersistent WebKit storage and its own empty temporary evidence directory; it never reads the selected real workspace. Native asset and child lifecycle checks are in `desktop/tests/`. Local applications use ad-hoc signing, not a notarized redistribution release.
+
+The repository also includes a Swift Package Manager target for native-host compilation and repository analysis: `swift build --package-path .`. It has no third-party dependencies. Use the Python builder above to produce the installable application with its assets and profile.
