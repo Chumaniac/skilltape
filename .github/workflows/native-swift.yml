@@ -22,7 +22,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Check fixture output boundaries
-        run: python3 desktop/tests/test_fixture_paths.py
+        run: /usr/bin/python3 desktop/tests/test_fixture_paths.py
       - name: Initialize Swift analysis
         uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
         with:
