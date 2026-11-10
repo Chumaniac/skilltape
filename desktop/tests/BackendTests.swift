@@ -19,6 +19,8 @@ struct BackendChecks {
       "backend-check-" + UUID().uuidString)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
     defer { try? FileManager.default.removeItem(at: root) }
+    var fixtureDirectories: [URL] = []
+    defer { for directory in fixtureDirectories { try? FileManager.default.removeItem(at: directory) } }
     let fixture = URL(fileURLWithPath: CommandLine.arguments[1]).path
     func configuration(mode: String, path: String = "health") throws -> (
       LaunchConfiguration, URL, URL
@@ -26,9 +28,12 @@ struct BackendChecks {
       let reserve = LocalWebServer(root: root)
       let port = try reserve.start(port: 0)
       reserve.stop()
-      let output = root.appendingPathComponent(UUID().uuidString + ".json")
+      let outputDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("native-fixture-\(port)")
+      try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+      fixtureDirectories.append(outputDirectory)
+      let output = outputDirectory.appendingPathComponent("result.json")
       var values: [String: Any] = [
-        "executable": "/usr/bin/python3", "arguments": [fixture, String(port), output.path, mode],
+        "executable": "/usr/bin/python3", "arguments": [fixture, String(port), mode],
         "workingDirectory": root.path, "smokeWorkingDirectory": "{{SMOKE_DIR}}", "healthPath": path,
         "healthMarker": "fixture-ready", "stopOnQuit": true,
       ]

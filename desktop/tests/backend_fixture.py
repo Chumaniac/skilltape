@@ -3,35 +3,30 @@ import http.server
 import json
 import os
 from pathlib import Path
-import re
 import signal
 import stat
 import subprocess
 import sys
 import tempfile
 
-port, requested_output, mode = int(sys.argv[1]), sys.argv[2], sys.argv[3]
+if len(sys.argv) != 3:
+    raise SystemExit("FIXTURE_ARGUMENT_INVALID")
+port, mode = int(sys.argv[1]), sys.argv[2]
 if not 1 <= port <= 65535 or mode not in {"normal", "hang", "managed"}:
     raise SystemExit("FIXTURE_ARGUMENT_INVALID")
-# The caller creates this private UUID directory. Never accept an arbitrary path.
-directory_name = os.path.basename(os.path.dirname(requested_output))
-filename = os.path.basename(requested_output)
-uuid = r"[A-Fa-f0-9]{8}(?:-[A-Fa-f0-9]{4}){3}-[A-Fa-f0-9]{12}"
-if not re.fullmatch("backend-check-" + uuid, directory_name) or not re.fullmatch(uuid + r"\.json", filename):
-    raise SystemExit("FIXTURE_OUTPUT_INVALID")
-root = Path(tempfile.gettempdir()).resolve() / directory_name
-info = root.lstat()
-if (not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid()
-        or stat.S_IMODE(info.st_mode) != 0o700):
+# There is no output-path argument. The caller exclusively creates this directory.
+root = Path(tempfile.gettempdir()).resolve() / ("native-fixture-" + str(port))
+directory_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+info = os.fstat(directory_fd)
+if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o700:
+    os.close(directory_fd)
     raise SystemExit("FIXTURE_DIRECTORY_INVALID")
-output = root / filename
-if Path(requested_output).resolve() != output:
-    raise SystemExit("FIXTURE_OUTPUT_INVALID")
 
 
-def write_result(path, content):
-    # Exclusive creation and NOFOLLOW protect existing files and links.
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+def write_result(name, content):
+    # Fixed filenames, a held directory descriptor and exclusive creation prevent escapes.
+    descriptor = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                         0o600, dir_fd=directory_fd)
     with os.fdopen(descriptor, "w") as stream:
         stream.write(content)
 
@@ -49,7 +44,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
         if self.path == "/target":
             try:
-                write_result(output.with_suffix(".redirected"), "unexpected")
+                write_result("result.redirected", "unexpected")
             except FileExistsError:
                 pass
         body = b'{"service":"fixture-ready"}'
@@ -63,9 +58,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 
 server = http.server.ThreadingHTTPServer(("127.0.0.1", port), Handler)
-write_result(output, json.dumps({"pid": os.getpid(), "cwd": os.getcwd()}))
+write_result("result.json", json.dumps({"pid": os.getpid(), "cwd": os.getcwd()}))
 if mode == "managed":
-    state = output.with_suffix(".state.json")
-    write_result(state, json.dumps({"pid": os.getpid(), "port": port, "started": subprocess.check_output(
+    write_result("result.state.json", json.dumps({"pid": os.getpid(), "port": port, "started": subprocess.check_output(
         ["ps", "-p", str(os.getpid()), "-o", "lstart="], text=True).strip()}))
 server.serve_forever()
