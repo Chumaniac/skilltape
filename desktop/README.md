@@ -20,3 +20,5 @@ Only the API process started by this application is stopped on exit. Listener ow
 `--smoke-check /private/result.json --snapshot /private/view.png` uses nonpersistent WebKit storage and its own empty temporary evidence directory; it never reads the selected real workspace. Native asset and child lifecycle checks are in `desktop/tests/`. Local applications use ad-hoc signing, not a notarized redistribution release.
 
 The repository also includes a Swift Package Manager target for native-host compilation and repository analysis: `swift build --package-path .`. It has no third-party dependencies. Use the Python builder above to produce the installable application with its assets and profile.
+
+The dedicated Native Swift analysis workflow compiles this target, checks fixture boundaries and retains CodeQL SARIF as an Actions artifact. It fails on any reported finding. SARIF and database uploads to Code Scanning are disabled (`upload: never`, `upload-database: false`), preserving the repository’s existing default setup and Rust coverage.

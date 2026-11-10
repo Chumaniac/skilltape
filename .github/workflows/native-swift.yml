@@ -1,0 +1,64 @@
+name: Native Swift analysis
+on:
+  push:
+    branches: [main]
+    paths: ["desktop/**", "Package.swift", ".github/workflows/native-swift.yml"]
+  pull_request:
+    paths: ["desktop/**", "Package.swift", ".github/workflows/native-swift.yml"]
+permissions:
+  contents: read
+  actions: read
+  security-events: read
+concurrency:
+  group: native-swift-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  native-swift:
+    name: Swift host analysis
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Check fixture output boundaries
+        run: /usr/bin/python3 desktop/tests/test_fixture_paths.py
+      - name: Initialize Swift analysis
+        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
+        with:
+          languages: swift
+          build-mode: manual
+      - name: Compile native host
+        run: swift build --scratch-path "$RUNNER_TEMP/native-swift-analysis"
+      - name: Analyze native host
+        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
+        with:
+          output: swift-sarif
+          upload: never
+          upload-database: false
+      - name: Require a complete report without findings
+        run: |
+          python3 - <<'PY_CHECK'
+          import json
+          from pathlib import Path
+          reports = list(Path("swift-sarif").glob("*.sarif"))
+          if not reports:
+              raise SystemExit("Swift analysis produced no report")
+          runs = [run for report in reports for run in json.loads(report.read_text())["runs"]]
+          if not runs or any(run.get("tool", {}).get("driver", {}).get("name") != "CodeQL" for run in runs):
+              raise SystemExit("Swift analysis report is incomplete")
+          if any(invocation.get("executionSuccessful") is False for run in runs for invocation in run.get("invocations", [])):
+              raise SystemExit("Swift analysis did not complete successfully")
+          findings = sum(len(run.get("results", [])) for run in runs)
+          if findings:
+              raise SystemExit(f"Swift analysis reported {findings} findings; inspect the retained report")
+          print("Swift CodeQL report complete; findings: 0")
+          PY_CHECK
+      - name: Retain analysis report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: native-swift-analysis
+          path: swift-sarif/*.sarif
+          if-no-files-found: warn
+          retention-days: 14
