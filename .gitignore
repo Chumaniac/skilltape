@@ -8,3 +8,7 @@ __pycache__/
 
 desktop/build/
 __pycache__/
+
+# Swift Package Manager native-host builds
+.build/
+.swiftpm/
