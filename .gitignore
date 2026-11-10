@@ -5,3 +5,6 @@ __pycache__/
 /apps/skilltape-console/node_modules
 /apps/skilltape-console/dist/
 /apps/skilltape-console/test-results/
+
+desktop/build/
+__pycache__/

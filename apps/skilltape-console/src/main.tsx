@@ -33,7 +33,8 @@ function readOffset(value: string | null): number {
 }
 
 function readRoute(): RouteState {
-  const hash = window.location.hash.replace(/^#/, '') || 'timeline'
+  const native = (window as Window & { __NATIVE_WORKSPACE__?: boolean }).__NATIVE_WORKSPACE__ === true
+  const hash = window.location.hash.replace(/^#/, '') || (native ? 'task' : 'timeline')
   const [pageValue, query] = hash.split('?')
   const page: PageKey =
     pageValue === 'task' || pageValue === 'timeline' || pageValue === 'compile' || pageValue === 'permissions' || pageValue === 'receipt' || pageValue === 'export' || pageValue === 'deliveries' || pageValue === 'batch'
@@ -68,7 +69,7 @@ function App() {
       document.getElementById('main-content')?.focus()
     }}>Skip to content</a><div className="app-shell">
       <aside className="sidebar">
-        <a className="brand" href="#timeline" translate="no">
+        <a className="brand" href="#timeline" translate="no" onClick={protectDraftNavigation}>
           <span className="brand-mark" aria-hidden="true">
             <span />
             <span />
@@ -108,9 +109,9 @@ function App() {
             <span className="topbar-separator">/</span>
             <span>{pageLabel(route.page)}</span>
           </div>
-          <div className="api-status" aria-label="Local API endpoint">
-            <span>Endpoint {apiBaseLabel()}</span>
-          </div>
+          <details className="api-status connection-details" aria-label="Local API endpoint">
+            <summary>Local workspace</summary><code>{apiBaseLabel()}</code>
+          </details>
         </header>
 
         <main id="main-content" className="main-content" tabIndex={-1}>
@@ -135,6 +136,12 @@ function App() {
   )
 }
 
+function protectDraftNavigation(event: React.MouseEvent<HTMLAnchorElement>) {
+  if (event.currentTarget.hash === window.location.hash || (readRoute().page === 'task' && event.currentTarget.hash === '#task')) return
+  const leaving = new Event('beforeunload', { cancelable: true })
+  if (!window.dispatchEvent(leaving) && !window.confirm('Discard the unsaved local calculation and open another view?')) event.preventDefault()
+}
+
 function NavLink({
   href,
   active,
@@ -145,7 +152,7 @@ function NavLink({
   label: string
 }) {
   return (
-    <a className={'nav-link' + (active ? ' nav-link-active' : '')} href={href} aria-current={active ? 'page' : undefined}>
+    <a className={'nav-link' + (active ? ' nav-link-active' : '')} href={href} aria-current={active ? 'page' : undefined} onClick={protectDraftNavigation}>
       <span>{label}</span>
     </a>
   )
