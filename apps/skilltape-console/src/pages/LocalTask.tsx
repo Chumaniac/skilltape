@@ -314,7 +314,7 @@ export function LocalTaskPage() {
             Duplicate item names are added together. Quantities must be whole,
             nonnegative numbers.
           </p>
-          <button className="button" disabled={busy} onClick={run}>
+          <button className="button button-primary" disabled={busy} onClick={run}>
             {busy ? "Calculating…" : "Calculate differences"}
           </button>
         </section>
