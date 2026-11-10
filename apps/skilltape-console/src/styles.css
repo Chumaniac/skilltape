@@ -1302,3 +1302,32 @@ html,body{background:#fff}.app-shell{grid-template-columns:244px minmax(0,1fr)}.
 :root{font-size:16px}body{font-size:14px}.button,button,select{font-size:13px}table,.panel-body p,.permission-footnote,.permission-safe,.permission-risk{font-size:13px}.status-badge,.select-control,.result-list small,.decision-list small,.code-label,.code-block,.payload-block{font-size:12px}.topbar-context{font-size:13px}
 
 .connection-details{position:relative;font-size:12px}.connection-details summary{cursor:pointer;list-style:none;min-height:38px;display:flex;align-items:center}.connection-details summary::before{content:'';width:5px;height:5px;border-radius:50%;background:#92958d;margin-right:7px}.connection-details code{position:absolute;right:0;top:40px;background:#fff;border:1px solid var(--line);padding:10px 14px;border-radius:8px;z-index:2;max-width:240px;overflow-wrap:anywhere}
+
+/* SkillTape · amber ledger. Color identifies actions; result statuses keep their own meaning. */
+:root{--bg:#fcf9f3;--bg-soft:#f8f0e2;--panel:#fffdfa;--panel-strong:#f8f0e2;--line:#e6d8c2;--line-bright:#cfb997;--text:#30291f;--muted:#75664f;--faint:#75664f;--cyan:#985c20;--cyan-soft:#f4e4ca;--blue:#985c20;--tool-bg:#fcf9f3;--tool-surface:#fffdfa;--tool-ink:#30291f;--tool-muted:#75664f;--tool-line:#e6d8c2;--tool-accent:#985c20;--shadow:0 6px 24px #784c1410}
+html,body,.app-shell{background:var(--bg)}
+.sidebar{background:#f7eddd;border-color:var(--line)}
+.brand-mark{width:32px;height:32px;color:#fff;background:var(--cyan);border-color:var(--cyan);box-shadow:0 3px 8px #985c2020}
+.nav-label,.topbar-kicker{color:var(--cyan);font-weight:550}
+.nav-link:hover{background:#f0dfc3}.nav-link-active{color:#754313;background:#edd7b5;box-shadow:inset 3px 0 var(--cyan);font-weight:600}
+.local-card{background:#fff9ee;border:1px solid var(--line);border-radius:10px}.local-card strong{color:#754313}
+.topbar{background:#fffdfa;border-bottom-color:var(--line)}
+.page-heading{padding:22px 24px;background:#f8edda;border:1px solid var(--line);border-radius:14px;border-left:4px solid var(--cyan)}
+.page-heading h1{letter-spacing:-.035em}.page-description{color:#75664f}
+.panel,.task-panel,.metric,.permission-card{background:#fffdfa;border-color:var(--line);box-shadow:var(--shadow)}
+.task-panel{border-radius:14px}.task-panel h2,.panel-heading h2{color:#754313}
+.task-panel h2{margin-top:0;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.local-task-grid>.task-panel:nth-child(2){border-top:3px solid var(--cyan)}
+.quantity-editor fieldset{background:#fbf4e8;border-color:var(--line);border-radius:10px}.quantity-editor legend{color:#754313;font-weight:550}
+.task-panel input,.task-panel textarea,select,.receipt-picker input{background:#fff;border-color:#cfb997}
+.task-panel input:focus,.task-panel textarea:focus,select:focus{border-color:var(--cyan)}
+.button-primary,.task-panel .button-primary{background:var(--cyan);border-color:var(--cyan);color:#fff;box-shadow:0 3px 8px #985c2018}
+.button-primary:hover,.task-panel .button-primary:hover{background:#754313;border-color:#754313}
+.task-panel button:not(.button-primary):hover,.button:not(.button-primary):hover{background:#f7ead4;border-color:#c7a675}
+.task-totals{background:#f8edda;border:1px solid var(--line);border-radius:10px;padding:14px}.task-totals strong{color:#754313;font-variant-numeric:tabular-nums}
+.task-table thead,.table-wrap thead{background:#f8f0e2}.task-table tbody tr:hover{background:#fcf5e8}
+.metric-accent{background:#f8edda;border-color:#d7b98b}.metric-accent strong{color:#754313}
+.payload-block,.code-block,.permission-list li{background:#f8f2e8;color:#51422f}
+.saved-task{background:#fcf7ed;border-radius:8px;padding:14px}.saved-receipts{border-color:var(--line);background:#fffdfa}
+.connection-details code{background:#fffdfa;border-color:var(--line)}
+@media(max-width:720px){.page-heading{padding:18px}.task-panel{padding:17px}.brand-mark{width:30px;height:30px}}

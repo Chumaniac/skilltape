@@ -461,7 +461,7 @@ func renderIcon(mark: String, directory: URL) throws {
       bytesPerRow: 0, bitsPerPixel: 0)!
     NSGraphicsContext.saveGraphicsState()
     NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmap)
-    NSColor(calibratedWhite: 0.94, alpha: 1).setFill()
+    NSColor(srgbRed: 0.596078, green: 0.360784, blue: 0.125490, alpha: 1).setFill()
     NSBezierPath(
       roundedRect: NSRect(
         x: side * 0.035, y: side * 0.035, width: side * 0.93, height: side * 0.93),
@@ -470,7 +470,7 @@ func renderIcon(mark: String, directory: URL) throws {
     let font = NSFont.systemFont(ofSize: side * (mark.count > 1 ? 0.33 : 0.5), weight: .medium)
     let text = NSAttributedString(
       string: mark,
-      attributes: [.font: font, .foregroundColor: NSColor(calibratedWhite: 0.16, alpha: 1)])
+      attributes: [.font: font, .foregroundColor: NSColor.white])
     let size = text.size()
     text.draw(at: NSPoint(x: (side - size.width) / 2, y: (side - size.height) / 2 + side * 0.01))
     NSGraphicsContext.restoreGraphicsState()
