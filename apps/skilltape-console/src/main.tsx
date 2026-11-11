@@ -67,7 +67,7 @@ function App() {
     <><a className="skip-link" href="#main-content" onClick={event => {
       event.preventDefault()
       document.getElementById('main-content')?.focus()
-    }}>Skip to content</a><div className="app-shell">
+    }}>跳转到内容</a><div className="app-shell">
       <aside className="sidebar">
         <a className="brand" href="#timeline" translate="no" onClick={protectDraftNavigation}>
           <span className="brand-mark" aria-hidden="true">
@@ -77,26 +77,26 @@ function App() {
           </span>
           <span>
             <strong>SkillTape</strong>
-            <small>Evidence console</small>
+            <small>证据控制台</small>
           </span>
         </a>
         <div className="sidebar-rule" />
-        <nav aria-label="Console sections">
-          <p className="nav-label">Work</p><NavLink href="#task" active={route.page === 'task'} label="Reconcile quantities" /><p className="nav-label">Inspect</p>
-          <NavLink href="#batch" active={route.page === 'batch'} label="Verification batch" />
-          <NavLink href="#deliveries" active={route.page === 'deliveries'} label="Delivery workbench" />
-          <NavLink href="#timeline" active={route.page === 'timeline'} label="Capture timeline" />
-          <NavLink href={'#compile' + skillQuery} active={route.page === 'compile'} label="Compile review" />
-          <NavLink href={'#permissions' + skillQuery} active={route.page === 'permissions'} label="Permissions" />
-          <NavLink href="#receipt" active={route.page === 'receipt'} label="Verify Receipt" />
-          <p className="nav-label" style={{ marginTop: 16 }}>Export</p>
-          <NavLink href={'#export' + skillQuery} active={route.page === 'export'} label="Export guide" />
+        <nav aria-label="控制台导航">
+          <p className="nav-label">操作</p><NavLink href="#task" active={route.page === 'task'} label="核对数量" /><p className="nav-label">检查</p>
+          <NavLink href="#batch" active={route.page === 'batch'} label="验证批次" />
+          <NavLink href="#deliveries" active={route.page === 'deliveries'} label="交付工作台" />
+          <NavLink href="#timeline" active={route.page === 'timeline'} label="采集时间线" />
+          <NavLink href={'#compile' + skillQuery} active={route.page === 'compile'} label="编译复核" />
+          <NavLink href={'#permissions' + skillQuery} active={route.page === 'permissions'} label="权限" />
+          <NavLink href="#receipt" active={route.page === 'receipt'} label="查看验证凭据" />
+          <p className="nav-label" style={{ marginTop: 16 }}>导出</p>
+          <NavLink href={'#export' + skillQuery} active={route.page === 'export'} label="导出指南" />
         </nav>
         <div className="sidebar-bottom">
           <div className="local-card">
             <div>
-              <strong>Saved local evidence</strong>
-              <span>Read-only inspection</span>
+              <strong>已保存本机证据</strong>
+              <span>只读检查</span>
             </div>
           </div>
         </div>
@@ -105,17 +105,17 @@ function App() {
       <div className="main-shell">
         <header className="topbar">
           <div className="topbar-context">
-            <span className="topbar-kicker">Local evidence</span>
+            <span className="topbar-kicker">本机证据</span>
             <span className="topbar-separator">/</span>
             <span>{pageLabel(route.page)}</span>
           </div>
-          <details className="api-status connection-details" aria-label="Local API endpoint">
-            <summary>Local workspace</summary><code>{apiBaseLabel()}</code>
+          <details className="api-status connection-details" aria-label="本机 API 地址">
+            <summary>本地工作区</summary><code>{apiBaseLabel()}</code>
           </details>
         </header>
 
         <main id="main-content" className="main-content" tabIndex={-1}>
-          {route.page === 'not-found' ? <section className="page-section"><header className="page-heading"><div><h1>Page not found</h1><p className="page-description">This link does not name a Console view. Choose a section from navigation or return to your captures.</p></div></header><p><a className="button" href="#timeline">Open capture timeline</a></p></section> : null}
+          {route.page === 'not-found' ? <section className="page-section"><header className="page-heading"><div><h1>页面不存在</h1><p className="page-description">此链接没有对应的控制台页面，请从导航选择功能或返回采集记录。</p></div></header><p><a className="button" href="#timeline">打开采集时间线</a></p></section> : null}
           {route.page === 'task' ? <LocalTaskPage /> : null}
           {route.page === 'batch' ? <BatchReviewPage /> : null}
           {route.page === 'deliveries' ? <DeliveriesPage deliveryId={route.deliveryId} offset={route.deliveryOffset} /> : null}
@@ -128,8 +128,8 @@ function App() {
 
         <BuildIdentity />
         <footer className="app-footer">
-          <span>SkillTape Console <span translate="no">v{metadata.version}</span></span>
-          <span>Local calculations · saved evidence stays read-only</span>
+          <span>SkillTape 控制台 <span translate="no">v{metadata.version}</span></span>
+          <span>本机计算 · 已保存证据保持只读</span>
         </footer>
       </div>
     </div></>
@@ -139,7 +139,7 @@ function App() {
 function protectDraftNavigation(event: React.MouseEvent<HTMLAnchorElement>) {
   if (event.currentTarget.hash === window.location.hash || (readRoute().page === 'task' && event.currentTarget.hash === '#task')) return
   const leaving = new Event('beforeunload', { cancelable: true })
-  if (!window.dispatchEvent(leaving) && !window.confirm('Discard the unsaved local calculation and open another view?')) event.preventDefault()
+  if (!window.dispatchEvent(leaving) && !window.confirm("放弃未保存的本地计算并打开其他页面？")) event.preventDefault()
 }
 
 function NavLink({
@@ -159,15 +159,15 @@ function NavLink({
 }
 
 function pageLabel(page: PageKey): string {
-  if (page === 'task') return 'Reconcile quantities'
-  if (page === 'not-found') return 'Page not found'
-  if (page === 'batch') return 'Verification batch'
-  if (page === 'deliveries') return 'Delivery workbench'
-  if (page === 'compile') return 'Compile review'
-  if (page === 'permissions') return 'Permission review'
-  if (page === 'receipt') return 'Verify Receipt'
-  if (page === 'export') return 'Export guide'
-  return 'Capture timeline'
+  if (page === 'task') return "核对数量"
+  if (page === 'not-found') return "页面不存在"
+  if (page === 'batch') return "验证批次"
+  if (page === 'deliveries') return "交付工作台"
+  if (page === 'compile') return "编译复核"
+  if (page === 'permissions') return "权限复核"
+  if (page === 'receipt') return "查看验证凭据"
+  if (page === 'export') return "导出指南"
+  return "采集时间线"
 }
 
 createRoot(document.getElementById('root')!).render(

@@ -39,7 +39,7 @@ function read() {
     return {
       items: [] as Saved[],
       error:
-        "Saved local tasks could not be read. Original storage was kept; export your current result before changing storage.",
+        "无法读取本地历史。原始存储已保留，修改存储前请先导出当前结果。",
     };
   }
 }
@@ -92,32 +92,32 @@ export function LocalTaskPage() {
       ),
     );
     setResult(null);
-    setMessage("Input changed. Calculate again to refresh the result.");
+    setMessage("输入已改变，请重新计算以更新结果。");
   }
   function showForm() {
     try {
       setFormRows(formRowsFor(JSON.parse(input)));
       setJsonMode(false);
     } catch {
-      setMessage("Correct the JSON input before opening the item editor.");
+      setMessage("请先修正 JSON 输入，再打开物品编辑器。");
     }
   }
   function run() {
     setUnsaved(true);
     setResult(null);
     setBusy(true);
-    setMessage("Checking quantities…");
+    setMessage("正在核对数量…");
     const id = ++generation.current;
     setTimeout(() => {
       if (id !== generation.current) return;
       try {
-        if (input.length > 256000) throw Error("Input is limited to 256 KB.");
+        if (input.length > 256000) throw Error("输入上限为256 KB。");
         setResult(reconcile(JSON.parse(input)));
         setMessage(
-          "Local calculation complete. Review differences before exporting.",
+          "本机计算完成，请在导出前复核差异。",
         );
       } catch (e) {
-        setMessage(e instanceof Error ? e.message : "Input could not be read.");
+        setMessage(e instanceof SyntaxError ? "JSON 格式有误，请检查括号、逗号和引号。" : e instanceof Error ? e.message : "无法读取输入。");
       } finally {
         setBusy(false);
       }
@@ -137,17 +137,17 @@ export function LocalTaskPage() {
         raw = JSON.stringify({ version: 1, items: next });
       if (raw.length > 512000)
         throw Error(
-          "Local history is full. Export this result before removing old records.",
+          "本地历史已满，请先导出当前结果，再移除旧记录。",
         );
       savedStorage().setItem(key, raw);
       setHistory(next);
       setUnsaved(false);
-      setMessage(nativeWorkspace() ? "Saved in this app." : "Saved in this tab. Export before closing it.");
+      setMessage(nativeWorkspace() ? "已保存到本应用。" : "已保存到本标签页，关闭前请导出。");
     } catch (e) {
       setMessage(
         e instanceof Error
           ? e.message
-          : "Storage is unavailable; export the result.",
+          : "存储暂不可用，请导出结果。",
       );
     }
   }
@@ -157,27 +157,25 @@ export function LocalTaskPage() {
     <section className="page-section local-task-workspace">
       <header className="page-heading task-hero">
         <div>
-          <p className="eyebrow">QUANTITY WORKSPACE</p>
-          <h1>Reconcile quantities</h1>
+          <p className="eyebrow">数量核对工作台</p>
+          <h1>核对数量</h1>
           <p className="page-description">
-            Compare expected and received items. Start with an example, edit
-            quantities, then review the differences.
+            核对物品的应有数量与实收数量。可先填入示例，修改数量后查看差异。
           </p>
         </div>
-        <span className="task-mode-badge">Local calculation</span>
+        <span className="task-mode-badge">本机计算</span>
       </header>
-      <div className="task-workspace-stats" aria-label="Current calculation summary">
-        <div className="task-stat task-stat-accent"><span>Input rows</span><strong>{jsonMode ? 'JSON' : formRows.length}</strong><small>{jsonMode ? 'Validate by calculating' : 'Ready to edit'}</small></div>
-        <div className="task-stat"><span>Differences</span><strong>{result ? differenceCount : '—'}</strong><small>{result ? 'From the full comparison' : 'Calculate to compare'}</small></div>
-        <div className="task-stat"><span>Saved locally</span><strong>{history.length}<small> / 20</small></strong><small>Explicit saves only</small></div>
+      <div className="task-workspace-stats" aria-label="当前计算概览">
+        <div className="task-stat task-stat-accent"><span>输入行数</span><strong>{jsonMode ? 'JSON' : formRows.length}</strong><small>{jsonMode ? "计算时校验" : "可直接编辑"}</small></div>
+        <div className="task-stat"><span>差异项</span><strong>{result ? differenceCount : '—'}</strong><small>{result ? "基于完整对比结果" : "计算后对比"}</small></div>
+        <div className="task-stat"><span>本地已保存</span><strong>{history.length}<small> / 20</small></strong><small>仅保留主动保存的记录</small></div>
       </div>
       <p className="task-scope">
-        Runs on this device. This calculation is separate from captured runs
-        and verified Receipts.
+        在本机计算，与已采集运行和验证凭据分开保存。
       </p>
       <div className="local-task-grid">
         <section className="task-panel task-input-panel">
-          <div className="task-section-heading"><h2>1. Input</h2>
+          <div className="task-section-heading"><h2>1. 输入</h2>
           <button
             disabled={busy}
             onClick={() => {
@@ -185,19 +183,19 @@ export function LocalTaskPage() {
               setFormRows(formRowsFor(example));
               setJsonMode(false);
               setResult(null);
-              setMessage("Example filled. No calculation has run.");
+              setMessage("示例已填入，尚未计算。");
             }}
           >
-            Fill example
+            填入示例
           </button></div>
-          <div className="task-actions task-view-switch" role="group" aria-label="Input format">
+          <div className="task-actions task-view-switch" role="group" aria-label="输入格式">
             <button
               type="button"
               disabled={busy || !jsonMode}
               aria-pressed={!jsonMode}
               onClick={showForm}
             >
-              Edit items
+              编辑物品
             </button>
             <button
               type="button"
@@ -205,7 +203,7 @@ export function LocalTaskPage() {
               aria-pressed={jsonMode}
               onClick={() => setJsonMode(true)}
             >
-              Edit JSON
+              编辑 JSON
             </button>
           </div>
           {!jsonMode ? (
@@ -213,11 +211,11 @@ export function LocalTaskPage() {
               <div className="quantity-editor">
                 {formRows.map((row, index) => (
                   <fieldset key={index} disabled={busy}>
-                    <legend>Item {index + 1}</legend>
+                    <legend>物品 {index + 1}</legend>
                     <label>
-                      Item name
+                      物品名称
                       <input
-                        aria-label={"Item name " + (index + 1)}
+                        aria-label={"物品名称 " + (index + 1)}
                         value={row.item}
                         maxLength={128}
                         onChange={(e) =>
@@ -230,9 +228,9 @@ export function LocalTaskPage() {
                       />
                     </label>
                     <label>
-                      Expected
+                      应有数量
                       <input
-                        aria-label={"Expected " + (index + 1)}
+                        aria-label={"应有数量 " + (index + 1)}
                         type="number"
                         min="0"
                         max="1000000000"
@@ -250,9 +248,9 @@ export function LocalTaskPage() {
                       />
                     </label>
                     <label>
-                      Received
+                      实收数量
                       <input
-                        aria-label={"Received " + (index + 1)}
+                        aria-label={"实收数量 " + (index + 1)}
                         type="number"
                         min="0"
                         max="1000000000"
@@ -271,13 +269,13 @@ export function LocalTaskPage() {
                     </label>
                     <button
                       type="button"
-                      aria-label={"Remove item " + (index + 1)}
+                      aria-label={"移除物品 " + (index + 1)}
                       disabled={formRows.length <= 1}
                       onClick={() =>
                         editRows(formRows.filter((_, i) => i !== index))
                       }
                     >
-                      Remove
+                      移除
                     </button>
                   </fieldset>
                 ))}
@@ -292,18 +290,17 @@ export function LocalTaskPage() {
                   ])
                 }
               >
-                Add item
+                添加物品
               </button>
               <p>
-                Enter item names and whole quantities. Use JSON for existing
-                starter inputs.
+                填写物品名称与整数数量；已有任务输入可切换到 JSON。
               </p>
             </>
           ) : null}
           {jsonMode ? (
             <>
               <label htmlFor="task-input">
-                Expected and received quantities (JSON)
+                应有数量与实收数量（JSON）
               </label>
               <textarea
                 id="task-input"
@@ -316,45 +313,44 @@ export function LocalTaskPage() {
                   setInput(e.target.value);
                   setResult(null);
                   setMessage(
-                    "Input changed. Calculate again to refresh the result.",
+                    "输入已改变，请重新计算以更新结果。",
                   );
                 }}
               />
             </>
           ) : null}
           <p>
-            Duplicate item names are added together. Quantities must be whole,
-            nonnegative numbers.
+            同名物品会合并计数，数量必须为非负整数。
           </p>
           <button className="button button-primary" disabled={busy} onClick={run}>
-            {busy ? "Calculating…" : "Calculate differences"}
+            {busy ? "正在计算…" : "计算差异"}
           </button>
         </section>
         <section className="task-panel task-result-panel">
-          <h2>2. Result</h2>
+          <h2>2. 结果</h2>
           <p role="status">
-            {message || "No result yet. Fill an example or enter quantities."}
+            {message || "暂无结果，请填入示例或输入数量。"}
           </p>
           {result ? (
             <>
               <div className="task-totals" data-balanced={result.balanced}>
                 <span className="task-result-symbol" aria-hidden="true">{result.balanced ? '=' : 'Δ'}</span>
-                <strong>{result.rows.length} items</strong>
+                <strong>{result.rows.length} 种物品</strong>
                 <span>
                   {result.rows.filter((r) => r.difference !== 0).length}{" "}
-                  differences
+                  项差异
                 </span>
-                <span>{result.balanced ? "Balanced" : "Review required"}</span>
+                <span>{result.balanced ? "数量一致" : "需要复核"}</span>
               </div>
-              <div className="task-table-toolbar"><span>Comparison details</span><label className="task-difference-toggle"><input type="checkbox" checked={onlyDifferences} onChange={event => setOnlyDifferences(event.target.checked)} />Only differences</label></div>
+              <div className="task-table-toolbar"><span>对比明细</span><label className="task-difference-toggle"><input type="checkbox" checked={onlyDifferences} onChange={event => setOnlyDifferences(event.target.checked)} />仅看差异</label></div>
               <div className="task-table">
                 <table>
                   <thead>
                     <tr>
-                      <th>Item</th>
-                      <th>Expected</th>
-                      <th>Received</th>
-                      <th>Difference</th>
+                      <th>物品</th>
+                      <th>应有数量</th>
+                      <th>实收数量</th>
+                      <th>差异</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -372,54 +368,52 @@ export function LocalTaskPage() {
                   </tbody>
                 </table>
               </div>
-              {onlyDifferences && visibleRows.length === 0 && <p className="task-filter-empty">No differences in this result. The full result stays available for export.</p>}
+              {onlyDifferences && visibleRows.length === 0 && <p className="task-filter-empty">本次结果没有差异，仍可导出完整结果。</p>}
               <div className="task-actions">
                 <button onClick={save} disabled={!!initial.error} data-desktop-save="calculation">
-                  {nativeWorkspace() ? "Save in this app" : "Save in this tab"}
+                  {nativeWorkspace() ? "保存到本应用" : "保存到本标签页"}
                 </button>
                 <button
                   onClick={() => download(result, "reconciliation-result.json")}
                 >
-                  Export result
+                  导出结果
                 </button>
                 <button
                   onClick={() => download(JSON.parse(input), "request.json")}
                 >
-                  Export starter input
+                  导出任务输入
                 </button>
               </div>
               <details>
-                <summary>Use with the local capture workflow</summary>
+                <summary>接入本机采集流程</summary>
                 <p>
-                  Create a reconcile starter directly from the exported request.json,
-                  review its inputs, then run the capture and verification workflow. A browser
-                  calculation does not issue a Receipt.
+                  使用导出的 request.json 创建对账任务，核对输入后再执行采集与验证。页面中的数量计算不会生成验证凭据。
                 </p>
                 <code>
                   skilltape starter new reconcile --request request.json --output NEW_TASK_DIRECTORY
                 </code>
               </details>
             </>
-          ) : <div className="task-result-empty"><svg viewBox="0 0 120 100" width="120" height="100" aria-hidden="true"><rect x="17" y="10" width="86" height="78" rx="10"/><path d="M17 32h86M46 32v56M74 32v56M17 52h86M17 70h86"/></svg><strong>Awaiting calculation</strong><p>Compare your quantities to see matched items and differences here.</p></div>}
+          ) : <div className="task-result-empty"><svg viewBox="0 0 120 100" width="120" height="100" aria-hidden="true"><rect x="17" y="10" width="86" height="78" rx="10"/><path d="M17 32h86M46 32v56M74 32v56M17 52h86M17 70h86"/></svg><strong>等待计算</strong><p>计算后，这里会显示数量一致的物品和差异。</p></div>}
         </section>
       </div>
       <section className="task-panel task-history-panel">
-        <h2>{nativeWorkspace() ? "3. Saved in this app" : "3. Saved in this tab"}</h2>
+        <h2>{nativeWorkspace() ? "3. 本应用保存的记录" : "3. 本标签页保存的记录"}</h2>
         <p>{nativeWorkspace()
-          ? "Up to 20 records / 512 KB. Explicit saves stay in this app until removed; local calculations remain separate from workspace evidence."
-          : "Up to 20 records / 512 KB. Explicit saves only; closing this tab clears its session storage."}</p>
+          ? "最多20条记录、512 KB。主动保存的记录在移除前持续保留于本应用，与工作区执行证据分开存放。"
+          : "最多20条记录、512 KB。仅保留主动保存记录，关闭标签页会清除会话存储。"}</p>
         {history.length ? (
           history.map((item) => (
             <div className="saved-task" key={item.id}>
               <span>
-                {new Date(item.at).toLocaleString()} · {item.result.rows.length}{" "}
-                items · {item.result.balanced ? "balanced" : "differences"}
+                {new Date(item.at).toLocaleString('zh-CN', { hour12: false })} · {item.result.rows.length}{" "}
+                种物品 · {item.result.balanced ? "数量一致" : "存在差异"}
               </span>
               <button
                 onClick={() => {
                   if (
                     window.confirm(
-                      "Replace the current input with this saved task?",
+                      "使用这条保存记录替换当前输入？",
                     )
                   ) {
                     setInput(JSON.stringify(item.input, null, 2));
@@ -427,20 +421,20 @@ export function LocalTaskPage() {
                     setJsonMode(false);
                     setResult(item.result);
                     setUnsaved(false);
-                    setMessage("Opened a saved local calculation.");
+                    setMessage("已打开保存的本机计算。");
                   }
                 }}
               >
-                Open
+                打开
               </button>
               <button
                 onClick={() => download(item, "saved-reconciliation.json")}
               >
-                Export
+                导出
               </button>
               <button
                 onClick={() => {
-                  if (window.confirm("Remove this saved local task?")) {
+                  if (window.confirm("移除这条本地保存记录？")) {
                     try {
                       const next = history.filter((n) => n.id !== item.id);
                       savedStorage().setItem(
@@ -449,17 +443,17 @@ export function LocalTaskPage() {
                       );
                       setHistory(next);
                     } catch {
-                      setMessage("Could not update local history.");
+                      setMessage("无法更新本地历史。");
                     }
                   }
                 }}
               >
-                Remove
+                移除
               </button>
             </div>
           ))
         ) : (
-          <p>No saved tasks.</p>
+          <p>暂无保存记录。</p>
         )}
       </section>
     </section>

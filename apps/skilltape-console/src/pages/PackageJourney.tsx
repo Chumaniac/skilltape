@@ -8,14 +8,14 @@ export function CommandCard({ label, command }: { label: string; command: string
   const alive = useRef(true)
   useEffect(() => { alive.current = true; return () => { alive.current = false } }, [])
   return <div className="journey-command"><CodeBlock label={label} value={command} /><button type="button" className="button" onClick={async () => {
-    try { await navigator.clipboard.writeText(command); if (alive.current) setResult({ value: command, message: 'Command copied. Nothing has run.' }) }
-    catch { if (alive.current) setResult({ value: command, message: 'Copy unavailable. Select the command text and copy it manually.' }) }
-  }}>Copy {label.toLowerCase()}</button><p className="muted" role="status">{result?.value === command ? result.message : ''}</p></div>
+    try { await navigator.clipboard.writeText(command); if (alive.current) setResult({ value: command, message: "命令已复制，尚未执行。" }) }
+    catch { if (alive.current) setResult({ value: command, message: "无法自动复制，请选中命令文本手动复制。" }) }
+  }}>复制 {label.toLowerCase()}</button><p className="muted" role="status">{result?.value === command ? result.message : ''}</p></div>
 }
 export function PackageJourney({ skillId, current }: { skillId: string; current: 'compile' | 'permissions' }) {
   const query = '?skill=' + encodeURIComponent(skillId)
-  return <article className="panel package-journey" aria-labelledby="package-journey-title"><h2 id="package-journey-title">Continue with this package</h2><p>Review its permissions, verify it locally, then prepare the export. The package stays selected throughout.</p><nav className="journey-actions" aria-label="Package next steps">
-    {current === 'permissions' ? <a className="button" href={'#compile' + query}>Return to package review</a> : <a className="button" href={'#permissions' + query}>Review this package’s permissions</a>}
-    <a className="button" href={'#export' + query}>Prepare this package’s export</a>
-  </nav><p className="muted">Lint and declared policy checks are separate from a successful verification Receipt.</p></article>
+  return <article className="panel package-journey" aria-labelledby="package-journey-title"><h2 id="package-journey-title">继续处理此技能包</h2><p>先复核权限，再在本机验证，最后准备导出。过程中会保留已选择的技能包。</p><nav className="journey-actions" aria-label="技能包下一步">
+    {current === 'permissions' ? <a className="button" href={'#compile' + query}>返回技能包复核</a> : <a className="button" href={'#permissions' + query}>复核此技能包权限</a>}
+    <a className="button" href={'#export' + query}>准备导出此技能包</a>
+  </nav><p className="muted">静态检查和声明策略检查，与成功验证凭据是不同的结果。</p></article>
 }
