@@ -32,8 +32,12 @@ export class ApiError extends Error {
 }
 
 async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
-  const timeout = AbortSignal.timeout(15_000)
-  const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout
+  const request = new AbortController()
+  const cancel = () => request.abort()
+  if (signal?.aborted) cancel()
+  else signal?.addEventListener('abort', cancel, { once: true })
+  const deadline = window.setTimeout(cancel, 15_000)
+  const requestSignal = request.signal
   let response: Response
   let payload: unknown
   try {
@@ -44,8 +48,11 @@ async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
     })
   } catch (error) {
     if (signal?.aborted) throw error
-    if (timeout.aborted) throw new ApiError("读取超时，请检查本机服务后重试。", 408, 'request_timeout')
+    if (requestSignal.aborted) throw new ApiError("读取超时，请检查本机服务后重试。", 408, 'request_timeout')
     throw new ApiError("连接失败。请启动本机控制台后重试。", 0, 'connection_failed')
+  } finally {
+    window.clearTimeout(deadline)
+    signal?.removeEventListener('abort', cancel)
   }
   if (!response.ok) {
     const error =
