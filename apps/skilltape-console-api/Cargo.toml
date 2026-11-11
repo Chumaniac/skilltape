@@ -1,0 +1,32 @@
+[package]
+name = "skilltape-console-api"
+version = "0.4.1"
+edition.workspace = true
+license.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "skilltape-console-api"
+path = "src/main.rs"
+
+[dependencies]
+axum.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+libc.workspace = true
+errno = "=0.3.14"
+skilltape-core = { path = "../../crates/skilltape-core" }
+skilltape-verify = { path = "../../crates/skilltape-verify" }
+skilltape-schema = { path = "../../crates/skilltape-schema" }
+skilltape-tape = { path = "../../crates/skilltape-tape" }
+thiserror.workspace = true
+tokio.workspace = true
+tokio-stream.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tower.workspace = true

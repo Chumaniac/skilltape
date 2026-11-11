@@ -1,0 +1,26 @@
+.worktrees/
+.superpowers/sdd/
+target/
+__pycache__/
+/apps/skilltape-console/node_modules
+/apps/skilltape-console/dist/
+/apps/skilltape-console/test-results/
+
+desktop/build/
+__pycache__/
+
+# Swift Package Manager native-host builds
+.build/
+.swiftpm/
+
+# Community distribution build outputs and private runtime
+release/
+.runtime/
+*.app/
+*.sqlite3*
+*.db
+*.log
+.local/
+
+# Never publish a local target directory or build-cache link
+/target

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "skilltape.dev/tape/v1",
+  "type": "object",
+  "required": ["sequence", "occurred_at_ms", "kind", "source", "payload", "redaction"],
+  "additionalProperties": false,
+  "properties": {
+    "sequence": { "type": "integer", "minimum": 0 },
+    "occurred_at_ms": { "type": "integer", "minimum": 0 },
+    "kind": { "enum": ["session_started", "session_finished", "terminal_command", "filesystem_changed", "permission_requested", "permission_decided", "environment_snapshot", "capture_warning"] },
+    "source": { "enum": ["cli", "shell", "filesystem", "permission", "environment", "system"] },
+    "payload": {},
+    "redaction": { "enum": ["unredacted", "redacted", "partially_redacted"] }
+  }
+}

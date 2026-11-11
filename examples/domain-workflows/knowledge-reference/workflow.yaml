@@ -1,0 +1,37 @@
+{
+  "schema": "skilltape.dev/workflow/v1",
+  "steps": [
+    {
+      "id": "copy-0",
+      "action": "file",
+      "operation": "copy",
+      "from": "inputs/note.md",
+      "to": "outputs/knowledge/note.md"
+    },
+    {
+      "id": "check-0",
+      "action": "assert",
+      "assertion": {
+        "type": "file_hash",
+        "path": "outputs/knowledge/note.md",
+        "hash": "7e208c7d84ab0c4d705ed5c964194b797f72b8efe1565ba98308e731b6fee75e"
+      }
+    },
+    {
+      "id": "copy-1",
+      "action": "file",
+      "operation": "copy",
+      "from": "inputs/source.md",
+      "to": "outputs/knowledge/source.md"
+    },
+    {
+      "id": "check-1",
+      "action": "assert",
+      "assertion": {
+        "type": "file_hash",
+        "path": "outputs/knowledge/source.md",
+        "hash": "e395c41f8b0fdb75e92b2b1e101e698652ef1f6c1ffffd7951f849b850b41d3c"
+      }
+    }
+  ]
+}

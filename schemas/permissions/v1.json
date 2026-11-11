@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skilltape.dev/schemas/permissions/v1.json",
+  "type": "object",
+  "required": ["schema", "filesystem", "process", "network", "secrets"],
+  "properties": {
+    "schema": { "const": "skilltape.dev/permissions/v1" },
+    "filesystem": { "$ref": "#/$defs/filesystem" },
+    "process": { "$ref": "#/$defs/process" },
+    "network": { "$ref": "#/$defs/network" },
+    "secrets": { "$ref": "#/$defs/secrets" }
+  },
+  "patternProperties": { "^x-": true },
+  "additionalProperties": false,
+  "$defs": {
+    "filesystem": {
+      "type": "object",
+      "required": ["read", "write"],
+      "properties": {
+        "read": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "write": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      },
+      "patternProperties": { "^x-": true },
+      "additionalProperties": false
+    },
+    "process": {
+      "type": "object",
+      "required": ["executables", "max_processes", "default_timeout_ms"],
+      "properties": {
+        "executables": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "max_processes": { "type": "integer", "minimum": 1 },
+        "default_timeout_ms": { "type": "integer", "minimum": 1 }
+      },
+      "patternProperties": { "^x-": true },
+      "additionalProperties": false
+    },
+    "network": {
+      "type": "object",
+      "required": ["enabled", "allow_hosts"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "allow_hosts": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      },
+      "patternProperties": { "^x-": true },
+      "additionalProperties": false
+    },
+    "secrets": {
+      "type": "object",
+      "required": ["read_environment"],
+      "properties": { "read_environment": { "type": "boolean" } },
+      "patternProperties": { "^x-": true },
+      "additionalProperties": false
+    }
+  }
+}

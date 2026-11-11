@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "name": "SkillTape",
+  "identifier": "com.chumaniac.skilltape",
+  "mark": "ST",
+  "port": 19001,
+  "smokePort": 19011,
+  "mode": "process",
+  "assets": "apps/skilltape-console/dist",
+  "workspaceSelectable": true,
+  "readySelector": "main",
+  "launch": {
+    "executable": "{{REPO}}/target/release/skilltape-console-api",
+    "arguments": [
+      "--workspace",
+      "{{WORKSPACE}}",
+      "--port",
+      "19001",
+      "--static-root",
+      "{{RESOURCES}}/ui"
+    ],
+    "workingDirectory": "{{REPO}}",
+    "healthPath": "",
+    "healthMarker": "SkillTape",
+    "stopOnQuit": true,
+    "smokeArguments": [
+      "--workspace",
+      "{{SMOKE_DIR}}",
+      "--port",
+      "19011",
+      "--static-root",
+      "{{RESOURCES}}/ui"
+    ]
+  },
+  "saveSelector": "[data-desktop-save]"
+}

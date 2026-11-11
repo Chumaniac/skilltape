@@ -1,0 +1,7 @@
+{
+  "schema": "skilltape.dev/permissions/v1",
+  "filesystem": { "read": [], "write": ["../../outside.txt"] },
+  "process": { "executables": [], "max_processes": 1, "default_timeout_ms": 120000 },
+  "network": { "enabled": false, "allow_hosts": [] },
+  "secrets": { "read_environment": false }
+}

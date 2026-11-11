@@ -1,0 +1,320 @@
+use std::path::PathBuf;
+use std::process::ExitCode;
+
+use clap::{Parser, Subcommand};
+use skilltape_core::{create_skill_template, Diagnostic, LintReport, SkillPackage};
+
+use crate::output;
+
+#[path = "batch_command.rs"]
+mod batch_command;
+#[path = "capture_command.rs"]
+mod capture_command;
+#[path = "compile_command.rs"]
+mod compile_command;
+#[path = "console_command.rs"]
+mod console_command;
+#[path = "export_command.rs"]
+mod export_command;
+#[path = "preflight_command.rs"]
+mod preflight_command;
+#[path = "run_command.rs"]
+mod run_command;
+#[path = "starter_command.rs"]
+mod starter_command;
+
+const PACKAGE_ERROR_EXIT_CODE: u8 = 2;
+const POLICY_ERROR_EXIT_CODE: u8 = 3;
+
+#[derive(Parser)]
+#[command(name = "skilltape")]
+pub struct Cli {
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    /// Print source, channel and declared capabilities without reading a workspace.
+    BuildInfo,
+    /// Prepare, execute and resume a bounded set of local verification cases.
+    Batch {
+        #[command(subcommand)]
+        command: batch_command::BatchCommand,
+    },
+    /// Prepare or explicitly run one of two bounded, local starter tasks.
+    Starter {
+        #[command(subcommand)]
+        command: starter_command::StarterCommand,
+    },
+    /// Inspect package policy without executing steps or creating any output.
+    Preflight {
+        skill_path: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    Init {
+        name: String,
+        #[arg(long)]
+        output: PathBuf,
+        #[arg(long)]
+        force: bool,
+    },
+    Lint {
+        path: PathBuf,
+        #[arg(long)]
+        strict: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    Capture {
+        name: String,
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        #[arg(long)]
+        command: Option<String>,
+        /// Pass one literal argument to --command; repeat for multiple arguments.
+        #[arg(long = "arg", action = clap::ArgAction::Append, requires = "command")]
+        args: Vec<String>,
+        #[arg(long)]
+        interactive: bool,
+        #[arg(long)]
+        output: Option<PathBuf>,
+        #[arg(long, action = clap::ArgAction::Append)]
+        allow_env: Vec<String>,
+        #[arg(long, default_value_t = 64 * 1024)]
+        max_output_bytes: usize,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        yes: bool,
+    },
+    Compile {
+        tape: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+        #[arg(long)]
+        provider: Option<String>,
+        #[arg(long)]
+        accept_proposal: bool,
+    },
+    Console {
+        #[arg(long, default_value = ".")]
+        workspace: PathBuf,
+        #[arg(long, default_value_t = 0)]
+        port: u16,
+        #[arg(long)]
+        open: bool,
+    },
+    Replay {
+        skill_path: PathBuf,
+        #[arg(long)]
+        input: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    Verify {
+        skill_path: PathBuf,
+        #[arg(long)]
+        input: Option<PathBuf>,
+        #[arg(long)]
+        receipt: Option<PathBuf>,
+        /// Optional JSON run context; use RECEIPT.json.context for Console discovery.
+        #[arg(long)]
+        context: Option<PathBuf>,
+        /// Record content-free start/completion metadata in a separate private directory.
+        #[arg(long)]
+        attempt_dir: Option<PathBuf>,
+        #[arg(long, conflicts_with = "receipt")]
+        delivery_dir: Option<PathBuf>,
+        /// Require a regular file relative to the output root; repeat up to 64 times.
+        #[arg(long = "expect-file", value_name = "PATH")]
+        expected_files: Vec<String>,
+        /// Require exact output bytes; shares the 64-requirement limit with --expect-file.
+        #[arg(long = "expect-sha256", value_name = "PATH=SHA256")]
+        expected_hashes: Vec<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    Export {
+        skill_path: PathBuf,
+        #[arg(long)]
+        target: String,
+        #[arg(long)]
+        output: PathBuf,
+        #[arg(long)]
+        receipt: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+pub fn run() -> ExitCode {
+    let _interrupt_guard = if matches!(
+        std::env::args().nth(1).as_deref(),
+        Some("capture" | "replay" | "verify" | "starter" | "batch")
+    ) {
+        Some(crate::interrupt::InterruptGuard::install())
+    } else {
+        None
+    };
+    match Cli::parse().command {
+        Command::BuildInfo => {
+            println!(
+                "{}",
+                skilltape_core::build_info::build_info(env!("CARGO_PKG_VERSION"))
+            );
+            ExitCode::SUCCESS
+        }
+        Command::Batch { command } => batch_command::run(command),
+        Command::Starter { command } => starter_command::run(command),
+        Command::Preflight { skill_path, json } => preflight_command::run(skill_path, json),
+        Command::Init {
+            name,
+            output,
+            force,
+        } => init(name, output, force),
+        Command::Lint { path, strict, json } => lint(path, strict, json),
+        Command::Capture {
+            name,
+            workspace,
+            command,
+            args,
+            interactive,
+            output,
+            allow_env,
+            max_output_bytes,
+            json,
+            yes,
+        } => capture_command::run(capture_command::CaptureConfig {
+            name,
+            workspace,
+            command,
+            args,
+            interactive,
+            output,
+            allow_env,
+            max_output_bytes,
+            json,
+            yes,
+        }),
+        Command::Compile {
+            tape,
+            output,
+            provider,
+            accept_proposal,
+        } => compile_command::run(compile_command::CompileConfig {
+            tape,
+            output,
+            provider,
+            accept_proposal,
+        }),
+        Command::Console {
+            workspace,
+            port,
+            open,
+        } => console_command::run(console_command::ConsoleConfig {
+            workspace,
+            port,
+            open,
+        }),
+        Command::Replay {
+            skill_path,
+            input,
+            json,
+        } => run_command::replay(run_command::ReplayConfig {
+            skill_path,
+            input,
+            json,
+        }),
+        Command::Verify {
+            skill_path,
+            input,
+            receipt,
+            context,
+            attempt_dir,
+            delivery_dir,
+            expected_files,
+            expected_hashes,
+            json,
+        } => run_command::verify(
+            run_command::VerifyConfig {
+                skill_path,
+                input,
+                receipt,
+                context,
+                delivery_dir,
+                expected_files,
+                expected_hashes,
+                json,
+            },
+            attempt_dir,
+        ),
+        Command::Export {
+            skill_path,
+            target,
+            output,
+            receipt,
+            json,
+        } => export_command::run(export_command::ExportConfig {
+            skill_path,
+            target,
+            output,
+            receipt,
+            json,
+        }),
+    }
+}
+
+fn lint(path: PathBuf, strict: bool, json: bool) -> ExitCode {
+    let package = match SkillPackage::load(&path) {
+        Ok(package) => package,
+        Err(error) => {
+            eprintln!("{error}");
+            return ExitCode::from(2);
+        }
+    };
+
+    let report = package.lint(strict);
+    if json {
+        println!("{}", output::json_report(&report));
+    } else {
+        print!("{}", output::human_report(&report));
+    }
+
+    lint_exit_code(&report)
+}
+
+fn lint_exit_code(report: &LintReport) -> ExitCode {
+    if report.errors.is_empty() {
+        return ExitCode::SUCCESS;
+    }
+
+    if report.errors.iter().any(is_package_or_schema_failure) {
+        ExitCode::from(PACKAGE_ERROR_EXIT_CODE)
+    } else {
+        ExitCode::from(POLICY_ERROR_EXIT_CODE)
+    }
+}
+
+fn is_package_or_schema_failure(diagnostic: &Diagnostic) -> bool {
+    matches!(diagnostic.code.as_str(), "PKG001" | "PKG002" | "PKG003")
+}
+
+fn init(name: String, output: PathBuf, force: bool) -> ExitCode {
+    if output.exists() && !force {
+        eprintln!("target already exists: {}", output.display());
+        return ExitCode::FAILURE;
+    }
+
+    match create_skill_template(&output, &name) {
+        Ok(()) => {
+            println!("Initialized {} at {}", name, output.display());
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("{error}");
+            ExitCode::FAILURE
+        }
+    }
+}

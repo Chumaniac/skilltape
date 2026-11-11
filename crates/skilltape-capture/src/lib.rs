@@ -1,0 +1,15 @@
+//! Secret-safe primitives shared by Skilltape capture backends.
+
+mod environment;
+mod filesystem;
+mod pty;
+mod redaction;
+mod session;
+
+pub use environment::{snapshot_environment, EnvironmentSnapshot, EnvironmentVariable};
+pub use filesystem::{
+    merge_capture_timeline, watch_workspace, FilesystemCaptureError, FilesystemChange,
+    FilesystemChangeKind, TimelineBatch, TimelineEvent, TimelineFilesystemChange,
+};
+pub use redaction::{redact_text, RedactedText, RedactionConfig, RedactionMetadata};
+pub use session::{capture_terminal, CaptureError, CaptureOptions, CaptureSummary, TerminalSize};

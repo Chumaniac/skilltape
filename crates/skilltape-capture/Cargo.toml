@@ -1,0 +1,22 @@
+[package]
+name = "skilltape-capture"
+version = "0.2.3"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+notify.workspace = true
+portable-pty.workspace = true
+regex.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+skilltape-tape = { path = "../skilltape-tape" }
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true

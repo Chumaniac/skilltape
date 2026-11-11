@@ -1,0 +1,52 @@
+[package]
+name = "skilltape-cli"
+version = "0.4.1"
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "skilltape"
+path = "src/main.rs"
+
+[[test]]
+name = "security_path_escape"
+path = "../../tests/security/path_escape.rs"
+
+[[test]]
+name = "security_secret_leak"
+path = "../../tests/security/secret_leak.rs"
+
+[[test]]
+name = "integration_full_journey"
+path = "../../tests/integration/full_journey.rs"
+
+[[bench]]
+name = "capture_compile"
+path = "../../benchmarks/capture_compile.rs"
+harness = false
+
+[dependencies]
+clap.workspace = true
+ctrlc.workspace = true
+libc.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+skilltape-capture = { path = "../skilltape-capture" }
+skilltape-compiler = { path = "../skilltape-compiler" }
+skilltape-core = { path = "../skilltape-core" }
+skilltape-export = { path = "../skilltape-export" }
+skilltape-policy = { path = "../skilltape-policy" }
+skilltape-runner = { path = "../skilltape-runner" }
+skilltape-tape = { path = "../skilltape-tape" }
+skilltape-verify = { path = "../skilltape-verify" }
+tempfile.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+skilltape-console-api = { path = "../../apps/skilltape-console-api" }
+assert_cmd.workspace = true
+predicates.workspace = true
+serde_yaml.workspace = true

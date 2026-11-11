@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skilltape.dev/schemas/lock/v1.json",
+  "type": "object",
+  "required": ["schema", "engine", "tools", "scripts"],
+  "properties": {
+    "schema": { "const": "skilltape.dev/lock/v1" },
+    "engine": { "$ref": "#/$defs/engine" },
+    "tools": { "type": "array", "items": { "$ref": "#/$defs/tool" } },
+    "scripts": { "type": "array", "items": { "$ref": "#/$defs/script" } }
+  },
+  "patternProperties": { "^x-": true },
+  "additionalProperties": false,
+  "$defs": {
+    "engine": {
+      "type": "object",
+      "required": ["version"],
+      "properties": { "version": { "type": "string", "minLength": 1 } },
+      "patternProperties": { "^x-": true },
+      "additionalProperties": false
+    },
+    "tool": {
+      "type": "object",
+      "required": ["program", "version"],
+      "properties": {
+        "program": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "minLength": 1 }
+      },
+      "patternProperties": { "^x-": true },
+      "additionalProperties": false
+    },
+    "script": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "minLength": 1 }
+      },
+      "patternProperties": { "^x-": true },
+      "additionalProperties": false
+    }
+  }
+}

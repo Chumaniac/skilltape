@@ -1,0 +1,175 @@
+import { useEffect, useState } from 'react'
+import { createRoot } from 'react-dom/client'
+
+import { apiBaseLabel, isSavedEvidenceId } from './api'
+import { CompileReviewPage } from './pages/CompileReview'
+import { ExportTargetsPage } from './pages/ExportTargets'
+import { PermissionReviewPage } from './pages/PermissionReview'
+import { ReceiptViewPage } from './pages/ReceiptView'
+import { TimelinePage } from './pages/Timeline'
+import { DeliveriesPage } from './pages/Deliveries'
+import { BatchReviewPage } from './pages/BatchReview'
+import { LocalTaskPage } from './pages/LocalTask'
+import metadata from '../package.json'
+import { BuildIdentity } from './BuildIdentity'
+import './styles.css'
+
+type PageKey = 'task' | 'timeline' | 'compile' | 'permissions' | 'receipt' | 'export' | 'deliveries' | 'batch' | 'not-found'
+
+interface RouteState {
+  page: PageKey
+  skillId?: string
+  receiptId?: string
+  tapeId?: string
+  tapeOffset: number
+  eventOffset: number
+  deliveryId?: string
+  deliveryOffset: number
+}
+
+function readOffset(value: string | null): number {
+  const offset = Number(value)
+  return Number.isSafeInteger(offset) && offset >= 0 ? offset : 0
+}
+
+function readRoute(): RouteState {
+  const native = (window as Window & { __NATIVE_WORKSPACE__?: boolean }).__NATIVE_WORKSPACE__ === true
+  const hash = window.location.hash.replace(/^#/, '') || (native ? 'task' : 'timeline')
+  const [pageValue, query] = hash.split('?')
+  const page: PageKey =
+    pageValue === 'task' || pageValue === 'timeline' || pageValue === 'compile' || pageValue === 'permissions' || pageValue === 'receipt' || pageValue === 'export' || pageValue === 'deliveries' || pageValue === 'batch'
+      ? pageValue
+      : 'not-found'
+  const params = new URLSearchParams(query)
+  return {
+    page,
+    skillId: params.get('skill') ?? undefined,
+    receiptId: params.get('run') ?? undefined,
+    tapeId: params.get('tape') ?? undefined,
+    tapeOffset: readOffset(params.get('tapesOffset')),
+    eventOffset: readOffset(params.get('eventsOffset')),
+    deliveryId: params.get('delivery') ?? undefined,
+    deliveryOffset: readOffset(params.get('deliveryOffset')),
+  }
+}
+
+function App() {
+  const [route, setRoute] = useState<RouteState>(readRoute)
+  const skillQuery = route.skillId && isSavedEvidenceId(route.skillId) ? '?skill=' + encodeURIComponent(route.skillId) : ''
+
+  useEffect(() => {
+    const handleHashChange = () => setRoute(readRoute())
+    window.addEventListener('hashchange', handleHashChange)
+    return () => window.removeEventListener('hashchange', handleHashChange)
+  }, [])
+
+  return (
+    <><a className="skip-link" href="#main-content" onClick={event => {
+      event.preventDefault()
+      document.getElementById('main-content')?.focus()
+    }}>Skip to content</a><div className="app-shell">
+      <aside className="sidebar">
+        <a className="brand" href="#timeline" translate="no" onClick={protectDraftNavigation}>
+          <span className="brand-mark" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </span>
+          <span>
+            <strong>SkillTape</strong>
+            <small>Evidence console</small>
+          </span>
+        </a>
+        <div className="sidebar-rule" />
+        <nav aria-label="Console sections">
+          <p className="nav-label">Work</p><NavLink href="#task" active={route.page === 'task'} label="Reconcile quantities" /><p className="nav-label">Inspect</p>
+          <NavLink href="#batch" active={route.page === 'batch'} label="Verification batch" />
+          <NavLink href="#deliveries" active={route.page === 'deliveries'} label="Delivery workbench" />
+          <NavLink href="#timeline" active={route.page === 'timeline'} label="Capture timeline" />
+          <NavLink href={'#compile' + skillQuery} active={route.page === 'compile'} label="Compile review" />
+          <NavLink href={'#permissions' + skillQuery} active={route.page === 'permissions'} label="Permissions" />
+          <NavLink href="#receipt" active={route.page === 'receipt'} label="Verify Receipt" />
+          <p className="nav-label" style={{ marginTop: 16 }}>Export</p>
+          <NavLink href={'#export' + skillQuery} active={route.page === 'export'} label="Export guide" />
+        </nav>
+        <div className="sidebar-bottom">
+          <div className="local-card">
+            <div>
+              <strong>Saved local evidence</strong>
+              <span>Read-only inspection</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <div className="main-shell">
+        <header className="topbar">
+          <div className="topbar-context">
+            <span className="topbar-kicker">Local evidence</span>
+            <span className="topbar-separator">/</span>
+            <span>{pageLabel(route.page)}</span>
+          </div>
+          <details className="api-status connection-details" aria-label="Local API endpoint">
+            <summary>Local workspace</summary><code>{apiBaseLabel()}</code>
+          </details>
+        </header>
+
+        <main id="main-content" className="main-content" tabIndex={-1}>
+          {route.page === 'not-found' ? <section className="page-section"><header className="page-heading"><div><h1>Page not found</h1><p className="page-description">This link does not name a Console view. Choose a section from navigation or return to your captures.</p></div></header><p><a className="button" href="#timeline">Open capture timeline</a></p></section> : null}
+          {route.page === 'task' ? <LocalTaskPage /> : null}
+          {route.page === 'batch' ? <BatchReviewPage /> : null}
+          {route.page === 'deliveries' ? <DeliveriesPage deliveryId={route.deliveryId} offset={route.deliveryOffset} /> : null}
+          {route.page === 'timeline' ? <TimelinePage tapeId={route.tapeId} tapeOffset={route.tapeOffset} eventOffset={route.eventOffset} /> : null}
+          {route.page === 'compile' ? <CompileReviewPage key={route.skillId ?? ''} skillId={route.skillId} /> : null}
+          {route.page === 'permissions' ? <PermissionReviewPage key={route.skillId ?? ''} skillId={route.skillId} /> : null}
+          {route.page === 'receipt' ? <ReceiptViewPage key={route.receiptId ?? ''} receiptId={route.receiptId} skillId={route.skillId} /> : null}
+          {route.page === 'export' ? <ExportTargetsPage key={route.skillId ?? ''} skillId={route.skillId} receiptId={route.receiptId} /> : null}
+        </main>
+
+        <BuildIdentity />
+        <footer className="app-footer">
+          <span>SkillTape Console <span translate="no">v{metadata.version}</span></span>
+          <span>Local calculations · saved evidence stays read-only</span>
+        </footer>
+      </div>
+    </div></>
+  )
+}
+
+function protectDraftNavigation(event: React.MouseEvent<HTMLAnchorElement>) {
+  if (event.currentTarget.hash === window.location.hash || (readRoute().page === 'task' && event.currentTarget.hash === '#task')) return
+  const leaving = new Event('beforeunload', { cancelable: true })
+  if (!window.dispatchEvent(leaving) && !window.confirm('Discard the unsaved local calculation and open another view?')) event.preventDefault()
+}
+
+function NavLink({
+  href,
+  active,
+  label,
+}: {
+  href: string
+  active: boolean
+  label: string
+}) {
+  return (
+    <a className={'nav-link' + (active ? ' nav-link-active' : '')} href={href} aria-current={active ? 'page' : undefined} onClick={protectDraftNavigation}>
+      <span>{label}</span>
+    </a>
+  )
+}
+
+function pageLabel(page: PageKey): string {
+  if (page === 'task') return 'Reconcile quantities'
+  if (page === 'not-found') return 'Page not found'
+  if (page === 'batch') return 'Verification batch'
+  if (page === 'deliveries') return 'Delivery workbench'
+  if (page === 'compile') return 'Compile review'
+  if (page === 'permissions') return 'Permission review'
+  if (page === 'receipt') return 'Verify Receipt'
+  if (page === 'export') return 'Export guide'
+  return 'Capture timeline'
+}
+
+createRoot(document.getElementById('root')!).render(
+  <App />,
+)

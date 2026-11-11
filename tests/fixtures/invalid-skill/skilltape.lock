@@ -1,0 +1,6 @@
+{
+  "schema": "skilltape.dev/lock/v1",
+  "engine": { "version": "0.1.0" },
+  "tools": [{ "program": "python", "version": "system" }],
+  "scripts": []
+}

@@ -1,0 +1,40 @@
+{
+  "schema": "skilltape.dev/skill/v1",
+  "name": "verified-order-delivery",
+  "version": "0.1.0",
+  "description": "Compute a synthetic daily order summary, then preserve an independently inspectable delivery.",
+  "engine": {
+    "min_version": "0.1.0"
+  },
+  "entrypoint": {
+    "workflow": "workflow.yaml",
+    "permissions": "permissions.json",
+    "lockfile": "skilltape.lock"
+  },
+  "inputs": [
+    {
+      "id": "orders",
+      "type": "directory",
+      "required": true,
+      "description": "Small synthetic order CSV supplied with --input."
+    }
+  ],
+  "outputs": [
+    {
+      "id": "metrics",
+      "type": "file",
+      "path": "outputs/metrics.csv"
+    },
+    {
+      "id": "summary",
+      "type": "file",
+      "path": "outputs/summary.json"
+    }
+  ],
+  "targets": [
+    "generic-agent-skill",
+    "claude-code",
+    "codex",
+    "cursor"
+  ]
+}

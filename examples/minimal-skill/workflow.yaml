@@ -1,0 +1,12 @@
+schema: skilltape.dev/workflow/v1
+steps:
+  - id: write-message
+    action: exec
+    program: /bin/cp
+    args:
+      - inputs/sample.txt
+      - message.txt
+    timeout_ms: 3000
+    outputs:
+      - path: message.txt
+        type: text

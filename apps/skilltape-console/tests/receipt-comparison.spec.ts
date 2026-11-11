@@ -1,0 +1,57 @@
+import {test, expect} from '@playwright/test'
+const digest='a'.repeat(64)
+const identity=(id:string,status:string)=>({id,receipt_sha256:digest,run_id:digest,skill_hash:digest,status,context_state:'unrecorded'})
+const comparison=()=>({schema:'skilltape.dev/receipt-comparison/v1',before:identity('before','succeeded'),after:identity('after','assertion_failed'),comparability:'unknown',condition_findings:['conditions_unrecorded'],counts:{new_non_success:1,no_longer_observed_non_success:0,continuing_non_success:0,total_groups:1,outcome_groups_changed:1},changes:[{key:digest,category:'assertion',kind:'file_hash',target:'output.txt',phase:null,label_truncated:false,before:[{status:'passed',exit_code:null,count:1}],after:[{status:'failed',exit_code:null,count:1}]}],change_total:1,changes_truncated:false,execution:'not-run',provenance:'not-authenticated',export_approval:'not-granted'})
+
+test('saved IDs select an outcome comparison without replay or export approval',async({page})=>{
+ let comparisons=0,writes=0
+ page.on('request',request=>{if(request.method()!=='GET'&&request.url().includes('/api/'))writes++})
+ await page.route('**/api/v1/receipts?*',route=>route.fulfill({json:{schema:'skilltape.dev/console/v1',items:['before','after'].map(id=>({id,metadata_state:'available',status:'succeeded',skill_hash:digest,run_id:digest,bytes:100,modified_at_ms:null})),offset:0,limit:50,total:2,next_offset:null}}))
+ await page.route('**/api/v1/receipt-comparisons?*',route=>{comparisons++;return route.fulfill({json:comparison()})})
+ await page.goto('/#receipt')
+ await page.getByRole('button',{name:'Browse saved Receipts',exact:true}).click()
+ await page.getByRole('button',{name:'Use before as earlier Receipt',exact:true}).click()
+ await page.getByRole('button',{name:'Use after as later Receipt',exact:true}).click()
+ await expect(page.getByLabel('Earlier Receipt ID',{exact:true})).toHaveValue('before')
+ await expect(page.getByLabel('Later Receipt ID',{exact:true})).toHaveValue('after')
+ await page.getByRole('button',{name:'Compare saved outcomes',exact:true}).click()
+ const result=page.getByRole('region',{name:'Saved Receipt comparison result'})
+ await expect(result).toContainText('Execution conditions are missing or invalid')
+ await expect(result).toContainText('output.txt')
+ await expect(result).toContainText('not proof of a fix')
+ await expect(result).toContainText('No replay or export approval')
+ await page.getByLabel('Earlier Receipt ID',{exact:true}).fill('../outside')
+ await page.getByRole('button',{name:'Compare saved outcomes',exact:true}).click()
+ await expect(page.getByText('Choose two different saved Receipt filenames, not paths.',{exact:true})).toBeVisible()
+ await expect(result).toHaveCount(0);expect(comparisons).toBe(1);expect(writes).toBe(0)
+})
+
+test('changing IDs aborts pending evidence and mismatched replies stay unavailable',async({page})=>{
+ let release!:()=>void
+ await page.route('**/api/v1/receipt-comparisons?*',async route=>{await new Promise<void>(resolve=>{release=resolve});await route.fulfill({json:comparison()}).catch(()=>{})})
+ await page.goto('/#receipt')
+ await page.getByLabel('Earlier Receipt ID',{exact:true}).fill('before');await page.getByLabel('Later Receipt ID',{exact:true}).fill('after')
+ await page.getByRole('button',{name:'Compare saved outcomes',exact:true}).click()
+ await expect(page.getByRole('button',{name:'Cancel comparison',exact:true})).toBeVisible()
+ await page.getByRole('button',{name:'Cancel comparison',exact:true}).click()
+ await expect(page.getByText('Comparison cancelled. Saved Receipts are unchanged.',{exact:true})).toBeVisible()
+ await page.getByLabel('Later Receipt ID',{exact:true}).fill('third');release()
+ await expect(page.getByRole('region',{name:'Saved Receipt comparison result'})).toHaveCount(0)
+ await page.unroute('**/api/v1/receipt-comparisons?*')
+ await page.route('**/api/v1/receipt-comparisons?*',route=>route.fulfill({json:comparison()}))
+ await page.getByRole('button',{name:'Compare saved outcomes',exact:true}).click()
+ await expect(page.getByText('Saved Receipt comparison is invalid or incomplete.',{exact:true})).toBeVisible()
+ await expect(page.getByRole('region',{name:'Saved Receipt comparison result'})).toHaveCount(0)
+})
+
+test('different package conditions are explicit on a narrow screen',async({page})=>{
+ await page.setViewportSize({width:390,height:844})
+ const value=comparison();value.comparability='incomparable';value.after.skill_hash='b'.repeat(64);value.condition_findings=['package_changed','conditions_unrecorded'];value.changes[0].target='x'.repeat(241);value.changes[0].label_truncated=true
+ await page.route('**/api/v1/receipt-comparisons?*',route=>route.fulfill({json:value}))
+ await page.goto('/#receipt');await page.getByLabel('Earlier Receipt ID',{exact:true}).fill('before');await page.getByLabel('Later Receipt ID',{exact:true}).fill('after')
+ await page.getByRole('button',{name:'Compare saved outcomes',exact:true}).click()
+ const result=page.getByRole('region',{name:'Saved Receipt comparison result'})
+ await expect(result).toContainText('Conditions differ')
+ await expect(result).toContainText('Package changed')
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
+})

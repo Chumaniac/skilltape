@@ -1,0 +1,565 @@
+use std::fs::{self, File, OpenOptions};
+use std::io::Write;
+use std::sync::{mpsc, Arc, Barrier};
+use std::thread;
+use std::time::Duration;
+
+use fs2::FileExt;
+use skilltape_tape::{
+    EventSource, RedactionState, TapeEvent, TapeEventKind, TapeIdGenerator, TapeManifest,
+    TapeStore, TapeStoreError, TAPE_SCHEMA_V1,
+};
+use tempfile::TempDir;
+
+fn manifest(id: &str) -> TapeManifest {
+    TapeManifest {
+        schema: TAPE_SCHEMA_V1.to_owned(),
+        id: id.to_owned(),
+        started_at_ms: 10,
+        finished_at_ms: None,
+        platform: "test".to_owned(),
+        workspace_root: "workspace".to_owned(),
+        event_count: 0,
+    }
+}
+
+fn event(sequence: u64) -> TapeEvent {
+    TapeEvent {
+        sequence,
+        occurred_at_ms: 10 + sequence,
+        kind: TapeEventKind::TerminalCommand,
+        source: EventSource::Cli,
+        payload: serde_json::json!({"sequence": sequence}),
+        redaction: RedactionState::Unredacted,
+    }
+}
+
+fn create_store() -> (TempDir, std::path::PathBuf, TapeStore) {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let root = temp_dir.path().join("tape-1");
+    let store = TapeStore::create(&root, manifest("tape-1")).unwrap();
+    (temp_dir, root, store)
+}
+
+fn append_raw_event(root: &std::path::Path, item: &TapeEvent) {
+    let mut file = fs::OpenOptions::new()
+        .append(true)
+        .open(root.join("events.jsonl"))
+        .unwrap();
+    serde_json::to_writer(&mut file, item).unwrap();
+    file.write_all(b"\n").unwrap();
+    file.sync_all().unwrap();
+}
+
+fn overwrite_manifest(root: &std::path::Path, value: &TapeManifest) {
+    let mut bytes = serde_json::to_vec_pretty(value).unwrap();
+    bytes.push(b'\n');
+    fs::write(root.join("manifest.json"), bytes).unwrap();
+}
+
+fn lock_tape(root: &std::path::Path) -> File {
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(root.join(".store.lock"))
+        .unwrap();
+    FileExt::lock_exclusive(&file).unwrap();
+    file
+}
+
+#[test]
+fn bounded_reads_accept_exact_limits_and_reject_oversized_streams() {
+    let (_temp, root, store) = create_store();
+    store.append(&event(0)).unwrap();
+    let bytes = fs::metadata(root.join("events.jsonl")).unwrap().len();
+    assert_eq!(
+        store
+            .read_events_bounded(bytes, 1)
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(matches!(
+        store.read_events_bounded(bytes - 1, 1),
+        Err(TapeStoreError::ReadBudgetExceeded)
+    ));
+    assert!(matches!(
+        store.read_events_bounded(bytes, 0),
+        Err(TapeStoreError::ReadBudgetExceeded)
+    ));
+    let original = fs::read_to_string(root.join("events.jsonl")).unwrap();
+    fs::write(root.join("events.jsonl"), original.trim_end()).unwrap();
+    assert_eq!(
+        store
+            .read_events_bounded(bytes - 1, 1)
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn bounded_reader_enforces_bytes_when_a_line_grows_after_open() {
+    let (_temp, root, store) = create_store();
+    store.append(&event(0)).unwrap();
+    let original = fs::read_to_string(root.join("events.jsonl")).unwrap();
+    let mut reader = store
+        .read_events_bounded(original.len() as u64 + 4, 1)
+        .unwrap();
+    fs::write(
+        root.join("events.jsonl"),
+        format!("{}        \n", original.trim_end()),
+    )
+    .unwrap();
+    assert!(matches!(
+        reader.next(),
+        Some(Err(TapeStoreError::ReadBudgetExceeded))
+    ));
+    assert!(reader.next().is_none());
+}
+
+#[test]
+fn creates_empty_tape_and_reopens_it_without_overwriting() {
+    let (_temp_dir, root, store) = create_store();
+
+    assert_eq!(store.read_manifest().unwrap(), manifest("tape-1"));
+    assert!(store.read_events().unwrap().next().is_none());
+    assert!(root.join("manifest.json").is_file());
+    assert!(root.join("events.jsonl").is_file());
+
+    let reopened = TapeStore::open(&root).unwrap();
+    assert_eq!(reopened.read_manifest().unwrap(), manifest("tape-1"));
+    assert!(matches!(
+        TapeStore::create(&root, manifest("other")),
+        Err(TapeStoreError::AlreadyExists { .. })
+    ));
+}
+
+#[test]
+fn simultaneous_creates_have_one_winner_without_losing_its_tape() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let root = temp_dir.path().join("tape-1");
+    let start = Arc::new(Barrier::new(3));
+    let mut workers = Vec::new();
+
+    for id in ["first", "second"] {
+        let root = root.clone();
+        let start = Arc::clone(&start);
+        workers.push(thread::spawn(move || {
+            start.wait();
+            TapeStore::create(root, manifest(id)).map(|store| (id, store))
+        }));
+    }
+    start.wait();
+
+    let results: Vec<_> = workers
+        .into_iter()
+        .map(|worker| worker.join().unwrap())
+        .collect();
+    assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+    assert_eq!(
+        results
+            .iter()
+            .filter(|result| matches!(result, Err(TapeStoreError::AlreadyExists { .. })))
+            .count(),
+        1
+    );
+
+    let winner_id = results
+        .iter()
+        .find_map(|result| result.as_ref().ok().map(|(id, _store)| *id))
+        .unwrap();
+    let reopened = TapeStore::open(&root).unwrap();
+    assert_eq!(reopened.read_manifest().unwrap(), manifest(winner_id));
+    assert!(reopened.read_events().unwrap().next().is_none());
+}
+
+#[test]
+fn appends_events_with_fsync_and_recovers_them_in_sequence() {
+    let (_temp_dir, root, store) = create_store();
+    let expected = vec![event(0), event(1)];
+
+    for item in &expected {
+        store.append(item).unwrap();
+    }
+
+    assert_eq!(store.read_manifest().unwrap().event_count, 2);
+    let recovered: Vec<_> = TapeStore::open(root)
+        .unwrap()
+        .read_events()
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(recovered, expected);
+}
+
+#[test]
+fn duplicate_sequence_is_rejected_without_changing_existing_events() {
+    let (_temp_dir, root, store) = create_store();
+    store.append(&event(0)).unwrap();
+    let before = fs::read(root.join("events.jsonl")).unwrap();
+
+    assert!(matches!(
+        store.append(&event(0)),
+        Err(TapeStoreError::SequenceMismatch {
+            expected: 1,
+            actual: 0,
+            ..
+        })
+    ));
+    assert_eq!(fs::read(root.join("events.jsonl")).unwrap(), before);
+    assert_eq!(store.read_manifest().unwrap().event_count, 1);
+}
+
+#[test]
+fn simultaneous_appends_cannot_both_accept_the_same_sequence() {
+    let (_temp_dir, root, store) = create_store();
+    let held_lock = lock_tape(&root);
+    let store = Arc::new(store);
+    let start = Arc::new(Barrier::new(3));
+    let (result_tx, result_rx) = mpsc::channel();
+    let mut workers = Vec::new();
+
+    for _ in 0..2 {
+        let store = Arc::clone(&store);
+        let start = Arc::clone(&start);
+        let result_tx = result_tx.clone();
+        workers.push(thread::spawn(move || {
+            start.wait();
+            result_tx.send(store.append(&event(0))).unwrap();
+        }));
+    }
+    drop(result_tx);
+    start.wait();
+
+    assert!(result_rx.recv_timeout(Duration::from_millis(200)).is_err());
+    FileExt::unlock(&held_lock).unwrap();
+
+    let results: Vec<_> = result_rx.iter().collect();
+    for worker in workers {
+        worker.join().unwrap();
+    }
+    assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+    assert_eq!(
+        results
+            .iter()
+            .filter(|result| matches!(
+                result,
+                Err(TapeStoreError::SequenceMismatch {
+                    expected: 1,
+                    actual: 0,
+                    ..
+                })
+            ))
+            .count(),
+        1
+    );
+    assert_eq!(store.read_manifest().unwrap().event_count, 1);
+    assert_eq!(
+        store
+            .read_events()
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap(),
+        vec![event(0)]
+    );
+}
+
+#[test]
+fn append_after_concurrent_finish_cannot_succeed() {
+    let (_temp_dir, root, store) = create_store();
+    let held_lock = lock_tape(&root);
+    let store = Arc::new(store);
+    let (started_tx, started_rx) = mpsc::channel();
+    let (finished_tx, finished_rx) = mpsc::channel();
+    let finisher_store = Arc::clone(&store);
+    let finisher = thread::spawn(move || {
+        started_tx.send(()).unwrap();
+        finished_tx.send(finisher_store.finish(99)).unwrap();
+    });
+
+    started_rx.recv().unwrap();
+    assert!(finished_rx
+        .recv_timeout(Duration::from_millis(200))
+        .is_err());
+    FileExt::unlock(&held_lock).unwrap();
+
+    assert_eq!(
+        finished_rx.recv().unwrap().unwrap().finished_at_ms,
+        Some(99)
+    );
+    finisher.join().unwrap();
+    assert!(matches!(
+        store.append(&event(0)),
+        Err(TapeStoreError::AlreadyFinished)
+    ));
+    assert!(store.read_events().unwrap().next().is_none());
+}
+
+#[test]
+fn retry_after_event_fsync_repairs_manifest_without_duplicating_the_event() {
+    let (_temp_dir, root, store) = create_store();
+    append_raw_event(&root, &event(0));
+
+    store.append(&event(0)).unwrap();
+
+    assert_eq!(store.read_manifest().unwrap().event_count, 1);
+    let recovered = store
+        .read_events()
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(recovered, vec![event(0)]);
+}
+
+#[test]
+fn finish_after_event_fsync_repairs_stale_manifest() {
+    let (_temp_dir, root, store) = create_store();
+    append_raw_event(&root, &event(0));
+
+    let finished = store.finish(99).unwrap();
+
+    assert_eq!(finished.event_count, 1);
+    assert_eq!(finished.finished_at_ms, Some(99));
+    assert_eq!(store.read_manifest().unwrap(), finished);
+    assert_eq!(
+        store
+            .read_events()
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap(),
+        vec![event(0)]
+    );
+}
+
+#[test]
+fn finish_rejects_more_than_one_unreconciled_event() {
+    let (_temp_dir, root, store) = create_store();
+    append_raw_event(&root, &event(0));
+    append_raw_event(&root, &event(1));
+
+    assert!(matches!(
+        store.finish(99),
+        Err(TapeStoreError::EventCountExceeded {
+            manifest_count: 0,
+            minimum_event_count: 2,
+        })
+    ));
+    assert_eq!(store.read_manifest().unwrap().finished_at_ms, None);
+}
+
+#[test]
+fn recovery_reports_when_manifest_claims_more_events_than_jsonl_contains() {
+    let (_temp_dir, root, store) = create_store();
+    store.append(&event(0)).unwrap();
+    let mut inconsistent = store.read_manifest().unwrap();
+    inconsistent.event_count = 2;
+    overwrite_manifest(&root, &inconsistent);
+
+    let mut recovered = store.read_events().unwrap();
+    assert_eq!(recovered.next().unwrap().unwrap(), event(0));
+    assert!(matches!(
+        recovered.next().unwrap(),
+        Err(TapeStoreError::EventCountShortfall {
+            manifest_count: 2,
+            event_count: 1,
+        })
+    ));
+}
+
+#[test]
+fn recovery_reports_when_jsonl_contains_more_events_than_manifest_claims() {
+    let (_temp_dir, root, store) = create_store();
+    store.append(&event(0)).unwrap();
+    append_raw_event(&root, &event(1));
+
+    let mut recovered = store.read_events().unwrap();
+    assert_eq!(recovered.next().unwrap().unwrap(), event(0));
+    assert!(matches!(
+        recovered.next().unwrap(),
+        Err(TapeStoreError::EventCountExceeded {
+            manifest_count: 1,
+            minimum_event_count: 2,
+        })
+    ));
+}
+
+#[test]
+fn stale_manifest_temp_file_is_replaced_by_the_next_atomic_update() {
+    let (_temp_dir, root, store) = create_store();
+    fs::write(root.join("manifest.json.tmp"), b"stale partial manifest").unwrap();
+
+    store.append(&event(0)).unwrap();
+
+    assert_eq!(store.read_manifest().unwrap().event_count, 1);
+    assert!(!root.join("manifest.json.tmp").exists());
+}
+
+#[test]
+fn finish_atomically_updates_manifest_and_rejects_later_writes() {
+    let (_temp_dir, root, store) = create_store();
+    store.append(&event(0)).unwrap();
+
+    let finished = store.finish(99).unwrap();
+    assert_eq!(finished.finished_at_ms, Some(99));
+    assert_eq!(store.read_manifest().unwrap(), finished);
+    assert!(!root.join("manifest.json.tmp").exists());
+    assert!(matches!(
+        store.append(&event(1)),
+        Err(TapeStoreError::AlreadyFinished)
+    ));
+    assert!(matches!(
+        store.finish(100),
+        Err(TapeStoreError::AlreadyFinished)
+    ));
+}
+
+#[test]
+fn truncated_jsonl_is_reported_without_discarding_prior_events() {
+    let (_temp_dir, root, store) = create_store();
+    store.append(&event(0)).unwrap();
+    fs::OpenOptions::new()
+        .append(true)
+        .open(root.join("events.jsonl"))
+        .unwrap()
+        .write_all(b"{\"sequence\":1")
+        .unwrap();
+
+    let mut recovered = store.read_events().unwrap();
+    assert_eq!(recovered.next().unwrap().unwrap(), event(0));
+    assert!(matches!(
+        recovered.next().unwrap(),
+        Err(TapeStoreError::InvalidJsonl { line: 2, .. })
+    ));
+}
+
+#[test]
+fn a_non_contiguous_recovered_sequence_is_rejected() {
+    let (_temp_dir, root, store) = create_store();
+    store.append(&event(0)).unwrap();
+    let mut raw = serde_json::to_string(&event(2)).unwrap();
+    raw.push('\n');
+    fs::OpenOptions::new()
+        .append(true)
+        .open(root.join("events.jsonl"))
+        .unwrap()
+        .write_all(raw.as_bytes())
+        .unwrap();
+
+    let mut recovered = store.read_events().unwrap();
+    assert_eq!(recovered.next().unwrap().unwrap(), event(0));
+    assert!(matches!(
+        recovered.next().unwrap(),
+        Err(TapeStoreError::SequenceMismatch {
+            expected: 1,
+            actual: 2,
+            line: 2,
+        })
+    ));
+}
+
+#[test]
+fn unsafe_roots_and_invalid_manifests_are_rejected() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let unsafe_root = temp_dir.path().join("..").join("outside");
+    assert!(matches!(
+        TapeStore::create(unsafe_root, manifest("unsafe")),
+        Err(TapeStoreError::UnsafeRoot { .. })
+    ));
+
+    let file_root = temp_dir.path().join("file");
+    fs::write(&file_root, b"not a directory").unwrap();
+    assert!(matches!(
+        TapeStore::create(&file_root, manifest("file")),
+        Err(TapeStoreError::InvalidRoot { .. })
+    ));
+
+    let mut invalid = manifest("invalid");
+    invalid.schema = "skilltape.dev/tape/v2".to_owned();
+    assert!(matches!(
+        TapeStore::create(temp_dir.path().join("invalid"), invalid),
+        Err(TapeStoreError::InvalidManifest { .. })
+    ));
+}
+
+#[test]
+fn local_ids_are_deterministic_and_lexicographically_sortable() {
+    let mut first = TapeIdGenerator::new(42);
+    let mut second = TapeIdGenerator::new(42);
+
+    let first_id = first.next();
+    let second_id = first.next();
+    assert_eq!(first_id, second.next());
+    assert_eq!(second_id, second.next());
+    assert!(first_id < second_id);
+    assert_eq!(first_id, "tape_00000000000000000042-00000000000000000000");
+}
+
+#[test]
+fn oversized_manifest_cannot_create_an_unreadable_tape() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path().join("oversized");
+    assert!(TapeStore::create(&root, manifest(&"x".repeat(65536))).is_err());
+    assert!(!root.exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn data_files_cannot_follow_links_outside_the_selected_tape() {
+    use std::os::unix::fs::symlink;
+    let (temp, root, store) = create_store();
+    let outside_manifest = temp.path().join("outside-manifest.json");
+    fs::copy(root.join("manifest.json"), &outside_manifest).unwrap();
+    fs::remove_file(root.join("manifest.json")).unwrap();
+    symlink(&outside_manifest, root.join("manifest.json")).unwrap();
+    assert!(
+        store.read_manifest().is_err(),
+        "manifest link must not be followed"
+    );
+    fs::remove_file(root.join("manifest.json")).unwrap();
+    fs::copy(&outside_manifest, root.join("manifest.json")).unwrap();
+    let outside_events = temp.path().join("outside-events.jsonl");
+    fs::write(&outside_events, b"").unwrap();
+    fs::remove_file(root.join("events.jsonl")).unwrap();
+    symlink(&outside_events, root.join("events.jsonl")).unwrap();
+    assert!(
+        store.read_events_bounded(1024, 10).is_err(),
+        "event link must not be followed"
+    );
+    assert!(
+        store.append(&event(0)).is_err(),
+        "append must not modify an external link target"
+    );
+    assert_eq!(fs::read(&outside_events).unwrap(), b"");
+}
+
+#[cfg(unix)]
+#[test]
+fn fifo_manifest_is_rejected_without_waiting_for_a_writer() {
+    use std::ffi::CString;
+    use std::os::unix::fs::OpenOptionsExt;
+    let (_temp, root, store) = create_store();
+    let path = root.join("manifest.json");
+    fs::remove_file(&path).unwrap();
+    let name = CString::new(path.to_str().unwrap()).unwrap();
+    assert_eq!(unsafe { libc::mkfifo(name.as_ptr(), 0o600) }, 0);
+    let (sender, receiver) = mpsc::channel();
+    let worker = thread::spawn(move || sender.send(store.read_manifest().is_err()).unwrap());
+    let result = receiver.recv_timeout(Duration::from_secs(2));
+    if result.is_err() {
+        // Release a regressed blocking open so this test never strands a thread.
+        let release = OpenOptions::new()
+            .write(true)
+            .custom_flags(libc::O_NONBLOCK)
+            .open(&path);
+        drop(release);
+    }
+    worker.join().unwrap();
+    assert!(result.unwrap());
+}

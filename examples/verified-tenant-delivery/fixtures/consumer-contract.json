@@ -1,0 +1,120 @@
+{
+  "schema": "skillsync.artifacts/v1",
+  "limits": {
+    "max_files": 3,
+    "max_file_bytes": 1048576,
+    "max_total_bytes": 3145728
+  },
+  "files": [
+    {
+      "path": "expected.csv",
+      "format": "csv",
+      "columns": [
+        {
+          "name": "tenant_id",
+          "type": "string"
+        },
+        {
+          "name": "order_id",
+          "type": "string"
+        },
+        {
+          "name": "amount_cents",
+          "type": "integer",
+          "min": 0
+        }
+      ],
+      "unique_by": [
+        "tenant_id",
+        "order_id"
+      ],
+      "max_rows": 1000
+    },
+    {
+      "path": "allocations.csv",
+      "format": "csv",
+      "columns": [
+        {
+          "name": "tenant_id",
+          "type": "string"
+        },
+        {
+          "name": "order_id",
+          "type": "string"
+        },
+        {
+          "name": "amount_cents",
+          "type": "integer",
+          "min": 0
+        }
+      ],
+      "max_rows": 1000
+    },
+    {
+      "path": "summary.json",
+      "format": "json",
+      "fields": [
+        {
+          "name": "expected_rows",
+          "type": "integer",
+          "min": 0
+        },
+        {
+          "name": "allocation_rows",
+          "type": "integer",
+          "min": 0
+        },
+        {
+          "name": "total_cents",
+          "type": "integer",
+          "min": 0
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "type": "csv_summary",
+      "csv": "expected.csv",
+      "json": "summary.json",
+      "row_count_field": "expected_rows",
+      "sums": [
+        {
+          "column": "amount_cents",
+          "field": "total_cents"
+        }
+      ]
+    },
+    {
+      "type": "csv_summary",
+      "csv": "allocations.csv",
+      "json": "summary.json",
+      "row_count_field": "allocation_rows",
+      "sums": [
+        {
+          "column": "amount_cents",
+          "field": "total_cents"
+        }
+      ]
+    },
+    {
+      "type": "keyed_integer_sum_equals",
+      "source": {
+        "path": "expected.csv",
+        "key": [
+          "tenant_id",
+          "order_id"
+        ],
+        "value": "amount_cents"
+      },
+      "target": {
+        "path": "allocations.csv",
+        "key": [
+          "tenant_id",
+          "order_id"
+        ],
+        "value": "amount_cents"
+      }
+    }
+  ]
+}

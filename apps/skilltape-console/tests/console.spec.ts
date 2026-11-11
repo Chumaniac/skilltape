@@ -1,0 +1,637 @@
+import { expect, test } from '@playwright/test'
+
+const permissions = {
+  filesystem: { read: ['inputs/**'], write: ['outputs/**'] },
+  process: { executables: ['/usr/bin/printf'], max_processes: 1, default_timeout_ms: 1000 },
+  network: { enabled: false, allow_hosts: [] },
+  secrets: { read_environment: false },
+}
+
+const skill = {
+  schema: 'skilltape.dev/console/v1',
+  id: 'demo',
+  package_path: 'skills/demo',
+  manifest: { name: 'demo', version: '0.1.0', targets: ['generic-agent-skill'] },
+  workflow: {
+    schema: 'skilltape.dev/workflow/v1',
+    steps: [
+      { action: 'exec', id: 'format', program: '/usr/bin/printf', args: ['ready'] },
+      { action: 'file', id: 'copy', operation: 'copy', from: 'inputs/a', to: 'outputs/a' },
+    ],
+  },
+  permissions,
+  lockfile: { schema: 'skilltape.dev/lock/v1', tools: [] },
+  files: [
+    { path: 'skilltape.yaml', bytes: 220, sha256: 'a'.repeat(64) },
+    { path: 'workflow.yaml', bytes: 320, sha256: 'b'.repeat(64) },
+    { path: 'permissions.json', bytes: 280, sha256: 'c'.repeat(64) },
+    { path: 'skilltape.lock', bytes: 100, sha256: 'd'.repeat(64) },
+    { path: 'SKILL.md', bytes: 600, sha256: 'e'.repeat(64) },
+    { path: 'README.md', bytes: 180, sha256: 'f'.repeat(64) },
+  ],
+  lint: { files_checked: 6, errors: [], warnings: [] },
+}
+
+const receipt = {
+  schema: 'skilltape.dev/receipt/v1',
+  run_id: 'd'.repeat(64),
+  skill_hash: 'a'.repeat(64),
+  status: 'succeeded',
+  steps: [
+    {
+      step_id: 'format',
+      status: 'succeeded',
+      exit_code: 0,
+      stdout_sha256: 'b'.repeat(64),
+      stdout_bytes: 5,
+      stdout_truncated: false,
+      stderr_sha256: 'c'.repeat(64),
+      stderr_bytes: 0,
+      stderr_truncated: false,
+    },
+  ],
+  assertions: [{ kind: 'file_exists', target: 'outputs/a', passed: true, reason: 'file exists' }],
+  policy_decisions: [
+    { step_id: 'format', phase: 'before', allowed: true, code: 'POLICY001', reason: 'allowed', risk: 'low' },
+  ],
+}
+
+test('bounded saved run documents preserve explicit legacy and replay identities',async({page})=>{
+ await mockApi(page)
+ let payload:unknown={schema:'skilltape.dev/run/v1',id:'run-a',document:{status:'succeeded'}}
+ await page.route('**/api/v1/runs/run-a',route=>route.fulfill({json:payload}))
+ await page.route('**/contract-check',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><title>Isolated API contract</title>'}))
+ await page.goto('/contract-check')
+ const inspect=()=>page.evaluate(async()=>{
+  const module=await import('/src/api.ts')
+  try{return {valid:true,schema:(await module.getRun('run-a')).schema}}catch(error){return {valid:false,code:(error as {code?:string}).code}}
+ })
+ expect(await inspect()).toEqual({valid:false,code:'invalid_run'})
+ payload={schema:'skilltape.dev/run/v1',id:'run-a',document:{schema:'skilltape.dev/run/v1',status:'succeeded',steps:[]}}
+ expect(await inspect()).toEqual({valid:true,schema:'skilltape.dev/run/v1'})
+ payload={schema:'skilltape.dev/replay/v1',id:'run-a',document:{schema:'skilltape.dev/replay/v1',status:'succeeded',steps:[],policy_decisions:[],output_truncated:false}}
+ expect(await inspect()).toEqual({valid:true,schema:'skilltape.dev/replay/v1'})
+ payload={schema:'skilltape.dev/replay/v1',id:'run-a',document:{schema:'skilltape.dev/replay/v1',status:'succeeded',
+  steps:[{...receipt.steps[0],status:{toString:'PRIVATE_RUN_SENTINEL'}}],policy_decisions:[],output_truncated:false}}
+ expect(await inspect()).toEqual({valid:false,code:'invalid_run'})
+})
+
+test('large compile arrays use bounded workflow and diagnostic pages',async({page})=>{
+ await mockApi(page)
+ const payload={...skill,workflow:{...skill.workflow,steps:Array.from({length:205},(_,index)=>({id:'step-'+index,action:'exec',program:'printf',args:['x'.repeat(400)]}))},
+  lint:{files_checked:6,errors:[],warnings:Array.from({length:205},(_,index)=>({code:'SYNTHETIC'+index,level:'warning',file:'workflow.yaml',path:'/steps/'+index,message:'Synthetic review note'}))}}
+ await page.route('**/api/v1/skills/demo/diff',route=>route.fulfill({json:payload}))
+ await page.goto('/#compile?skill=demo')
+ await expect(page.locator('.workflow-list > li')).toHaveCount(100)
+ await expect(page.locator('.diagnostic-list > li')).toHaveCount(100)
+ const json=page.locator('details').filter({has:page.getByText('View workflow JSON',{exact:true})})
+ await expect(json.locator('pre')).toHaveCount(0)
+ await page.getByText('View workflow JSON',{exact:true}).click()
+ await expect(json.locator('pre')).toContainText('Preview truncated')
+ expect((await json.locator('pre').innerText()).length).toBeLessThan(65700)
+ await page.getByRole('button',{name:'Next workflow page'}).click()
+ await expect(page.getByText('step-100',{exact:true})).toBeVisible()
+ await page.getByRole('button',{name:'Next workflow page'}).click()
+ await expect(page.locator('.workflow-list > li')).toHaveCount(5)
+ await page.getByRole('button',{name:'Next diagnostic page'}).click()
+ await expect(page.getByText('SYNTHETIC100',{exact:true})).toBeVisible()
+})
+
+test('oversized compile arrays fail explicitly without rendering an unbounded list',async({page})=>{
+ await mockApi(page)
+ await page.route('**/api/v1/skills/demo/diff',route=>route.fulfill({json:{...skill,workflow:{...skill.workflow,
+  steps:Array.from({length:10001},(_,index)=>({id:'step-'+index,action:'exec',program:'printf'}))}}}))
+ await page.goto('/#compile?skill=demo')
+ await expect(page.getByRole('alert')).toContainText('The saved Skill package is invalid or unsupported.')
+ await expect(page.locator('.workflow-list > li')).toHaveCount(0)
+})
+
+async function mockApi(page: import('@playwright/test').Page, mode: 'normal' | 'error' = 'normal', storedReceipt = receipt) {
+  await page.route('**/api/v1/**', async (route) => {
+    const url = new URL(route.request().url())
+    if (mode === 'error' && url.pathname.endsWith('/workspaces')) {
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          schema: 'skilltape.dev/api-error/v1',
+          error: { code: 'offline', message: 'Start the local Console API, then retry.' },
+        }),
+      })
+      return
+    }
+    if (url.pathname.endsWith('/workspaces')) {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          schema: 'skilltape.dev/console/v1',
+          items: [{ id: 'default', name: 'fixture-workspace', tape_count: 1, skill_count: 1, run_count: 1, receipt_count: 1 }],
+          offset: 0,
+          limit: 1,
+          total: 1,
+          next_offset: null,
+        }),
+      })
+      return
+    }
+    if (url.pathname.endsWith('/workspaces/default/tapes')) {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          schema: 'skilltape.dev/console/v1',
+          items: [
+            {
+              id: 'tape-a',
+              schema: 'skilltape.dev/tape/v1',
+              started_at_ms: 1710000000000,
+              finished_at_ms: 1710000001000,
+              platform: 'test',
+              workspace_root: 'workspace',
+              event_count: 1,
+            },
+          ],
+          offset: 0,
+          limit: 50,
+          total: 1,
+          next_offset: null,
+        }),
+      })
+      return
+    }
+    if (url.pathname.endsWith('/tapes/none/events')) {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          schema: 'skilltape.dev/console/v1',
+          tape_id: 'none',
+          events: [],
+          offset: 0,
+          limit: 100,
+          total: 0,
+          next_offset: null,
+        }),
+      })
+      return
+    }
+    if (url.pathname.endsWith('/tapes/tape-a/events')) {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          schema: 'skilltape.dev/console/v1',
+          tape_id: 'tape-a',
+          events: [
+            {
+              sequence: 0,
+              occurred_at_ms: 1710000000500,
+              kind: 'terminal_command',
+              source: 'shell',
+              payload: { command: 'printf', note: 'redacted timeline payload' },
+              redaction: 'redacted',
+            },
+          ],
+          offset: 0,
+          limit: 100,
+          total: 1,
+          next_offset: null,
+        }),
+      })
+      return
+    }
+    if (url.pathname.endsWith('/skills/demo/diff')) {
+      await route.fulfill({ contentType: 'application/json', body: JSON.stringify(skill) })
+      return
+    }
+    if (url.pathname.endsWith('/context')) {
+      await route.fulfill({json:{schema:'skilltape.dev/context-review/v1',id:url.pathname.split('/').at(-2),status:'unrecorded',context:null,provenance:'not-authenticated'}})
+      return
+    }
+    if (url.pathname.includes('/receipts/')) {
+      if (!url.pathname.endsWith('/receipts/run-a')) {
+        await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: { message: 'Saved Receipt not found.' } }) })
+        return
+      }
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ schema: 'skilltape.dev/receipt/v1', id: 'run-a', document: storedReceipt }),
+      })
+      return
+    }
+    await route.continue()
+  })
+}
+
+test('timeline displays redaction state and payload details', async ({ page }) => {
+  await mockApi(page)
+  await page.goto('/#timeline')
+
+  await expect(page.getByRole('heading', { name: 'Capture timeline' })).toBeVisible()
+  await expect(page.getByText('Redacted', { exact: true })).toBeVisible()
+  await page.getByText('Inspect event payload').click()
+  await expect(page.getByText('redacted timeline payload')).toBeVisible()
+  await expect(page.getByText('fixture-workspace')).toBeVisible()
+})
+
+test('timeline pages through tapes and events without accumulating earlier pages', async ({ page }, testInfo) => {
+  await mockApi(page)
+  let failNextPage = true
+  await page.route('**/api/v1/workspaces/default/tapes*', async (route) => {
+    const offset = Number(new URL(route.request().url()).searchParams.get('offset') ?? 0)
+    const tapes = Array.from({ length: 51 }, (_, index) => ({
+      id: 'tape-' + index,
+      schema: 'skilltape.dev/tape/v1',
+      started_at_ms: 0,
+      finished_at_ms: 0,
+      platform: 'test',
+      workspace_root: 'workspace',
+      event_count: 101,
+    }))
+    await route.fulfill({ json: {
+      schema: 'skilltape.dev/console/v1', items: tapes.slice(offset, offset + 50),
+      offset, limit: 50, total: tapes.length, next_offset: offset === 0 ? 50 : null,
+    } })
+  })
+  await page.route('**/api/v1/tapes/tape-*/events*', async (route) => {
+    const url = new URL(route.request().url())
+    const offset = Number(url.searchParams.get('offset') ?? 0)
+    if (offset === 100 && failNextPage) {
+      failNextPage = false
+      await route.fulfill({ status: 503, json: { error: { message: 'Synthetic page unavailable.' } } })
+      return
+    }
+    const events = Array.from({ length: 101 }, (_, sequence) => ({
+      sequence, occurred_at_ms: 0, kind: 'terminal_command', source: 'shell',
+      payload: { note: 'synthetic event ' + sequence }, redaction: 'redacted',
+    }))
+    await route.fulfill({ json: {
+      schema: 'skilltape.dev/console/v1', tape_id: url.pathname.split('/')[4],
+      events: events.slice(offset, offset + 100), offset, limit: 100, total: events.length,
+      next_offset: offset === 0 ? 100 : null,
+    } })
+  })
+
+  await page.goto('/#timeline')
+  await expect(page.locator('.event-row')).toHaveCount(100)
+  await expect(page.getByRole('button', { name: 'Previous events' })).toBeDisabled()
+  await expect(page.getByText('Finished', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Next events' }).click()
+  await expect(page.getByRole('alert')).toContainText('Synthetic page unavailable.')
+  await page.getByRole('button', { name: 'Retry request' }).click()
+  await expect(page.locator('.event-row')).toHaveCount(1)
+  await expect(page.getByText('#0100', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Next events' })).toBeDisabled()
+  await page.getByRole('button', { name: 'Previous events' }).click()
+  await expect(page.locator('.event-row')).toHaveCount(100)
+  await expect(page.getByText('#0000', { exact: true })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Next tapes' }).click()
+  await expect(page.getByRole('combobox', { name: 'Select capture tape' })).toHaveValue('tape-50')
+  await expect(page.locator('select option')).toHaveCount(1)
+  await expect(page.locator('.event-row')).toHaveCount(100)
+  await page.getByRole('button', { name: 'Next events' }).click()
+  await expect(page.getByText('#0100', { exact: true })).toBeVisible()
+  await page.reload()
+  await expect(page.getByRole('combobox', { name: 'Select capture tape' })).toHaveValue('tape-50')
+  await expect(page.getByText('#0100', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Previous tapes' }).click()
+  await expect(page.getByRole('combobox', { name: 'Select capture tape' })).toHaveValue('tape-0')
+  await page.getByRole('combobox', { name: 'Select capture tape' }).selectOption('tape-1')
+  await expect(page.getByText('#0000', { exact: true })).toBeVisible()
+  await expect(page.locator('.event-row')).toHaveCount(100)
+  await page.screenshot({ path: testInfo.outputPath('pagination-desktop.png') })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(page.getByRole('button', { name: 'Next tapes' })).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('pagination-mobile.png') })
+})
+
+test('navigation opens compile and permission review pages', async ({ page }) => {
+  await mockApi(page)
+  await page.goto('/#compile?skill=demo')
+  await expect(page.getByRole('heading', { name: 'Compiled package' })).toBeVisible()
+  await expect(page.getByText('Lint clean')).toBeVisible()
+  await expect(page.getByText('format', { exact: true })).toBeVisible()
+
+  await page.getByRole('link', { name: 'Permissions', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Skill permissions' })).toBeVisible()
+  await expect(page.getByText('Environment variables are not available.')).toBeVisible()
+  await expect(page.getByText('Scoped access', { exact: true })).toBeVisible()
+})
+
+test('review navigation asks for saved evidence and keeps the selected Skill', async ({ page }, testInfo) => {
+  const requests: string[] = []
+  await mockApi(page)
+  await page.route('**/api/v1/skills/**/diff', async route => {
+    requests.push(route.request().url())
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ...skill, id: 'release #1' }) })
+  })
+  page.on('request', request => {
+    if (request.url().includes('/receipts/')) requests.push(request.url())
+  })
+  await page.goto('/#compile')
+  await expect(page.getByLabel('Saved Skill ID', { exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'No Skill selected' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Permissions', exact: true })).toHaveAttribute('href', '#permissions')
+  expect(requests).toEqual([])
+  await page.getByLabel('Saved Skill ID', { exact: true }).fill('release #1')
+  await page.getByRole('button', { name: 'Open Skill', exact: true }).click()
+  await expect(page.getByText('Lint clean')).toBeVisible()
+  await page.getByRole('link', { name: 'Permissions', exact: true }).click()
+  await expect(page.getByLabel('Saved Skill ID', { exact: true })).toHaveValue('release #1')
+  await expect(page.getByRole('heading', { name: 'Skill permissions' })).toBeVisible()
+  await page.reload()
+  await expect(page.getByLabel('Saved Skill ID', { exact: true })).toHaveValue('release #1')
+  expect(requests).toHaveLength(3)
+  expect(requests.every(url => url.endsWith('/skills/release%20%231/diff'))).toBe(true)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(page.getByRole('button', { name: 'Open Skill', exact: true })).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('saved-skill-mobile.png') })
+  await page.getByRole('link', { name: 'Verify Receipt', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'No Receipt selected' })).toBeVisible()
+  expect(requests).toHaveLength(3)
+})
+
+test('invalid Skill identifiers stay local and a missing package can be corrected', async ({ page }) => {
+  const requested: string[] = []
+  await mockApi(page)
+  await page.route('**/api/v1/skills/**/diff', async route => {
+    requested.push(route.request().url())
+    if (requested.length === 1) await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: { message: 'Saved Skill not found. Check the package directory name.' } }) })
+    else await route.fulfill({ contentType: 'application/json', body: JSON.stringify(skill) })
+  })
+  await page.goto('/#permissions?skill=..%2Foutside')
+  await expect(page.getByRole('alert').filter({ hasText: 'Use a package directory name, not a path.' })).toBeVisible()
+  expect(requested).toEqual([])
+  await page.getByLabel('Saved Skill ID', { exact: true }).fill('missing')
+  await page.getByRole('button', { name: 'Open Skill', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('Saved Skill not found.')
+  await page.getByLabel('Saved Skill ID', { exact: true }).fill('demo')
+  await page.getByRole('button', { name: 'Open Skill', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Skill permissions' })).toBeVisible()
+  expect(requested).toHaveLength(2)
+})
+
+test('receipt view shows bounded evidence and policy decisions', async ({ page }) => {
+  await mockApi(page)
+  await page.goto('/#receipt?run=run-a')
+
+  await expect(page.getByRole('heading', { name: 'Verification receipt' })).toBeVisible()
+  await expect(page.locator('.page-heading .status-badge').getByText('Succeeded', { exact: true })).toBeVisible()
+  await expect(page.getByText('Output digests and byte counts')).toBeVisible()
+  await expect(page.locator('.decision-list').getByText('POLICY001', { exact: false })).toBeVisible()
+  await expect(page.locator('.result-list').getByText('File Exists', { exact: true })).toBeVisible()
+})
+
+test('receipt step table can be focused and scrolled with the keyboard on mobile', async ({ page }) => {
+  await mockApi(page)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/#receipt?run=run-a')
+  const region = page.getByRole('region', { name: 'Step outcomes', exact: true })
+  await region.focus()
+  await expect(region).toBeFocused()
+  expect(await region.evaluate(element => element.scrollWidth > element.clientWidth)).toBe(true)
+  await region.press('ArrowRight')
+  await expect.poll(() => region.evaluate(element => element.scrollLeft)).toBeGreaterThan(0)
+})
+
+test('receipt review filters failed output checks and keeps the complete outcome visible', async ({ page }, testInfo) => {
+  await mockApi(page, 'normal', {
+    ...receipt, status: 'assertion_failed', assertions: [
+      { kind: 'file_exists', target: 'outputs/report.csv', passed: true, reason: 'file exists' },
+      { kind: 'file_hash', target: 'outputs/report.csv', passed: false, reason: 'output hash does not match expected digest' },
+      { kind: 'command_exit', target: 'export', passed: true, reason: 'exit code matches' },
+    ],
+  })
+  await page.goto('/#receipt?run=run-a')
+  await expect(page.getByRole('status').filter({ hasText: '2 passed · 1 failed' })).toBeVisible()
+  await page.getByRole('button', { name: 'Needs attention (1)', exact: true }).click()
+  await expect(page.locator('.result-list li')).toHaveCount(1)
+  await expect(page.locator('.result-list')).toContainText('File Hash')
+  await expect(page.locator('.result-list')).toContainText('Failed')
+  await expect(page.locator('.page-heading')).toContainText('Assertion Failed')
+  await page.screenshot({ path: testInfo.outputPath('receipt-output-review-desktop.png'), fullPage: true })
+  await page.getByRole('button', { name: 'All checks (3)', exact: true }).click()
+  await expect(page.locator('.result-list li')).toHaveCount(3)
+  await expect(page.locator('.result-list').getByText('Passed', { exact: true })).toHaveCount(2)
+})
+
+test('receipt next review action focuses failed checks and resets for another saved run', async ({ page }) => {
+  await mockApi(page, 'normal', {
+    ...receipt, status: 'assertion_failed', assertions: [
+      { kind: 'file_exists', target: 'outputs/report.csv', passed: true, reason: 'file exists' },
+      { kind: 'file_hash', target: 'outputs/report.csv', passed: false, reason: 'output hash does not match expected digest' },
+    ],
+  })
+  await page.route('**/api/v1/receipts/other-run', route => route.fulfill({ json: {
+    schema: 'skilltape.dev/receipt/v1', id: 'other-run', document: receipt,
+  } }))
+  await page.goto('/#receipt?run=run-a')
+  await expect(page.getByRole('region', { name: 'What to review next' })).toContainText('1 check needs attention')
+  await page.getByRole('button', { name: 'Review failed checks', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Checks against expected results' })).toBeFocused()
+  await expect(page.locator('.result-list li')).toHaveCount(1)
+  await expect(page).toHaveURL(/#receipt\?run=run-a$/)
+  await page.getByLabel('Saved Receipt ID', { exact: true }).fill('other-run')
+  await page.getByRole('button', { name: 'Open Receipt', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'All checks (1)', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.locator('.result-list li')).toHaveCount(1)
+  await expect(page.getByRole('region', { name: 'What to review next' })).toContainText('This run completed')
+})
+
+test('receipt without explicit checks directs review to execution', async ({ page }) => {
+  await mockApi(page, 'normal', { ...receipt, assertions: [] })
+  await page.goto('/#receipt?run=run-a')
+  await expect(page.getByRole('region', { name: 'What to review next' })).toContainText('without explicit checks')
+  await page.getByRole('button', { name: 'Review step results', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Step outcomes' })).toBeFocused()
+  await expect(page.getByText('No explicit assertions were recorded.', { exact: true })).toBeVisible()
+})
+
+test('saved Receipt picker recovers from missing IDs and rejects path input without a request', async ({ page }) => {
+  const requests: string[] = []
+  page.on('request', request => { if (request.url().includes('/api/v1/receipts/')) requests.push(request.url()) })
+  await mockApi(page)
+  await page.goto('/#receipt?run=missing')
+  await expect(page.getByRole('alert')).toContainText('Saved Receipt not found')
+  const input = page.getByLabel('Saved Receipt ID', { exact: true })
+  await input.fill('../private')
+  await page.getByRole('button', { name: 'Open Receipt', exact: true }).click()
+  await expect(page.getByText('Use a saved filename, not a path.', { exact: true })).toBeVisible()
+  expect(requests).toHaveLength(1)
+  await input.fill('run-a.json')
+  await input.press('Enter')
+  await expect(page.locator('.result-list')).toContainText('File Exists')
+  await expect(page).toHaveURL(/#receipt\?run=run-a$/)
+  await expect(page.getByRole('button', { name: 'All checks (1)', exact: true })).toHaveAttribute('aria-pressed', 'true')
+})
+
+test('malformed or oversized stored Receipts show a recoverable error', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  const cases = [
+    { ...receipt, assertions: [{ type: 'file_hash', target: 'output', passed: true, reason: 'legacy fixture field' }] },
+    { ...receipt, assertions: Array.from({ length: 1001 }, () => receipt.assertions[0]) },
+    { ...receipt, steps: [{ ...receipt.steps[0], stdout_bytes: -1 }] },
+    { ...receipt, assertions: [{ ...receipt.assertions[0], passed: false }] },
+    { ...receipt, raw_output: 'private-sentinel-not-for-display' },
+  ]
+  for (const document of cases) {
+    await page.route('**/api/v1/receipts/**', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ schema: receipt.schema, id: 'run-a', document }) }))
+    await page.goto('/#receipt?run=run-a')
+    await expect(page.getByRole('alert')).toContainText('invalid or unsupported')
+    await expect(page.getByRole('button', { name: 'Open Receipt', exact: true })).toBeVisible()
+    await expect(page.locator('.result-list')).toHaveCount(0)
+    await expect(page.locator('body')).not.toContainText('private-sentinel-not-for-display')
+    await page.unroute('**/api/v1/receipts/**')
+  }
+  expect(errors).toEqual([])
+})
+
+test('opening a different saved Receipt clears the previous failure filter', async ({ page }) => {
+  await mockApi(page, 'normal', { ...receipt, status: 'assertion_failed', assertions: [{ ...receipt.assertions[0], passed: false }] })
+  await page.route('**/api/v1/receipts/run-b', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ schema: receipt.schema, id: 'run-b', document: { ...receipt, run_id: 'e'.repeat(64) } }) }))
+  await page.goto('/#receipt?run=run-a')
+  await page.getByRole('button', { name: 'Needs attention (1)', exact: true }).click()
+  await page.getByLabel('Saved Receipt ID', { exact: true }).fill('run-b')
+  await page.getByRole('button', { name: 'Open Receipt', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'All checks (1)', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.locator('.result-list')).toContainText('Passed')
+  await expect(page.locator('.page-heading')).toContainText('Succeeded')
+})
+
+test('receipt details render literal untrusted text and remain readable on mobile', async ({ page }, testInfo) => {
+  const target = 'outputs/' + 'long-file-name-'.repeat(24) + '<img src=x onerror=alert(1)>.csv'
+  const reason = '<script>window.receiptInjected=true</script> digest mismatch'
+  await mockApi(page, 'normal', { ...receipt, status: 'assertion_failed', assertions: [{ kind: 'file_hash', target, passed: false, reason }] })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/#receipt?run=run-a')
+  await expect(page.locator('.result-list')).toContainText(target)
+  await expect(page.locator('.result-list')).toContainText(reason)
+  await expect(page.locator('.result-list img, .result-list script')).toHaveCount(0)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true)
+  await page.screenshot({ path: testInfo.outputPath('receipt-output-review-mobile.png'), fullPage: true })
+})
+
+test('empty and unavailable states explain the next step', async ({ page }) => {
+  await mockApi(page)
+  await page.goto('/#timeline?tape=none')
+  await expect(page.getByRole('heading', { name: 'This Tape is empty' })).toBeVisible()
+
+  await mockApi(page, 'error')
+  await page.goto('/#timeline?retry=1')
+  await expect(page.getByRole('alert')).toContainText('Start the local Console API')
+  await expect(page.getByRole('button', { name: 'Retry request' })).toBeVisible()
+})
+
+
+test('permission preflight is bounded, read-only and fails closed on inconsistent plans', async ({ page }, testInfo) => {
+  const checks = Array.from({ length: 40 }, (_, index) => ({ ordinal: index + 1, step_id: 'step-' + index, allowed: index !== 35, code: index === 35 ? 'PKG006' : 'POLICY_ALLOWED', reason: index === 35 ? 'path is outside declared filesystem write scopes' : 'allowed', risk: index === 35 ? 'high' : 'low' }))
+  let plan = { schema: 'skilltape.dev/policy-plan/v1', execution: 'not-run', allowed: false, package_valid: false, package_error_codes: ['PKG006'], checks }
+  const requests: string[] = []
+  page.on('request', request => { if (request.url().includes('/api/v1/')) requests.push(request.method()) })
+  await mockApi(page)
+  await page.route('**/api/v1/skills/demo/diff', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ...skill, policy_plan: plan }) }))
+  await page.goto('/#permissions?skill=demo')
+  const panel = page.getByRole('article').filter({ has: page.getByRole('heading', { name: 'Declared policy check' }) })
+  await expect(panel.getByText('Blocked: review package', { exact: true })).toBeVisible()
+  await panel.locator('summary').click()
+  await expect(panel.locator('li')).toHaveCount(32)
+  await expect(panel).toContainText('Showing 1–32 of 40 checks')
+  await panel.getByRole('button', { name: 'Denied only (1)', exact: true }).click()
+  await expect(panel.locator('li')).toHaveCount(1)
+  await expect(panel.locator('li')).toContainText('step-35')
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.screenshot({ path: testInfo.outputPath('preflight-denied-mobile.png'), fullPage: true })
+  await expect(panel.getByText('Blocked: review package', { exact: true })).toBeVisible()
+  await panel.getByRole('button', { name: 'All checks (40)', exact: true }).click()
+  await panel.getByRole('button', { name: 'Next checks', exact: true }).click()
+  await expect(panel.locator('li')).toHaveCount(8)
+  await expect(panel.locator('li').first()).toContainText('step-32')
+  await expect(panel.getByRole('button', { name: 'Next checks', exact: true })).toBeDisabled()
+  await panel.getByRole('button', { name: 'Previous checks', exact: true }).click()
+  await expect(panel.locator('li')).toHaveCount(32)
+  await page.setViewportSize({ width: 390, height: 844 })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  expect(requests.every(method => method === 'GET')).toBe(true)
+  plan = { ...plan, allowed: true }
+  await page.reload()
+  await expect(page.getByText('The policy preflight is invalid or unsupported. No execution is approved.')).toBeVisible()
+  await expect(page.getByText('Allowed by declared policy', { exact: true })).toHaveCount(0)
+  plan = { ...plan, package_valid: true, package_error_codes: [], checks: checks.map(check => ({ ...check, allowed: true, code: 'POLICY_ALLOWED', risk: 'low' })) }
+  await page.reload()
+  await panel.locator('summary').click()
+  await panel.getByRole('button', { name: 'Denied only (0)', exact: true }).click()
+  await expect(panel.getByRole('status')).toHaveText('No denied checks in this plan.')
+  await expect(panel.locator('li')).toHaveCount(0)
+  await expect(panel.getByText('Allowed by declared policy', { exact: true })).toBeVisible()
+  expect(requests.every(method => method === 'GET')).toBe(true)
+})
+
+
+test('invalid timeline timestamps show a recoverable error instead of crashing', async ({ page }) => {
+  await mockApi(page)
+  await page.route('**/api/v1/tapes/tape-a/events*', route => route.fulfill({json: {
+    schema: 'skilltape.dev/console/v1', tape_id: 'tape-a', offset: 0, limit: 100, total: 1, next_offset: null,
+    events: [{sequence: 0, occurred_at_ms: 9e18, kind: 'terminal_command', source: 'shell', payload: {}, redaction: 'redacted'}],
+  }}), {times: 1})
+  await page.goto('/#timeline')
+  await expect(page.getByRole('alert')).toContainText('The saved timeline is invalid or unsupported.')
+  await page.getByRole('button', {name: 'Retry request'}).click()
+  await expect(page.getByRole('heading', {name: 'Capture timeline', exact: true})).toBeVisible()
+  await expect(page.getByText('Redacted', {exact: true})).toBeVisible()
+})
+
+for (const broken of ['null step', 'invalid permissions', 'invalid file', 'invalid display field'] as const) {
+  test(`malformed package ${broken} keeps compile review recoverable`, async ({ page }) => {
+    await mockApi(page)
+    const payload = broken === 'null step' ? {...skill, workflow: {...skill.workflow, steps: [null]}} :
+      broken === 'invalid display field' ? {...skill, workflow: {...skill.workflow, steps: [{id: 'bad', action: 'exec', program: {toString: 'not callable'}}]}} :
+      broken === 'invalid permissions' ? {...skill, permissions: {...permissions, filesystem: {read: [null], write: []}}} :
+      {...skill, files: [{path: 'workflow.yaml', bytes: 10, sha256: null}]}
+    await page.route('**/api/v1/skills/demo/diff', route => route.fulfill({json: payload}), {times: 1})
+    await page.goto('/#compile?skill=demo')
+    await expect(page.getByRole('alert')).toContainText('The saved Skill package is invalid or unsupported.')
+    await page.getByRole('button', {name: 'Retry request'}).click()
+    await expect(page.getByRole('heading', {name: 'Compiled package', exact: true})).toBeVisible()
+  })
+}
+
+test('an empty policy plan does not imply that checks passed', async ({ page }) => {
+  await mockApi(page)
+  await page.route('**/api/v1/skills/demo/diff', route => route.fulfill({json: {...skill, policy_plan: {
+    schema: 'skilltape.dev/policy-plan/v1', execution: 'not-run', allowed: false, package_valid: false,
+    package_error_codes: ['EMPTY_WORKFLOW'], checks: [],
+  }}}))
+  await page.goto('/#permissions?skill=demo')
+  await page.getByText('Inspect 0 policy checks', {exact: true}).click()
+  await expect(page.getByRole('status')).toHaveText('No policy checks are recorded in this plan.')
+})
+
+
+test('a disconnected Console gives a connection recovery step', async ({ page }) => {
+  await mockApi(page)
+  await page.route('**/api/v1/workspaces', route => route.abort('failed'), {times: 1})
+  await page.goto('/#timeline')
+  await expect(page.getByRole('alert')).toContainText('Start the local Console, then retry.')
+  await page.getByRole('button', {name: 'Retry request'}).click()
+  await expect(page.getByRole('heading', {name: 'Capture timeline', exact: true})).toBeVisible()
+})
+
+test('compile review distinguishes a recorded Capture source from legacy metadata', async ({page}) => {
+  await mockApi(page)
+  const source = {format:'skilltape.dev/tape-source/v1',manifest_sha256:'sha256:'+'a'.repeat(64),events_sha256:'sha256:'+'b'.repeat(64),event_count:3}
+  await page.route('**/api/v1/skills/demo/diff', route => route.fulfill({json:{...skill,compile_source:source}}), {times:1})
+  await page.goto('/#compile?skill=demo')
+  await expect(page.getByRole('heading',{name:'Capture source',exact:true})).toBeVisible()
+  await expect(page.getByText('Recorded source: 3 events.',{exact:false})).toBeVisible()
+  await expect(page.getByText(source.events_sha256,{exact:true})).toBeVisible()
+  await expect(page.getByText('This is not author authentication',{exact:false})).toBeVisible()
+  await page.reload()
+  await expect(page.getByText('This package does not record its Capture source.',{exact:false})).toBeVisible()
+})
+
+
+test('capture package lookup shows only exact matches and rejects a response for another Tape',async({page})=>{
+ await mockApi(page);let foreign=false;
+ await page.route('**/api/v1/tapes/tape-a/packages*',route=>route.fulfill({json:{schema:'skilltape.dev/console/v1',tape_id:foreign?'other':'tape-a',items:[{id:'demo',matches_tape:true,source_state:'matched'},{id:'different',matches_tape:false,source_state:'different'}],offset:0,limit:50,total:2,next_offset:null}}));
+ await page.goto('/#timeline');await page.getByRole('button',{name:'Find compiled packages'}).click();await expect(page.getByRole('link',{name:'Review compiled package demo'})).toHaveAttribute('href','#compile?skill=demo');await expect(page.getByRole('link',{name:'Review compiled package different'})).toHaveCount(0);
+ foreign=true;await page.getByRole('button',{name:'Refresh package lookup'}).click();await expect(page.getByText('Package discovery is incomplete or unsupported.',{exact:false})).toBeVisible();await expect(page.getByRole('link',{name:'Review compiled package demo'})).toHaveCount(0);
+});

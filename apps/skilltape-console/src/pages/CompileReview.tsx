@@ -1,0 +1,190 @@
+import { PackageJourney } from './PackageJourney'
+import { useEffect, useState } from 'react'
+
+import { formatNumber, getSkillDiff, isSavedEvidenceId } from '../api'
+import type { SkillDiff } from '../types'
+import { CodeBlock, EmptyState, JsonDisclosure, Metric, PageError, PageLoading, SkillPicker, StatusBadge } from '../ui'
+
+interface CompileReviewProps {
+  skillId?: string
+}
+
+export function CompileReviewPage({ skillId = '' }: CompileReviewProps) {
+  const [skill, setSkill] = useState<SkillDiff | null>(null)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [reload, setReload] = useState(0)
+  const [workflowPage, setWorkflowPage] = useState(0)
+  const [diagnosticPage, setDiagnosticPage] = useState(0)
+
+  useEffect(() => {
+    setSkill(null)
+    setWorkflowPage(0)
+    setDiagnosticPage(0)
+    if (!isSavedEvidenceId(skillId)) { setLoading(false); setError(''); return }
+    const controller = new AbortController()
+    setLoading(true)
+    setError('')
+    getSkillDiff(skillId, controller.signal)
+      .then(value => { if (!controller.signal.aborted) setSkill(value) })
+      .catch((reason: unknown) => {
+        if (!controller.signal.aborted) {
+          setError(reason instanceof Error ? reason.message : 'Could not read the Skill package.')
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false)
+      })
+    return () => controller.abort()
+  }, [reload, skillId])
+
+  const picker = <SkillPicker key={skillId} skillId={skillId} onOpen={id => {
+    if (id === skillId) setReload(value => value + 1)
+    else window.location.hash = 'compile?skill=' + encodeURIComponent(id)
+  }} />
+  if (isSavedEvidenceId(skillId) && loading) return <>{picker}<PageLoading label="Loading compile review…" /></>
+  if (error) return <>{picker}<PageError message={error} onRetry={() => setReload((value) => value + 1)} /></>
+  if (!skill) {
+    return (
+      <>{picker}<EmptyState
+        title="No Skill selected"
+        message="Open a saved package to review its workflow, files and lint results."
+      /></>
+    )
+  }
+
+  const stepCount = skill.workflow.steps?.length ?? 0
+  const pageSize = 100
+  const diagnostics = [...skill.lint.errors, ...skill.lint.warnings]
+  const lintTone = skill.lint.errors.length === 0 ? 'good' : 'danger'
+  return (
+    <>{picker}<section className="page-section">
+      <header className="page-heading">
+        <div>
+          <p className="eyebrow">Compile review</p>
+          <h1>Compiled package</h1>
+        </div>
+        <StatusBadge tone={lintTone}>
+          {skill.lint.errors.length === 0 ? 'Lint clean' : skill.lint.errors.length + ' errors'}
+        </StatusBadge>
+      </header>
+
+      <div className="metric-grid">
+        <Metric label="Skill" value={skill.id} tone="accent" />
+        <Metric label="Workflow steps" value={formatNumber(stepCount)} />
+        <Metric label="Files checked" value={formatNumber(skill.lint.files_checked)} />
+        <Metric
+          label="Warnings"
+          value={formatNumber(skill.lint.warnings.length)}
+          tone={skill.lint.warnings.length > 0 ? 'warn' : 'good'}
+        />
+      </div>
+
+      <article className="panel compile-source" aria-labelledby="compile-source-title">
+        <h2 id="compile-source-title">Capture source</h2>
+        {skill.compile_source ? <>
+          <p>Recorded source: {formatNumber(skill.compile_source.event_count)} events. Compare these digests with the retained Capture.</p>
+          <p>Manifest <code>{skill.compile_source.manifest_sha256}</code></p>
+          <p>Events <code>{skill.compile_source.events_sha256}</code></p>
+          <p className="panel-note">Normalized v1 content digests only. This is not author authentication or proof of a successful replay.</p>
+        </> : <p>This package does not record its Capture source. Existing workflow and verification evidence remain available.</p>}
+      </article>
+
+      <PackageJourney skillId={skill.id} current="compile" />
+      <div className="review-grid">
+        <article className="panel panel-span-2">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">Executable contract</p>
+              <h2>Workflow</h2>
+            </div>
+            <span className="panel-note">Read-only</span>
+          </div>
+          {stepCount > 0 ? (
+            <ol className="workflow-list">
+              {skill.workflow.steps?.slice(workflowPage * pageSize, (workflowPage + 1) * pageSize).map((step, index) => (
+                <li key={String(step.id ?? '') + ':' + (workflowPage * pageSize + index)}>
+                  <span className="step-index">{String(workflowPage * pageSize + index + 1).padStart(2, '0')}</span>
+                  <div className="step-copy">
+                    <strong>{String(step.id ?? 'Unnamed step')}</strong>
+                    <span>{String(step.action ?? 'unknown action')}</span>
+                  </div>
+                  <code>{String(step.program ?? step.path ?? step.operation ?? 'structured step')}</code>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <EmptyState
+              title="No workflow steps"
+              message="This package has a valid workflow document, but it contains no executable steps."
+            />
+          )}
+          {stepCount > pageSize && <nav aria-label="Workflow pages" className="panel-heading">
+            <button type="button" disabled={workflowPage === 0} onClick={() => setWorkflowPage(value => value - 1)}>Previous workflow page</button>
+            <span>Steps {workflowPage * pageSize + 1}–{Math.min((workflowPage + 1) * pageSize, stepCount)} of {stepCount}</span>
+            <button type="button" disabled={(workflowPage + 1) * pageSize >= stepCount} onClick={() => setWorkflowPage(value => value + 1)}>Next workflow page</button>
+          </nav>}
+          <JsonDisclosure label="View workflow JSON" value={skill.workflow} />
+        </article>
+
+        <article className="panel">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">Package identity</p>
+              <h2>{skill.package_path}</h2>
+            </div>
+          </div>
+          <div className="file-list">
+            {skill.files.map((file) => (
+              <div className="file-row" key={file.path}>
+                <span className="file-dot" aria-hidden="true" />
+                <div className="file-copy">
+                  <strong>{file.path}</strong>
+                  <span>{formatNumber(file.bytes)} bytes</span>
+                </div>
+                <code title={file.sha256}>{file.sha256.slice(0, 10)}…</code>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="panel panel-span-2">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">Diagnostics</p>
+              <h2>Lint evidence</h2>
+            </div>
+            <span className="panel-note">{formatNumber(skill.lint.errors.length + skill.lint.warnings.length)} findings</span>
+          </div>
+          {skill.lint.errors.length === 0 && skill.lint.warnings.length === 0 ? (
+            <div className="success-line" role="status">
+              <span className="success-mark" aria-hidden="true">
+                ✓
+              </span>
+              <span>Schema, paths, permissions, and lockfile checks are clean.</span>
+            </div>
+          ) : (
+            <ul className="diagnostic-list">
+              {diagnostics.slice(diagnosticPage * pageSize, (diagnosticPage + 1) * pageSize).map((diagnostic, index) => (
+                <li className={'diagnostic diagnostic-' + diagnostic.level} key={diagnostic.code + diagnostic.file + ':' + (diagnosticPage * pageSize + index)}>
+                  <StatusBadge tone={diagnostic.level === 'error' ? 'danger' : 'warn'}>{diagnostic.level}</StatusBadge>
+                  <div>
+                    <strong>{diagnostic.code}</strong>
+                    <span>{diagnostic.message}</span>
+                    <code>{diagnostic.file}{diagnostic.path ? ':' + diagnostic.path : ''}</code>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          {diagnostics.length > pageSize && <nav aria-label="Diagnostic pages" className="panel-heading">
+            <button type="button" disabled={diagnosticPage === 0} onClick={() => setDiagnosticPage(value => value - 1)}>Previous diagnostic page</button>
+            <span>Findings {diagnosticPage * pageSize + 1}–{Math.min((diagnosticPage + 1) * pageSize, diagnostics.length)} of {diagnostics.length}</span>
+            <button type="button" disabled={(diagnosticPage + 1) * pageSize >= diagnostics.length} onClick={() => setDiagnosticPage(value => value + 1)}>Next diagnostic page</button>
+          </nav>}
+          <JsonDisclosure label="View manifest JSON" value={skill.manifest} />
+        </article>
+      </div>
+    </section></>
+  )
+}

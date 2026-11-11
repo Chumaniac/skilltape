@@ -1,0 +1,28 @@
+{
+  "schema": "skilltape.dev/workflow/v1",
+  "steps": [
+    {
+      "id": "summarize",
+      "action": "exec",
+      "program": "/bin/sh",
+      "args": [
+        "scripts/run_orders.sh",
+        "--input",
+        "inputs/orders.csv",
+        "--output-dir",
+        "outputs"
+      ],
+      "timeout_ms": 3000,
+      "outputs": [
+        {
+          "path": "outputs/metrics.csv",
+          "type": "file"
+        },
+        {
+          "path": "outputs/summary.json",
+          "type": "file"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,248 @@
+import { useEffect, useState } from 'react'
+
+import { formatDate, formatEventPayload, formatNumber, getTapeEvents, getTapes, getWorkspaces } from '../api'
+import type { Collection, TapeEvent, TapeEvents, TapeSummary, WorkspaceSummary } from '../types'
+import { TapePackages } from './TapePackages'
+import { CaptureCoverage } from './CaptureCoverage'
+import { EmptyState, PageError, PageLoading, titleCase } from '../ui'
+
+interface TimelineProps {
+  tapeId?: string
+  tapeOffset?: number
+  eventOffset?: number
+}
+
+interface TimelineData {
+  workspace: WorkspaceSummary | null
+  tapes: Collection<TapeSummary>
+  events: TapeEvents | null
+}
+
+export function TimelinePage({ tapeId, tapeOffset = 0, eventOffset = 0 }: TimelineProps) {
+  const [data, setData] = useState<TimelineData | null>(null)
+  const [error, setError] = useState('Could not load the local capture timeline.')
+  const [loading, setLoading] = useState(true)
+  const [reload, setReload] = useState(0)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    setLoading(true)
+    setError('')
+    Promise.all([getWorkspaces(controller.signal), getTapes('default', controller.signal, tapeOffset)])
+      .then(async ([workspaces, tapes]) => {
+        const selectedTape = tapeId ?? tapes.items[0]?.id
+        const events = selectedTape
+          ? await getTapeEvents(selectedTape, controller.signal, eventOffset)
+          : null
+        if (controller.signal.aborted) return
+        setData({
+          workspace: workspaces.items[0] ?? null,
+          tapes,
+          events,
+        })
+      })
+      .catch((reason: unknown) => {
+        if (!controller.signal.aborted) {
+          setError(reason instanceof Error ? reason.message : 'Could not read the local API.')
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false)
+      })
+    return () => controller.abort()
+  }, [reload, tapeId, tapeOffset, eventOffset])
+
+  if (loading) return <PageLoading label="Loading capture timeline…" />
+  if (error) return <PageError message={error} onRetry={() => setReload((value) => value + 1)} />
+  if (!data || data.tapes.total === 0) {
+    return (
+      <PageSection
+        eyebrow="Saved captures"
+        title="Capture timeline"
+        description="Inspect recorded terminal, file and permission events."
+      >
+        <EmptyState
+          title="No captures yet"
+          message="Run skilltape capture to create the first redacted Tape in this workspace."
+        />
+      </PageSection>
+    )
+  }
+
+  const selectedTape = data.events?.tape_id ?? data.tapes.items[0]?.id
+  const selectedSummary = data.tapes.items.find((tape) => tape.id === selectedTape)
+  const tapeLink = (nextTape: string | undefined, nextTapeOffset: number, nextEventOffset: number) => {
+    const params = new URLSearchParams()
+    if (nextTape) params.set('tape', nextTape)
+    if (nextTapeOffset) params.set('tapesOffset', String(nextTapeOffset))
+    if (nextEventOffset) params.set('eventsOffset', String(nextEventOffset))
+    return '#timeline?' + params.toString()
+  }
+  const navigate = (nextTape: string | undefined, nextTapeOffset: number, nextEventOffset: number) => {
+    window.location.hash = tapeLink(nextTape,nextTapeOffset,nextEventOffset)
+  }
+  return (
+    <PageSection
+      eyebrow="Saved captures"
+      title="Capture timeline"
+      description="Source and redaction status appear with each event."
+      actions={
+        <label className="select-control">
+          <span>Tape</span>
+          <select
+            aria-label="Select capture tape"
+            name="tape"
+            value={selectedTape}
+            onChange={(event) => {
+              navigate(event.target.value, tapeOffset, 0)
+            }}
+          >
+            {selectedTape && !selectedSummary ? <option value={selectedTape}>{selectedTape}</option> : null}
+            {data.tapes.items.map((tape) => (
+              <option key={tape.id} value={tape.id}>
+                {tape.id}
+              </option>
+            ))}
+          </select>
+        </label>
+      }
+    >
+      <PageNavigation
+        label="Tapes"
+        offset={data.tapes.offset}
+        count={data.tapes.items.length}
+        limit={data.tapes.limit}
+        total={data.tapes.total}
+        nextOffset={data.tapes.next_offset}
+        onPage={(offset) => navigate(undefined, offset, 0)}
+      />
+      <div className="metric-grid">
+        <div className="metric metric-accent">
+          <span className="metric-label">Workspace</span>
+          <strong>{data.workspace?.name ?? 'Local workspace'}</strong>
+        </div>
+        <div className="metric">
+          <span className="metric-label">Events</span>
+          <strong>{formatNumber(data.events?.total ?? 0)}</strong>
+        </div>
+        <div className="metric">
+          <span className="metric-label">Tape status</span>
+          <strong>{!selectedSummary ? 'Unknown' : selectedSummary.finished_at_ms !== null ? 'Finished' : 'Open'}</strong>
+        </div>
+      </div>
+      {selectedTape ? <TapePackages key={selectedTape} tapeId={selectedTape} /> : null}
+      {selectedTape ? <CaptureCoverage key={selectedTape} tapeId={selectedTape} eventHref={sequence => tapeLink(selectedTape,tapeOffset,Math.floor(sequence/100)*100)} /> : null}
+      {data.events ? (
+        <PageNavigation
+          label="Events"
+          offset={data.events.offset}
+          count={data.events.events.length}
+          limit={data.events.limit}
+          total={data.events.total}
+          nextOffset={data.events.next_offset}
+          onPage={(offset) => navigate(selectedTape, tapeOffset, offset)}
+        />
+      ) : null}
+      {data.events && data.events.events.length > 0 ? (
+        <ol className="event-list" aria-label="Capture events">
+          {data.events.events.map((event) => (
+            <TimelineEvent event={event} key={event.sequence} />
+          ))}
+        </ol>
+      ) : (
+        <EmptyState
+          title={data.events?.total ? 'No events on this page' : 'This Tape is empty'}
+          message={data.events?.total ? 'Use Previous events to return to an earlier page.' : 'This Tape has no saved events.'}
+        />
+      )}
+    </PageSection>
+  )
+}
+
+function PageNavigation({
+  label, offset, count, limit, total, nextOffset, onPage,
+}: {
+  label: string
+  offset: number
+  count: number
+  limit: number
+  total: number
+  nextOffset: number | null
+  onPage: (offset: number) => void
+}) {
+  if (total <= limit && offset === 0) return null
+  return (
+    <nav className="page-navigation" aria-label={label + ' pagination'}>
+      <button className="button button-secondary" disabled={offset === 0} onClick={() => onPage(Math.max(0, offset - limit))}>
+        Previous {label.toLowerCase()}
+      </button>
+      <span>{label} {count === 0 ? 0 : formatNumber(offset + 1)}–{formatNumber(offset + count)} of {formatNumber(total)}</span>
+      <button className="button button-secondary" disabled={nextOffset === null} onClick={() => { if (nextOffset !== null) onPage(nextOffset) }}>
+        Next {label.toLowerCase()}
+      </button>
+    </nav>
+  )
+}
+
+function PageSection({
+  eyebrow,
+  title,
+  description,
+  actions,
+  children,
+}: {
+  eyebrow: string
+  title: string
+  description: string
+  actions?: React.ReactNode
+  children: React.ReactNode
+}) {
+  return (
+    <section className="page-section">
+      <header className="page-heading">
+        <div>
+          <p className="eyebrow">{eyebrow}</p>
+          <h1>{title}</h1>
+          <p className="page-description">{description}</p>
+        </div>
+        {actions}
+      </header>
+      {children}
+    </section>
+  )
+}
+
+function TimelineEvent({ event }: { event: TapeEvent }) {
+  const payload = formatEventPayload(event)
+  const shortened = payload.length > 2400 ? payload.slice(0, 2400) + '\n…' : payload
+  return (
+    <li className="event-row">
+      <div className="event-rail" aria-hidden="true">
+        <span />
+      </div>
+      <article className="event-card">
+        <div className="event-card-header">
+          <div>
+            <span className="sequence">#{event.sequence.toString().padStart(4, '0')}</span>
+            <h2>{titleCase(event.kind)}</h2>
+          </div>
+          <time dateTime={new Date(event.occurred_at_ms).toISOString()}>
+            {formatDate(event.occurred_at_ms)}
+          </time>
+        </div>
+        <div className="event-meta">
+          <span>{titleCase(event.source)}</span>
+          <span className={'redaction redaction-' + event.redaction}>
+            {titleCase(event.redaction)}
+          </span>
+        </div>
+        <details className="payload-details">
+          <summary>Inspect event payload</summary>
+          <pre className="payload-block">
+            <code>{shortened}</code>
+          </pre>
+        </details>
+      </article>
+    </li>
+  )
+}

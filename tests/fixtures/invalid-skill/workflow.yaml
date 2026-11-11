@@ -1,0 +1,8 @@
+schema: skilltape.dev/workflow/v1
+steps:
+  - id: unsafe
+    action: exec
+    program: python
+    args:
+      - "../../outside.txt"
+    timeout_ms: 1000

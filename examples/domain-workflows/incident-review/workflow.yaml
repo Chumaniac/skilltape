@@ -1,0 +1,37 @@
+{
+  "schema": "skilltape.dev/workflow/v1",
+  "steps": [
+    {
+      "id": "copy-0",
+      "action": "file",
+      "operation": "copy",
+      "from": "inputs/incident.md",
+      "to": "outputs/incident/incident.md"
+    },
+    {
+      "id": "check-0",
+      "action": "assert",
+      "assertion": {
+        "type": "file_hash",
+        "path": "outputs/incident/incident.md",
+        "hash": "5fa68648c645c72395897ac0cce5978baed403b179d6a3af8c174a90b0d45177"
+      }
+    },
+    {
+      "id": "copy-1",
+      "action": "file",
+      "operation": "copy",
+      "from": "inputs/runbook.md",
+      "to": "outputs/incident/runbook.md"
+    },
+    {
+      "id": "check-1",
+      "action": "assert",
+      "assertion": {
+        "type": "file_hash",
+        "path": "outputs/incident/runbook.md",
+        "hash": "b40fe46e938d3fa5928a5631659e6d4129fb75b743f245e92f3dd19f79ce12a2"
+      }
+    }
+  ]
+}
