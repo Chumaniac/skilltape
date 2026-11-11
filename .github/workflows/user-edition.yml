@@ -25,5 +25,5 @@ jobs:
       - run: npm --prefix apps/skilltape-console run build
       - run: cargo test --workspace --locked
       - run: cargo build --locked -p skilltape-cli
-      - run: python3 scripts/test_request_import.py target/debug/skilltape
+      - run: python3 scripts/test_request_import.py
       - run: python3 -m unittest discover -s desktop/tests

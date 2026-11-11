@@ -2,10 +2,9 @@
 import json
 from pathlib import Path
 import subprocess
-import sys
 import tempfile
 
-binary = Path(sys.argv[1]).resolve()
+binary = Path(__file__).resolve().parents[1] / 'target/debug/skilltape'
 with tempfile.TemporaryDirectory(prefix='skilltape-import-') as directory:
     root = Path(directory).resolve()
     source = root / 'request.json'

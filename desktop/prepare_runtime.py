@@ -39,8 +39,6 @@ def minimum_macos(directory):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--python-runtime', type=Path)
-    parser.add_argument('--node-license', type=Path, help='Full upstream license for the installed Node runtime')
     args = parser.parse_args()
     profile = json.loads((ROOT / 'desktop/portable.json').read_text())
     product = profile['product']
@@ -62,51 +60,10 @@ def main():
         else:
             shutil.copy2(source, target)
 
-    if product == 'skilltape':
-        for binary in ['skilltape', 'skilltape-console-api']:
-            copy('target/release/' + binary, 'bin/' + binary)
-    elif product in {'skillsync', 'haptic-bridge'}:
-        node = shutil.which('node')
-        if not node:
-            raise SystemExit('NODE_REQUIRED')
-        (output / 'bin').mkdir()
-        shutil.copy2(node, output / 'bin/node')
-        for relative in ['package.json', 'package-lock.json']:
-            copy(relative)
-        for relative in (['dist', 'runner', 'profiles', 'templates', 'config', 'fixtures']
-                         if product == 'skillsync' else ['dist/src', 'dist/data']):
-            copy(relative)
-        # Resolve production dependencies from the lock; no developer modules or cache copied.
-        subprocess.run(['npm', 'ci', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], cwd=app, check=True)
-        node_prefix = Path(node).resolve().parent.parent
-        candidates = [args.node_license] if args.node_license else [node_prefix / 'LICENSE', node_prefix / 'share/doc/node/LICENSE', node_prefix / 'share/doc/nodejs/LICENSE']
-        license_root = next((path for path in candidates if path and path.is_file()), Path('/nonexistent-node-license'))
-        if not license_root.is_file():
-            raise SystemExit('NODE_LICENSE_REQUIRED')
-        shutil.copy2(license_root, output / 'bin/NODE-LICENSE.txt')
-    elif product in {'marine', 'inkwise'}:
-        if not args.python_runtime or not (args.python_runtime / 'bin/python3').is_file():
-            raise SystemExit('RELOCATABLE_PYTHON_312_REQUIRED')
-        shutil.copytree(args.python_runtime, output / 'python', symlinks=True, ignore=shutil.ignore_patterns('__pycache__', '*.pyc', '.DS_Store'))
-        # Only the explicit source/resource closure; no .env, DB, weights, logs or history.
-        if product == 'marine':
-            directories = ['marine', 'contracts', 'web', 'third_party']
-            files = ['pyproject.toml', 'requirements.local.lock', 'tools/start_app.py', 'tools/runtime_environment.py']
-        else:
-            directories = ['src/inkwise', 'web', 'teaching']
-            files = ['pyproject.toml', 'scripts/start_local.py', 'scripts/first_run.py']
-        for relative in directories + files:
-            copy(relative)
-        if product == 'inkwise':
-            binary = app / 'bin/inkwise-vision'
-            binary.parent.mkdir()
-            subprocess.run(['xcrun', 'swiftc', '-O', '-target', platform.machine() + '-apple-macosx13.0', str(ROOT / 'native/vision-ocr.swift'), '-o', str(binary)], check=True)
-        (app / 'embedded-runtime.json').write_text(json.dumps({'schema': 'embedded-runtime/v1', 'product': product}) + '\n')
-        files = {str(p.relative_to(app)): hashlib.sha256(p.read_bytes()).hexdigest()
-                 for p in sorted(app.rglob('*')) if p.is_file()}
-        (app / 'distribution.json').write_text(json.dumps({'schema': 'portable-source/v1', 'files': files}, indent=2) + '\n')
-    else:
+    if product != 'skilltape':
         raise SystemExit('PRODUCT_UNSUPPORTED')
+    for binary in ['skilltape', 'skilltape-console-api']:
+        copy('target/release/' + binary, 'bin/' + binary)
 
     if (ROOT / 'desktop/runtime-licenses').is_dir():
         shutil.copytree(ROOT / 'desktop/runtime-licenses', output / 'runtime-licenses')
