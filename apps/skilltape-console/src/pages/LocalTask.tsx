@@ -46,9 +46,8 @@ function read() {
   }
 }
 function download(value: unknown, name: string) {
-  const url = URL.createObjectURL(
-    new Blob([JSON.stringify(value, null, 2)], { type: "application/json" }),
-  );
+  const blob = value instanceof Blob ? value : new Blob([JSON.stringify(value, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = name;
@@ -388,6 +387,15 @@ export function LocalTaskPage() {
               </div>
               {onlyDifferences && visibleRows.length === 0 && <p className="task-filter-empty">本次结果没有差异，仍可导出完整结果。</p>}
               <div className="task-actions">
+                <button disabled={!visibleRows.length} onClick={() => {
+                  const lines = visibleRows.map(({ item, expected, received, difference }) => {
+                    // Spreadsheet apps may evaluate names starting with a formula prefix.
+                    const literal = /^\s*[=+@-]/u.test(item) ? "'" + item : item;
+                    return ['"' + literal.replaceAll('"', '""') + '"', expected, received, difference].join(',');
+                  });
+                  const csv = ['物品,应有数量,实收数量,差异', ...lines].join('\r\n') + '\r\n';
+                  download(new Blob(['\uFEFF', csv], {type:'text/csv;charset=utf-8'}), onlyDifferences ? 'reconciliation-differences.csv' : 'reconciliation.csv');
+                }}>导出当前表格 CSV</button>
                 <button onClick={save} disabled={!!initial.error} data-desktop-save="calculation">
                   {nativeWorkspace() ? "保存到本应用" : "保存到本标签页"}
                 </button>
