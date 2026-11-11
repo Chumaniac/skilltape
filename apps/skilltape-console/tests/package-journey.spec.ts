@@ -54,6 +54,8 @@ test('saved Receipt library reads selected evidence and keeps failed evidence ou
 });
 
 test('saved Receipt filters apply before paging and a failed refresh keeps the previous selection', async ({page}) => {
+  // 从手机视窗开始完整流程，避免沿用桌面滚动位置。
+  await page.setViewportSize({width: 390, height: 844})
   const queries: URLSearchParams[] = []
   let fail = false
   await page.route('**/api/v1/skills/demo/diff', route => route.fulfill({json: skill}))
@@ -86,7 +88,6 @@ test('saved Receipt filters apply before paging and a failed refresh keeps the p
   await page.getByRole('button', {name: "应用凭据筛选"}).click()
   await expect(page.getByText("指纹最多包含64位十六进制字符。", {exact: false})).toBeVisible()
   expect(queries).toHaveLength(reads)
-  await page.setViewportSize({width: 390, height: 844})
   await expect(page.getByRole('button', {name: "应用凭据筛选"})).toBeInViewport()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
 })
