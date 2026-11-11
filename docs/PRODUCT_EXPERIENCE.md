@@ -14,7 +14,7 @@ Input is limited to 256KB, with up to 1,000 rows on each side. Names and integer
 
 ## Validation
 
-Frontend build and type checks, quantity boundary checks, 80 existing Console browser checks and five new local-task checks passed. New coverage includes guided input, save/reopen/download, stale-result invalidation, preserved corrupt history and 320px layouts. Browser flows were also checked at desktop and 390px widths. These checks do not establish provider or production acceptance.
+The [task checks](../apps/skilltape-console/tests/local-task.spec.ts) cover quantity input, draft replacement, history preservation and export. The [native workspace checks](../apps/skilltape-console/tests/native-workspace.spec.ts) exercise application storage. Task input export writes the CLI fields `expected`, `received`, `item` and `quantity`; the saved-record export retains the original input.
 
 ## Local startup
 

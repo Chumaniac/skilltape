@@ -25,14 +25,16 @@ function read() {
       data.items.length > 20
     )
       throw Error();
+    const ids = new Set<string>();
     for (const item of data.items) {
       if (
         typeof item.id !== "string" ||
-        item.id.length > 64 ||
+        !item.id || ids.has(item.id) || item.id.length > 64 ||
         !Number.isFinite(Date.parse(item.at)) ||
         JSON.stringify(reconcile(item.input)) !== JSON.stringify(item.result)
       )
         throw Error();
+      ids.add(item.id);
     }
     return { items: data.items as Saved[], error: "" };
   } catch {
@@ -111,7 +113,7 @@ export function LocalTaskPage() {
     setTimeout(() => {
       if (id !== generation.current) return;
       try {
-        if (input.length > 256000) throw Error("输入上限为256 KB。");
+        if (new TextEncoder().encode(input).length > 256000) throw Error("输入上限为256 KB。");
         setResult(reconcile(JSON.parse(input)));
         setMessage(
           "本机计算完成，请在导出前复核差异。",
@@ -123,6 +125,21 @@ export function LocalTaskPage() {
       }
     }, 0);
   }
+  function latestHistory() {
+    const latest = read();
+    if (latest.error) throw Error(latest.error);
+    return latest.items;
+  }
+  function exportRequest() {
+    const request: Request = JSON.parse(input);
+    const quantities = (rows: Request["expected"]) => rows.map(({item, quantity}) => ({item, quantity}));
+    const value = {expected: quantities(request.expected), received: quantities(request.received)};
+    if ([...value.expected, ...value.received].some(row => /[\u0080-\u009f\ud800-\udfff]/u.test(row.item))) {
+      setMessage("物品名称含本机任务不支持的字符。请修正输入后重算。");
+      return;
+    }
+    download(value, "request.json");
+  }
   function save() {
     try {
       if (!result) return;
@@ -133,7 +150,7 @@ export function LocalTaskPage() {
         input: JSON.parse(input) as Request,
         result,
       };
-      const next = [record, ...history].slice(0, 20),
+      const next = [record, ...latestHistory()].slice(0, 20),
         raw = JSON.stringify({ version: 1, items: next });
       if (raw.length > 512000)
         throw Error(
@@ -178,6 +195,8 @@ export function LocalTaskPage() {
           <button
             disabled={busy}
             onClick={() => {
+              if (unsaved && !window.confirm("用示例替换未保存的输入和结果？")) return;
+              setUnsaved(false);
               setInput(JSON.stringify(example, null, 2));
               setFormRows(formRowsFor(example));
               setJsonMode(false);
@@ -378,7 +397,7 @@ export function LocalTaskPage() {
                   导出结果
                 </button>
                 <button
-                  onClick={() => download(JSON.parse(input), "request.json")}
+                  onClick={exportRequest}
                 >
                   导出任务输入
                 </button>
@@ -435,14 +454,14 @@ export function LocalTaskPage() {
                 onClick={() => {
                   if (window.confirm("移除这条本地保存记录？")) {
                     try {
-                      const next = history.filter((n) => n.id !== item.id);
+                      const next = latestHistory().filter((n) => n.id !== item.id);
                       savedStorage().setItem(
                         key,
                         JSON.stringify({ version: 1, items: next }),
                       );
                       setHistory(next);
-                    } catch {
-                      setMessage("无法更新本地历史。");
+                    } catch (error) {
+                      setMessage(error instanceof Error ? error.message : "无法更新本地历史。");
                     }
                   }
                 }}
