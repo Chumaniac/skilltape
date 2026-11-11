@@ -143,3 +143,21 @@ test("the interface stays Chinese in an English browser and JSON keeps stable ke
   await expect(page.getByRole('status')).toHaveText('JSON 格式有误，请检查括号、逗号和引号。');
   await expect(page.getByRole('button', { name: '导出结果', exact: true })).toHaveCount(0);
 });
+
+test("replacing a draft with the example respects a cancelled confirmation", async ({ page }) => {
+  await page.goto("/#task");
+  const item = page.getByLabel("物品名称 1", { exact: true });
+  await item.fill("保留这份输入");
+  page.once("dialog", dialog => dialog.dismiss());
+  await page.getByRole("button", {name: "填入示例"}).click();
+  await expect(item).toHaveValue("保留这份输入");
+});
+
+test("a history that becomes unreadable after opening is never overwritten", async ({ page }) => {
+  await page.goto("/#task");
+  await page.getByRole("button", {name: "计算差异"}).click();
+  await page.evaluate(key => sessionStorage.setItem(key, "damaged"), key);
+  await page.getByRole("button", {name:"保存到本标签页"}).click();
+  expect(await page.evaluate(key => sessionStorage.getItem(key), key)).toBe("damaged");
+  await expect(page.getByRole("status")).toContainText("原始存储已保留");
+});
