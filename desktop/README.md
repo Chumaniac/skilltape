@@ -9,7 +9,7 @@ cargo build --locked --release -p skilltape-console-api
 python3 desktop/build_app.py --output /a/new/output/directory
 ```
 
-The local application uses system WebKit and the existing read-only native Console API. It opens without a terminal or browser tab, while using this installed source workspace and compiled API runtime. The app includes its built UI; it does not embed user artifacts or credentials. The builder refuses to replace an existing application; working-tree previews require `--preview`.
+The local application uses system WebKit and the existing read-only native Console API. The command above without `--runtime` builds a source-bound development window. The portable program in this repository’s Releases embeds the CLI, API and UI and runs without a source checkout, terminal or browser tab. The app includes its built UI; it does not embed user artifacts or credentials. The builder refuses to replace an existing application; working-tree previews require `--preview`.
 
 Use **File → Open workspace** to select an existing evidence directory. The API remains read-only and does not execute capture, Skills, verification commands or scripts. Existing CLI workflows retain their own permissions and execution boundaries.
 
@@ -22,3 +22,5 @@ Only the API process started by this application is stopped on exit. Listener ow
 The repository also includes a Swift Package Manager target for native-host compilation and repository analysis: `swift build --package-path .`. It has no third-party dependencies. Use the Python builder above to produce the installable application with its assets and profile.
 
 The dedicated Native Swift analysis workflow compiles this target, checks fixture boundaries and retains CodeQL SARIF as an Actions artifact. It fails on any reported finding. SARIF and database uploads to Code Scanning are disabled (`upload: never`, `upload-database: false`), preserving the repository’s existing default setup and Rust coverage.
+
+完整可移动程序的构建步骤、运行时闭包和许可要求见[构建说明](../docs/build.md)。

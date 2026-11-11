@@ -36,6 +36,9 @@ pub(crate) enum StarterCommand {
         scenario: Scenario,
         #[arg(long)]
         output: PathBuf,
+        /// Import an exported reconciliation request (bounded JSON; never executes it).
+        #[arg(long)]
+        request: Option<PathBuf>,
     },
     /// Capture, compile, lint, verify and export a fixed local task. Requires --yes.
     Run {
@@ -57,7 +60,11 @@ pub(crate) enum StarterCommand {
 
 pub(crate) fn run(command: StarterCommand) -> ExitCode {
     let result = match command {
-        StarterCommand::New { scenario, output } => scaffold(scenario, &output),
+        StarterCommand::New {
+            scenario,
+            output,
+            request,
+        } => scaffold(scenario, &output, request.as_deref()),
         StarterCommand::Run { path, output, yes } => pipeline(&path, &output, yes),
         StarterCommand::Produce { scenario, input } => {
             if input != Path::new("inputs/request.json") {
@@ -196,7 +203,12 @@ fn read_bounded(path: &Path) -> io::Result<Vec<u8>> {
     }
     Ok(bytes)
 }
-fn scaffold(scenario: Scenario, output: &Path) -> io::Result<()> {
+fn scaffold(scenario: Scenario, output: &Path, imported: Option<&Path>) -> io::Result<()> {
+    if imported.is_some() && !matches!(scenario, Scenario::Reconcile) {
+        return Err(fail(
+            "--request supports reconciliation JSON; inventory requires its original files",
+        ));
+    }
     let (target, stage) = new_target(output)?;
     fs::create_dir(stage.path().join("inputs"))?;
     let request = match scenario {
@@ -212,7 +224,14 @@ fn scaffold(scenario: Scenario, output: &Path) -> io::Result<()> {
             json!({"expected":[{"item":"sample-1","quantity":5}],"received":[{"item":"sample-1","quantity":4}]})
         }
     };
+    let request = if let Some(path) = imported {
+        serde_json::from_slice::<Value>(&read_bounded(path)?)
+            .map_err(|_| fail("imported request must be valid JSON"))?
+    } else {
+        request
+    };
     write_json(&stage.path().join("inputs/request.json"), &request)?;
+    report(scenario, &stage.path().join("inputs"))?;
     write_json(
         &stage.path().join("starter.json"),
         &json!({"schema":"skilltape.dev/starter/v1","scenario":scenario.name()}),

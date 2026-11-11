@@ -8,7 +8,7 @@ export interface Request {
 }
 export function reconcile(value: unknown) {
   if (!value || typeof value !== "object")
-    throw Error("Use an object with expected and received lists.");
+    throw Error("请使用包含 expected 和 received 列表的对象。");
   const request = value as Request;
   if (
     !Array.isArray(request.expected) ||
@@ -17,7 +17,7 @@ export function reconcile(value: unknown) {
     !Array.isArray(request.received) ||
     request.received.length > 1000
   )
-    throw Error("Expected needs 1–1,000 rows; received allows up to 1,000.");
+    throw Error("应有列表须为1–1,000行，实收列表最多1,000行。");
   const totals = new Map<
     string,
     { item: string; expected: number; received: number }
@@ -35,7 +35,7 @@ export function reconcile(value: unknown) {
         row.quantity > 1_000_000_000
       )
         throw Error(
-          "Each row needs an item (1–128 bytes) and an integer quantity from 0 to 1,000,000,000.",
+          "每行须包含物品名称（1–128字节）及0至1,000,000,000之间的整数数量。",
         );
       const previous = totals.get(row.item) ?? {
         item: row.item,
@@ -56,11 +56,11 @@ export function reconcile(value: unknown) {
 }
 export const example: Request = {
   expected: [
-    { item: "notebooks", quantity: 5 },
-    { item: "pencils", quantity: 10 },
+    { item: "笔记本", quantity: 5 },
+    { item: "铅笔", quantity: 10 },
   ],
   received: [
-    { item: "notebooks", quantity: 4 },
-    { item: "pencils", quantity: 10 },
+    { item: "笔记本", quantity: 4 },
+    { item: "铅笔", quantity: 10 },
   ],
 };

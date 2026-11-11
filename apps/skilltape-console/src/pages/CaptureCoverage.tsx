@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { formatDate, formatNumber, getTapeCoverage } from '../api'
 import type { TapeCoverage } from '../types'
-import { PageError, PageLoading, titleCase } from '../ui'
+import { PageError, PageLoading, evidenceLabel } from '../ui'
 
 export function CaptureCoverage({ tapeId, eventHref }: { tapeId: string; eventHref: (sequence: number) => string }) {
   const [data, setData] = useState<TapeCoverage | null>(null)
@@ -17,25 +17,25 @@ export function CaptureCoverage({ tapeId, eventHref }: { tapeId: string; eventHr
       const value = await getTapeCoverage(tapeId, controller.signal)
       if (!controller.signal.aborted) setData(value)
     } catch (reason) {
-      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : 'Capture coverage could not be read.')
+      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "无法读取采集完整性。")
     } finally {
       if (!controller.signal.aborted) setLoading(false)
     }
   }
   return <section className="panel capture-coverage" role="region" aria-labelledby="capture-coverage-title">
-    <div className="panel-heading"><div><p className="eyebrow">Stored capture metadata</p><h2 id="capture-coverage-title">Capture coverage</h2></div>
-      <button className="button button-secondary" type="button" disabled={loading} onClick={check}>Check whole Tape</button></div>
-    <p>Inspect counts across all recorded pages. The check reads up to 100,000 events within 16 MiB and does not run commands.</p>
-    {loading ? <PageLoading label="Checking the saved capture stream…" /> : error ? <PageError message={error} onRetry={check} /> : data ? <div aria-live="polite">
-      <p><strong>{formatNumber(data.total_events)} recorded events</strong> · {data.state === 'complete' ? 'Finished capture snapshot' : data.state === 'open' ? 'Open capture snapshot; recording may continue' : 'Capture changed during the check; check again before sharing'}</p>
-      <div className="metric-grid"><CoverageCount label="Redacted" count={data.redaction.redacted} /><CoverageCount label="Partially redacted" count={data.redaction.partially_redacted} /><CoverageCount label="Unredacted" count={data.redaction.unredacted} /><CoverageCount label="Capture warnings" count={data.capture_warnings} /></div>
-      <p className="panel-note">Status metadata cannot establish whether payload is safe to share. Review the original events and retained evidence.</p>
-      <div className="coverage-breakdowns"><Breakdown title="Event kinds" counts={data.by_kind} /><Breakdown title="Sources" counts={data.by_source} /></div>
-      {data.total_events ? <p className="panel-note">First recorded event: {formatDate(data.first_event_at_ms)} · Last recorded event: {formatDate(data.last_event_at_ms)}</p> : <p>No redaction observations are available for an empty capture.</p>}
-      <h3>Events to review</h3><p>Showing {data.samples.length} of {formatNumber(data.sample_total)} events with an unredacted/partial label or a capture warning.{data.samples_truncated ? ' Only the first 32 sequence references are retained.' : ''}</p>
-      <ol className="coverage-samples">{data.samples.map(sample => <li key={sample.sequence}><a href={eventHref(sample.sequence)}>View sequence {sample.sequence}</a><span>{titleCase(sample.redaction)}{sample.capture_warning ? ' · Capture warning' : ''}</span></li>)}</ol>
-    </div> : <p className="panel-note">Run this check when you need a whole-capture overview; changing event pages does not trigger a scan.</p>}
+    <div className="panel-heading"><div><p className="eyebrow">已保存采集元数据</p><h2 id="capture-coverage-title">采集完整性</h2></div>
+      <button className="button button-secondary" type="button" disabled={loading} onClick={check}>检查整份采集记录</button></div>
+    <p>检查全部已记录页面的计数，最多读取100,000个事件和16 MiB内容，不执行命令。</p>
+    {loading ? <PageLoading label="正在检查已保存采集事件…" /> : error ? <PageError message={error} onRetry={check} /> : data ? <div aria-live="polite">
+      <p><strong>{formatNumber(data.total_events)} 条已记录事件</strong> · {data.state === 'complete' ? "已结束的采集快照" : data.state === 'open' ? "采集快照尚未结束，可能继续记录" : "检查期间采集记录发生变化，分享前请重新检查"}</p>
+      <div className="metric-grid"><CoverageCount label="已脱敏" count={data.redaction.redacted} /><CoverageCount label="部分脱敏" count={data.redaction.partially_redacted} /><CoverageCount label="未脱敏" count={data.redaction.unredacted} /><CoverageCount label="采集警告" count={data.capture_warnings} /></div>
+      <p className="panel-note">状态元数据不能判定内容是否适合分享，请复核原始事件和保留证据。</p>
+      <div className="coverage-breakdowns"><Breakdown title="事件类型" counts={data.by_kind} /><Breakdown title="来源" counts={data.by_source} /></div>
+      {data.total_events ? <p className="panel-note">首条事件： {formatDate(data.first_event_at_ms)} · 末条事件： {formatDate(data.last_event_at_ms)}</p> : <p>空采集记录没有脱敏观测数据。</p>}
+      <h3>需复核事件</h3><p>显示 {data.samples.length} / {formatNumber(data.sample_total)} 个事件标记为未脱敏、部分脱敏或存在采集警告。{data.samples_truncated ? " 仅保留前32条序号引用。" : ''}</p>
+      <ol className="coverage-samples">{data.samples.map(sample => <li key={sample.sequence}><a href={eventHref(sample.sequence)}>查看序号 {sample.sequence}</a><span>{evidenceLabel(sample.redaction)}{sample.capture_warning ? " · 采集警告" : ''}</span></li>)}</ol>
+    </div> : <p className="panel-note">需要整体查看采集记录时再执行此检查；切换事件页不会触发扫描。</p>}
   </section>
 }
 function CoverageCount({ label, count }: { label: string; count: number }) { return <div className="metric"><span className="metric-label">{label}</span><strong>{formatNumber(count)}</strong></div> }
-function Breakdown({ title, counts }: { title: string; counts: Record<string, number> }) { return <div><h3>{title}</h3><ul>{Object.entries(counts).map(([key,count]) => <li key={key}>{titleCase(key)}: {formatNumber(count)}</li>)}</ul></div> }
+function Breakdown({ title, counts }: { title: string; counts: Record<string, number> }) { return <div><h3>{title}</h3><ul>{Object.entries(counts).map(([key,count]) => <li key={key}>{evidenceLabel(key)}: {formatNumber(count)}</li>)}</ul></div> }

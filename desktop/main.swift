@@ -23,6 +23,7 @@ final class DesktopApplication: NSObject, NSApplicationDelegate, NSWindowDelegat
 {
   let configuration: AppConfiguration
   let resources: URL
+  var helpWindow: NSWindow?
   var window: NSWindow!
   var web: WKWebView!
   var server: LocalWebServer?
@@ -30,6 +31,7 @@ final class DesktopApplication: NSObject, NSApplicationDelegate, NSWindowDelegat
   var origin: URL!
   var closingApproved = false
   var smokeCompleted = false
+  var smokeSucceeded = false
   var loading: NSStackView!
   var loadingLabel: NSTextField!
   var retryButton: NSButton!
@@ -148,7 +150,7 @@ final class DesktopApplication: NSObject, NSApplicationDelegate, NSWindowDelegat
         backend!.start(
           url: origin,
           workspace: UserDefaults.standard.string(forKey: "selectedWorkspace")
-            ?? launch.workingDirectory
+            ?? launch.workspaceDirectory ?? launch.workingDirectory
         ) { ready in
           if ready {
             self.web.load(
@@ -207,7 +209,32 @@ final class DesktopApplication: NSObject, NSApplicationDelegate, NSWindowDelegat
     let reload = NSMenuItem(title: "重新载入", action: #selector(reloadPage), keyEquivalent: "r")
     reload.target = self
     view.addItem(reload)
+    let helpItem = NSMenuItem(title: "帮助", action: nil, keyEquivalent: "")
+    let help = NSMenu()
+    helpItem.submenu = help
+    menu.addItem(helpItem)
+    let guide = NSMenuItem(title: "使用指南", action: #selector(showGuide), keyEquivalent: "?")
+    guide.target = self
+    help.addItem(guide)
+    NSApp.helpMenu = help
     NSApp.mainMenu = menu
+  }
+  @objc func showGuide() {
+    if let helpWindow = helpWindow { helpWindow.makeKeyAndOrderFront(nil); return }
+    let guide = resources.appendingPathComponent("UserGuide.html")
+    guard FileManager.default.fileExists(atPath: guide.path) else { return }
+    let settings = WKWebViewConfiguration()
+    settings.websiteDataStore = .nonPersistent()
+    let page = WKWebView(frame: .zero, configuration: settings)
+    page.loadFileURL(guide, allowingReadAccessTo: resources)
+    let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 850, height: 720),
+      styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+    panel.title = configuration.name + " 使用指南"
+    panel.isReleasedWhenClosed = false
+    panel.contentView = page
+    panel.center()
+    panel.makeKeyAndOrderFront(nil)
+    helpWindow = panel
   }
   @objc func chooseWorkspace() {
     checkUnsaved { allowed in
@@ -282,6 +309,7 @@ final class DesktopApplication: NSObject, NSApplicationDelegate, NSWindowDelegat
   func applicationWillTerminate(_ notification: Notification) {
     server?.stop()
     backend?.stop()
+    if smokeOutput != nil { exit(smokeSucceeded ? 0 : 1) }
   }
   func showFailure() {
     if smokeOutput != nil {
@@ -357,6 +385,7 @@ final class DesktopApplication: NSObject, NSApplicationDelegate, NSWindowDelegat
   func finishSmoke(success: Bool, page: [String: Any]) {
     guard !smokeCompleted else { return }
     smokeCompleted = true
+    smokeSucceeded = success
     backend?.stop()
     let report: [String: Any] = [
       "app": configuration.name, "success": success, "windowVisible": window?.isVisible ?? false,
@@ -496,6 +525,6 @@ do {
   application.delegate = delegate
   application.run()
 } catch {
-  fputs("APPLICATION_CONFIGURATION_UNAVAILABLE\n", stderr)
+  fputs("应用配置不可用（APPLICATION_CONFIGURATION_UNAVAILABLE）\n", stderr)
   exit(1)
 }

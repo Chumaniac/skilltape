@@ -16,9 +16,13 @@ struct BackendChecks {
   }
   static func main() throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(
-      "backend-check-" + UUID().uuidString)
+      "backend check with spaces " + UUID().uuidString)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
     defer { try? FileManager.default.removeItem(at: root) }
+    let interpreter = CommandLine.arguments.count > 2 ? URL(fileURLWithPath: CommandLine.arguments[2]) : root.appendingPathComponent("python3")
+    if CommandLine.arguments.count <= 2 {
+      try FileManager.default.createSymbolicLink(at: interpreter, withDestinationURL: URL(fileURLWithPath: "/usr/bin/python3"))
+    }
     var fixtureDirectories: [URL] = []
     defer { for directory in fixtureDirectories { try? FileManager.default.removeItem(at: directory) } }
     let fixture = URL(fileURLWithPath: CommandLine.arguments[1]).path
@@ -33,7 +37,7 @@ struct BackendChecks {
       fixtureDirectories.append(outputDirectory)
       let output = outputDirectory.appendingPathComponent("result.json")
       var values: [String: Any] = [
-        "executable": "/usr/bin/python3", "arguments": [fixture, String(port), mode],
+        "executable": interpreter.path, "arguments": [fixture, String(port), mode],
         "workingDirectory": root.path, "smokeWorkingDirectory": "{{SMOKE_DIR}}", "healthPath": path,
         "healthMarker": "fixture-ready", "stopOnQuit": true,
       ]
@@ -84,7 +88,7 @@ struct BackendChecks {
       "readiness followed a redirect")
 
     let (managedConfig, managedURL, _) = try configuration(mode: "managed")
-    let managed = try BackendRuntime(configuration: managedConfig, resources: root, smoke: true)
+    let managed = try BackendRuntime(configuration: managedConfig, resources: root, smoke: true, startupTimeout: 2)
     defer { managed.stop() }
     var managedReady: Bool?
     managed.start(url: managedURL, workspace: root.path) { managedReady = $0 }

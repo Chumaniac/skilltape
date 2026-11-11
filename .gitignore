@@ -12,3 +12,5 @@ __pycache__/
 # Swift Package Manager native-host builds
 .build/
 .swiftpm/
+
+/apps/skilltape-console/dist-demo/

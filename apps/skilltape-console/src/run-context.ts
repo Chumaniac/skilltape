@@ -36,10 +36,10 @@ export function compareRunContexts(before: ContextReview, after: ContextReview):
   if (before.status !== 'recorded' || after.status !== 'recorded' || !before.context || !after.context) return null
   const a = before.context, b = after.context
   const differences: string[] = []
-  if (a.input_set_sha256 !== b.input_set_sha256) differences.push('Input snapshot changed')
-  if (a.skill_hash !== b.skill_hash) differences.push('Skill package changed')
-  if (a.executor !== b.executor || a.executor_version !== b.executor_version) differences.push('Executor changed')
-  if (a.os !== b.os || a.arch !== b.arch) differences.push('Platform changed')
-  if (a.max_processes !== b.max_processes || a.step_timeout_ms !== b.step_timeout_ms || a.max_output_bytes !== b.max_output_bytes) differences.push('Resource limits changed')
+  if (a.input_set_sha256 !== b.input_set_sha256) differences.push("输入快照发生变化")
+  if (a.skill_hash !== b.skill_hash) differences.push("技能包发生变化")
+  if (a.executor !== b.executor || a.executor_version !== b.executor_version) differences.push("执行器发生变化")
+  if (a.os !== b.os || a.arch !== b.arch) differences.push("运行平台发生变化")
+  if (a.max_processes !== b.max_processes || a.step_timeout_ms !== b.step_timeout_ms || a.max_output_bytes !== b.max_output_bytes) differences.push("资源上限发生变化")
   return differences
 }
