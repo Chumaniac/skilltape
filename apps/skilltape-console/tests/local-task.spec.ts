@@ -111,3 +111,19 @@ test("item editor updates real quantities without requiring JSON", async ({
     page.getByRole("button", { name: "Export result", exact: true }),
   ).toHaveCount(0);
 });
+
+test("difference-only viewing keeps the full result available for export", async ({ page }) => {
+  await page.goto("/#task");
+  await page.getByRole("button", { name: "Calculate differences", exact: true }).click();
+  await expect(page.locator(".task-table tbody tr")).toHaveCount(2);
+  await page.getByRole("checkbox", { name: "Only differences", exact: true }).check();
+  await expect(page.locator(".task-table tbody tr")).toHaveCount(1);
+  await expect(page.locator(".task-table tbody")).toContainText("notebooks");
+  const pending = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export result", exact: true }).click();
+  const exported = JSON.parse(await readFile((await (await pending).path())!, "utf8"));
+  expect(exported.rows).toHaveLength(2);
+  expect(exported.rows.some((row: { item: string; difference: number }) => row.item === "pencils" && row.difference === 0)).toBe(true);
+  await page.getByRole("checkbox", { name: "Only differences", exact: true }).uncheck();
+  await expect(page.locator(".task-table tbody tr")).toHaveCount(2);
+});
