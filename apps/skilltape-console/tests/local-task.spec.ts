@@ -163,3 +163,19 @@ test("a history that becomes unreadable after opening is never overwritten", asy
     await expect(page.getByRole("status")).toContainText("原始存储已保留");
   }
 });
+
+test("CSV carries the filtered rows and treats a formula-like item as text", async ({ page }) => {
+  await page.goto("/#task");
+  const name = '=SUM(1,2)"纸"';
+  await page.getByRole("button",{name:"编辑 JSON",exact:true}).click();
+  await page.getByLabel("应有数量与实收数量（JSON）").fill(JSON.stringify({
+    expected:[{item:name,quantity:4},{item:"相符",quantity:1}], received:[{item:"相符",quantity:1}]
+  }));
+  await page.getByRole("button",{name:"计算差异",exact:true}).click();
+  await page.getByLabel("仅看差异").check();
+  const [download] = await Promise.all([
+    page.waitForEvent("download"), page.getByRole("button",{name:"导出当前表格 CSV"}).click()
+  ]);
+  expect(download.suggestedFilename()).toBe("reconciliation-differences.csv");
+  expect(await readFile((await download.path())!, "utf8")).toBe("\uFEFF物品,应有数量,实收数量,差异\r\n\"'=SUM(1,2)\"\"纸\"\"\",4,0,-4\r\n");
+});
