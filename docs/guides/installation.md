@@ -1,115 +1,17 @@
-# Install and update SkillTape
+# 安装 SkillTape 独立用户版
 
-For your first Skill, start with the [Quickstart](quickstart.md). The native
-release is the default path: it installs a checksum-verified CLI, its Console
-API companion, and the packaged Console UI without requiring a source build.
+普通用户请从[本仓库 Releases](https://github.com/Chumaniac/skilltape-app/releases)下载 `skilltape-app-macos-arm64-2026.11.11.zip`、`SHA256SUMS` 与 `USER_GUIDE.md`。当前桌面包面向 Apple Silicon、macOS 13.0 及以上；未提供 Intel、Linux 或 Windows 桌面安装包。
 
-## Install a native release
-
-Release assets use these names:
-
-```text
-skilltape-v<version>-<target>.tar.gz   # macOS/Linux
-skilltape-v<version>-<target>.zip      # Windows
-checksums.txt
+```sh
+shasum -a 256 -c SHA256SUMS
 ```
 
-The `v0.4.1` release supports these targets:
+解压后把 `SkillTape.app` 放入 `~/Applications`，双击打开。包内有 Rust CLI、只读 Console API 与前端，无需源码、Rust 或 Node。程序内“帮助 → 使用指南”可离线查看命令及数据位置。使用本机临时签名，未做 Apple 公证。
 
-- `x86_64-unknown-linux-gnu`
-- `x86_64-apple-darwin`
-- `aarch64-apple-darwin`
-- `x86_64-pc-windows-msvc`
+更新前保存未完成输入并退出旧程序。保留旧包和私人工作区后，用新包替换程序；不要删除 `~/Library/Application Support/SkillTape/workspace`。运行记录和 Receipt 应另外备份。
 
-The fixed installers fetch the selected archive and `checksums.txt`, verify the
-archive SHA-256, validate the CLI, API companion, and Console UI, and stage all
-assets before replacement. A download, checksum, extraction, or staging failure
-leaves an existing installation untouched.
+## 从源码构建
 
-The unreleased source installers additionally back up the CLI, API and UI as one
-replacement transaction. A final-move failure restores the complete previous set;
-a failed fresh install removes its partial set. If restoration is blocked, the
-installer preserves its backup and installation lock and reports the recovery
-location. Inspect those files before removing the lock or retrying. Process
-termination without cleanup (for example, SIGKILL or power loss) still requires
-manual recovery. This source change does not alter the pinned v0.4.1 installers
-or release archives linked below.
+见[构建说明](../build.md)。源码 CLI 的 macOS/Linux 执行需要各自的系统沙箱：macOS 使用 `/usr/bin/sandbox-exec`，Linux 使用 Bubblewrap 和可用的用户命名空间。没有沙箱时 Replay/Verify 明确拒绝。Windows 的 Replay/Verify 未提供等价隔离执行器，不会降级执行。
 
-Linux needs `bwrap`/Bubblewrap and an available user namespace for Replay and
-Verify; Debian and Ubuntu users can install it with `sudo apt-get install
-bubblewrap`. macOS uses `/usr/bin/sandbox-exec`. Without the corresponding
-sandbox, Capture, Compile, Lint, and Export remain usable while Replay and
-Verify fail closed. Windows supports Capture, Compile, Lint, and Export;
-Replay and Verify fail closed until an equivalent restricted executor exists.
-
-The [Quickstart](quickstart.md) downloads a fixed installer source and runs the
-public release flow. To choose a trusted mirror, a different install directory,
-or a supported target, see [optional configuration](configuration.md).
-
-## Update or choose a custom directory
-
-Run the installer again with the version you want. It safely replaces the
-installed files only after the new archive has passed all checks:
-
-```bash
-installer_path="$(mktemp)"
-curl --fail --location --silent --show-error --output "$installer_path" \
-  "https://raw.githubusercontent.com/Chumaniac/skilltape/9f6bec579258baa63234139af0fae650d9efdbd2/scripts/install.sh"
-export SKILLTAPE_RELEASE_BASE_URL="https://github.com/Chumaniac/skilltape/releases/download"
-export SKILLTAPE_VERSION="0.4.1"
-bash "$installer_path"
-```
-
-Pass a version, installation directory, and target explicitly to install in a
-custom Unix location:
-
-```bash
-installer_path="$(mktemp)"
-curl --fail --location --silent --show-error --output "$installer_path" \
-  "https://raw.githubusercontent.com/Chumaniac/skilltape/9f6bec579258baa63234139af0fae650d9efdbd2/scripts/install.sh"
-SKILLTAPE_RELEASE_BASE_URL="https://github.com/Chumaniac/skilltape/releases/download" \
-  bash "$installer_path" 0.4.1 "$HOME/.local/bin" "aarch64-apple-darwin"
-```
-
-On Windows, download the fixed installer source before setting the same values
-in PowerShell:
-
-```powershell
-$installerPath = Join-Path $env:TEMP "skilltape-install.ps1"
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Chumaniac/skilltape/9f6bec579258baa63234139af0fae650d9efdbd2/scripts/install.ps1" -OutFile $installerPath
-$env:SKILLTAPE_RELEASE_BASE_URL = "https://github.com/Chumaniac/skilltape/releases/download"
-$env:SKILLTAPE_VERSION = "0.4.1"
-$env:SKILLTAPE_INSTALL_DIR = "$env:LOCALAPPDATA\SkillTape\bin"
-$env:SKILLTAPE_TARGET = "x86_64-pc-windows-msvc"
-& $installerPath
-```
-
-## Use the packaged Console
-
-The native package includes `skilltape-console-api` and `console/index.html`.
-`skilltape console --workspace .` discovers those packaged assets by default.
-`SKILLTAPE_CONSOLE_API_BIN` and `SKILLTAPE_CONSOLE_UI_DIST` are optional local
-overrides for intentionally using different packaged assets; they are not
-required setup. See [configuration](configuration.md) for the shell templates.
-
-## Build from source (contributors)
-
-If you are contributing or need an unreleased build, install Rust 1.97.1 and
-build from the repository root:
-
-```bash
-cargo build --locked --release -p skilltape-cli -p skilltape-console-api
-cargo install --locked --path crates/skilltape-cli
-```
-
-To build the Console UI from source before running `skilltape console`, use:
-
-```bash
-npm ci --prefix apps/skilltape-console
-npm --prefix apps/skilltape-console run build
-```
-
-
-## Current-source candidates
-
-Use the [candidate identity guide](source-candidates.md) to build and inspect one clean source revision. `--require-identity` refuses mixed CLI/API/UI artifacts before packaging. This does not publish or update the fixed public release; retain old installations and successful data.
+此社区用户版不使用旧仓库 v0.4.1 的固定安装器或旧跨平台下载地址。仓库内保留的历史版本说明不等于本版已有相应发行资产。首次完整操作见[用户指南](../user-guide.md)。
