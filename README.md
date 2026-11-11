@@ -42,4 +42,4 @@ cargo build --locked -p skilltape-cli
 
 **Beta** · Turn a real local workflow into a reviewable Agent Skill you can replay and verify before you share it.
 
-[终端示意](docs/assets/quickstart-terminal.svg) · [纯文本操作记录](docs/assets/quickstart-terminal.txt) · [命令行入门](docs/guides/quickstart.md) · [可选配置](docs/guides/configuration.md)
+[终端示意](docs/assets/quickstart-terminal.svg) · [纯文本操作记录](docs/assets/quickstart-terminal.txt) · [命令行入门](docs/guides/quickstart.md) · [Configuration](docs/guides/configuration.md)
