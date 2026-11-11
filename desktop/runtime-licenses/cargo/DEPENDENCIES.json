@@ -1860,14 +1860,14 @@
   },
   {
     "name": "rustls",
-    "version": "0.23.45",
+    "version": "0.23.46",
     "license": "Apache-2.0 OR ISC OR MIT",
     "source": "registry+https://github.com/rust-lang/crates.io-index",
     "repository": "https://github.com/rustls/rustls",
     "notices": [
-      "rustls-0.23.45/LICENSE-APACHE",
-      "rustls-0.23.45/LICENSE-ISC",
-      "rustls-0.23.45/LICENSE-MIT"
+      "rustls-0.23.46/LICENSE-APACHE",
+      "rustls-0.23.46/LICENSE-ISC",
+      "rustls-0.23.46/LICENSE-MIT"
     ]
   },
   {

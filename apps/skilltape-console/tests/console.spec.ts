@@ -635,3 +635,29 @@ test('capture package lookup shows only exact matches and rejects a response for
  await page.goto('/#timeline');await page.getByRole('button',{name:"查找已编译技能包"}).click();await expect(page.getByRole('link',{name:"复核编译包 demo"})).toHaveAttribute('href','#compile?skill=demo');await expect(page.getByRole('link',{name:"复核编译包 different"})).toHaveCount(0);
  foreign=true;await page.getByRole('button',{name:"刷新技能包查询"}).click();await expect(page.getByText('技能包查询不完整或版本不受支持',{exact:false})).toBeVisible();await expect(page.getByRole('link',{name:"复核编译包 demo"})).toHaveCount(0);
 });
+
+test('a slow workspace request can time out and recover without modern AbortSignal helpers', async ({page}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(AbortSignal, 'any', {value: undefined, configurable: true})
+    const original = window.fetch.bind(window)
+    let stalled = false
+    window.fetch = (input, init) => {
+      if (!stalled && String(input).endsWith('/workspaces')) {
+        stalled = true
+        document.documentElement.dataset.stalled = "true"
+        return new Promise<Response>((_, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted','AbortError')), {once:true})
+        })
+      }
+      return original(input,init)
+    }
+  })
+  await mockApi(page)
+  await page.clock.install()
+  await page.goto('/#timeline')
+  await expect(page.locator('html')).toHaveAttribute('data-stalled','true')
+  await page.clock.fastForward(16000)
+  await expect(page.getByRole('alert')).toContainText('读取超时')
+  await page.getByRole('button',{name:'重试'}).click()
+  await expect(page.getByRole('heading', { name: '采集时间线', exact: true })).toBeVisible()
+})

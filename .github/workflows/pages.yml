@@ -27,9 +27,14 @@ jobs:
           cd apps/skilltape-console
           npm ci
           npm run build:demo
-      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa
+      - name: Package the browser build
+        run: tar --directory apps/skilltape-console/dist-demo -cf "$RUNNER_TEMP/artifact.tar" .
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          path: apps/skilltape-console/dist-demo
+          name: github-pages
+          path: ${{ runner.temp }}/artifact.tar
+          retention-days: 1
+          if-no-files-found: error
   publish:
     needs: build
     runs-on: ubuntu-latest
