@@ -16,7 +16,7 @@ const savedStorage = () => nativeWorkspace() ? localStorage : sessionStorage;
 function read() {
   try {
     const raw = savedStorage().getItem(key);
-    if (!raw) return { items: [] as Saved[], error: "" };
+    if (raw === null) return { items: [] as Saved[], error: "" };
     if (raw.length > 512000) throw Error();
     const data = JSON.parse(raw);
     if (

@@ -156,8 +156,10 @@ test("replacing a draft with the example respects a cancelled confirmation", asy
 test("a history that becomes unreadable after opening is never overwritten", async ({ page }) => {
   await page.goto("/#task");
   await page.getByRole("button", {name: "计算差异"}).click();
-  await page.evaluate(key => sessionStorage.setItem(key, "damaged"), key);
-  await page.getByRole("button", {name:"保存到本标签页"}).click();
-  expect(await page.evaluate(key => sessionStorage.getItem(key), key)).toBe("damaged");
-  await expect(page.getByRole("status")).toContainText("原始存储已保留");
+  for (const raw of ["damaged", ""]) {
+    await page.evaluate(([key, raw]) => sessionStorage.setItem(key, raw), [key, raw]);
+    await page.getByRole("button", {name:"保存到本标签页"}).click();
+    expect(await page.evaluate(key => sessionStorage.getItem(key), key)).toBe(raw);
+    await expect(page.getByRole("status")).toContainText("原始存储已保留");
+  }
 });
