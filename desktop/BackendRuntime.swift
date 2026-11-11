@@ -4,6 +4,7 @@ import Foundation
 struct LaunchConfiguration: Decodable {
   let executable: String
   let arguments: [String]
+  let workspaceDirectory: String?
   let workingDirectory: String
   let environment: [String: String]?
   let healthPath: String
@@ -106,6 +107,11 @@ final class BackendRuntime {
       value.replacingOccurrences(of: "{{RESOURCES}}", with: resources.path)
         .replacingOccurrences(of: "{{SMOKE_DIR}}", with: scratch?.path ?? "")
         .replacingOccurrences(of: "{{WORKSPACE}}", with: smoke ? scratch!.path : workspace)
+        .replacingOccurrences(of: "{{HOME}}", with: FileManager.default.homeDirectoryForCurrentUser.path)
+    }
+    if !smoke && configuration.workspaceDirectory != nil {
+      do { try FileManager.default.createDirectory(atPath: resolve(workspace), withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700]) }
+      catch { completion(false); return }
     }
     let process = child?.isRunning == true ? child! : Process()
     if child?.isRunning != true {

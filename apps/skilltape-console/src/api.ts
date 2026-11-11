@@ -32,21 +32,28 @@ export class ApiError extends Error {
 }
 
 async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const timeout = AbortSignal.timeout(15_000)
+  const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout
   let response: Response
+  let payload: unknown
   try {
-    response = await fetch(API_BASE + path, { headers: { Accept: 'application/json' }, signal })
+    response = await fetch(API_BASE + path, { headers: { Accept: 'application/json' }, signal: requestSignal })
+    payload = await response.json().catch(error => {
+      if (requestSignal.aborted) throw error
+      return null
+    })
   } catch (error) {
     if (signal?.aborted) throw error
-    throw new ApiError('Connection failed. Start the local Console, then retry.', 0, 'connection_failed')
+    if (timeout.aborted) throw new ApiError("读取超时，请检查本机服务后重试。", 408, 'request_timeout')
+    throw new ApiError("连接失败。请启动本机控制台后重试。", 0, 'connection_failed')
   }
-  const payload: unknown = await response.json().catch(() => null)
   if (!response.ok) {
     const error =
       payload && typeof payload === 'object' && 'error' in payload
         ? (payload as { error?: { message?: string; code?: string } }).error
         : undefined
     throw new ApiError(
-      error?.message ?? 'The local API returned ' + response.status + '.',
+      requestFailure(error?.code, response.status),
       response.status,
       error?.code,
     )
@@ -67,14 +74,14 @@ export async function getSkills(signal?: AbortSignal, query = '', offset = 0): P
       new Set(value.items).size !== value.items.length ||
       value.items.length !== Math.min(value.limit, Math.max(0, value.total - offset)) ||
       value.next_offset !== (offset + value.items.length < value.total ? offset + value.items.length : null)) {
-    throw new ApiError('Saved Skill list is invalid. Open a known ID or retry the list.', 502, 'invalid_skill_list')
+    throw new ApiError("技能包列表无效，请重试或输入已知 ID。", 502, 'invalid_skill_list')
   }
   return value
 }
 
 export async function getBatchReview(signal?: AbortSignal) {
   const value=await get<unknown>('/batch',signal)
-  if(!validBatchReview(value)) throw new ApiError('Batch progress is invalid or unsupported. Inspect the saved workspace before continuing.',502,'invalid_batch')
+  if(!validBatchReview(value)) throw new ApiError("批次进度无效或版本不受支持，请先检查已保存的工作区。",502,'invalid_batch')
   return value
 }
 
@@ -100,7 +107,7 @@ export function isSavedEvidenceId(id: string): boolean {
 export async function getSkillDiff(skillId: string, signal?: AbortSignal) {
   const skill = await get<unknown>('/skills/' + encodeURIComponent(skillId) + '/diff', signal)
   if (!isSkillDiff(skill) || skill.id !== skillId) {
-    throw new ApiError('The saved Skill package is invalid or unsupported. Check it with the current CLI, then retry.', 502, 'invalid_skill')
+    throw new ApiError("已保存技能包无效或版本不受支持，请用当前 CLI 检查后重试。", 502, 'invalid_skill')
   }
   const plan = skill.policy_plan
   if (plan != null && (plan.schema !== 'skilltape.dev/policy-plan/v1' || plan.execution !== 'not-run' ||
@@ -112,7 +119,7 @@ export async function getSkillDiff(skillId: string, signal?: AbortSignal) {
       typeof check.allowed === 'boolean' && typeof check.code === 'string' && /^[A-Z0-9_]{1,64}$/.test(check.code) &&
       typeof check.reason === 'string' && check.reason.length <= 512 && ['low', 'medium', 'high', 'critical'].includes(check.risk)) ||
     (plan.allowed && (!plan.package_valid || plan.package_error_codes.length > 0 || plan.checks.some(check => !check.allowed))))) {
-    throw new ApiError('The policy preflight is invalid or unsupported. No execution is approved.', 502, 'invalid_policy_plan')
+    throw new ApiError("策略预检无效或版本不受支持，未批准任何执行。", 502, 'invalid_policy_plan')
   }
   return skill
 }
@@ -120,7 +127,7 @@ export async function getSkillDiff(skillId: string, signal?: AbortSignal) {
 export async function getRun(runId: string, signal?: AbortSignal) {
   const value = await get<unknown>('/runs/' + encodeURIComponent(runId), signal)
   if (!isRunDocument(value, runId)) {
-    throw new ApiError('The saved run is invalid or unsupported. Inspect the original record; Console did not run or modify it.', 502, 'invalid_run')
+    throw new ApiError("已保存运行无效或版本不受支持。请检查原始记录，控制台没有运行或修改它。", 502, 'invalid_run')
   }
   return value
 }
@@ -128,7 +135,7 @@ export async function getRun(runId: string, signal?: AbortSignal) {
 export async function getReceipt(receiptId: string, signal?: AbortSignal) {
   const payload = await get<unknown>('/receipts/' + encodeURIComponent(receiptId), signal)
   if (!isRecord(payload) || payload.schema !== 'skilltape.dev/receipt/v1' || payload.id !== receiptId || !isReceipt(payload.document)) {
-    throw new ApiError('The saved Receipt is invalid or unsupported. Choose another saved Receipt or retry after checking the file.', 502, 'invalid_receipt')
+    throw new ApiError("已保存凭据无效或版本不受支持，请选择另一份凭据或检查文件后重试。", 502, 'invalid_receipt')
   }
   return { ...payload, document: payload.document }
 }
@@ -188,7 +195,7 @@ const isText = (value: unknown): value is string => typeof value === 'string'
 const isCount = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
 const isTimestamp = (value: unknown): value is number => isCount(value) && Number.isFinite(new Date(value).getTime())
 const isTextList = (value: unknown) => Array.isArray(value) && value.every(isText)
-const invalidTimeline = () => new ApiError('The saved timeline is invalid or unsupported. Check the saved Tape, then retry.', 502, 'invalid_timeline')
+const invalidTimeline = () => new ApiError("已保存时间线无效或版本不受支持，请检查原始记录后重试。", 502, 'invalid_timeline')
 
 function isPage(value: Record<string, unknown>) {
   return value.schema === 'skilltape.dev/console/v1' && isCount(value.offset) &&
@@ -266,7 +273,7 @@ function isReceipt(value: unknown): value is Receipt {
 export async function getDeliveries(offset = 0, signal?: AbortSignal) {
   const payload = await get<unknown>('/workspaces/default/deliveries?limit=50&offset=' + offset, signal)
   if (!isCollection(payload, 50, isDeliverySummary) || payload.total > 1000 || payload.offset !== offset || payload.limit !== 50) {
-    throw new ApiError('The saved-delivery response is invalid or unsupported. Check the local Console service, then refresh the list.', 502, 'invalid_response')
+    throw new ApiError("交付包响应无效或版本不受支持，请检查本机控制台服务后刷新列表。", 502, 'invalid_response')
   }
   return payload
 }
@@ -295,7 +302,7 @@ function isDeliveryReview(value: unknown, id: string): value is DeliveryReview {
 export async function getDelivery(id: string, signal?: AbortSignal) {
   const payload = await get<unknown>('/deliveries/' + encodeURIComponent(id), signal)
   if (!isDeliveryReview(payload, id)) {
-    throw new ApiError('The saved-delivery inspection is invalid or unsupported. No file acceptance is established.', 502, 'invalid_response')
+    throw new ApiError("交付检查无效或版本不受支持，尚未确认文件验收通过。", 502, 'invalid_response')
   }
   return payload
 }
@@ -305,16 +312,17 @@ export function formatEventPayload(event: TapeEvent): string {
 }
 
 export function formatDate(timestampMs: number | null): string {
-  if (timestampMs === null) return 'Not finished'
-  if (!isTimestamp(timestampMs)) return 'Invalid timestamp'
-  return new Intl.DateTimeFormat(undefined, {
+  if (timestampMs === null) return "尚未结束"
+  if (!isTimestamp(timestampMs)) return "时间戳无效"
+  return new Intl.DateTimeFormat('zh-CN', {
+    hour12: false,
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(new Date(timestampMs))
 }
 
 export function formatNumber(value: number): string {
-  return new Intl.NumberFormat().format(value)
+  return new Intl.NumberFormat('zh-CN').format(value)
 }
 
 export function apiBaseLabel(): string {
@@ -323,7 +331,7 @@ export function apiBaseLabel(): string {
 
 export async function getRunContext(receiptId: string, signal?: AbortSignal) {
   const value = await get<unknown>('/receipts/' + encodeURIComponent(receiptId) + '/context', signal)
-  if (!validContextReview(value, receiptId)) throw new ApiError('Run context is invalid or unsupported.', 502, 'invalid_context')
+  if (!validContextReview(value, receiptId)) throw new ApiError("运行上下文无效或版本不受支持。", 502, 'invalid_context')
   return value
 }
 
@@ -351,7 +359,7 @@ function isTapeCoverage(value: unknown, id: string): value is TapeCoverage {
 }
 export async function getTapeCoverage(id: string, signal?: AbortSignal) {
   const value = await get<unknown>('/tapes/' + encodeURIComponent(id) + '/coverage',signal)
-  if (!isTapeCoverage(value,id)) throw new ApiError('Capture coverage is invalid or unsupported. Check the saved Tape, then retry.',502,'invalid_coverage')
+  if (!isTapeCoverage(value,id)) throw new ApiError("采集完整性数据无效或版本不受支持，请检查已保存记录后重试。",502,'invalid_coverage')
   return value
 }
 
@@ -359,7 +367,7 @@ export async function getTapeCoverage(id: string, signal?: AbortSignal) {
 export interface TapePackages extends Collection<{id:string;matches_tape:boolean;source_state:'matched'|'different'|'unrecorded'|'unavailable'}> {tape_id:string}
 export async function getTapePackages(tapeId:string,signal?:AbortSignal,offset=0):Promise<TapePackages>{
  const value=await get<unknown>('/tapes/'+encodeURIComponent(tapeId)+'/packages?limit=50&offset='+offset,signal)
- if(!isCollection(value,50,(row:unknown):row is TapePackages['items'][number]=>Boolean(row&&typeof row==='object'&&typeof (row as {id:string}).id==='string'&&isSavedEvidenceId((row as {id:string}).id)&&['matched','different','unrecorded','unavailable'].includes((row as {source_state:string}).source_state)&&typeof (row as {matches_tape:boolean}).matches_tape==='boolean'&&((row as {source_state:string}).source_state==='matched')===(row as {matches_tape:boolean}).matches_tape))||!('tape_id' in value)||value.tape_id!==tapeId)throw new ApiError('Package discovery is incomplete or unsupported. Retry or open a known saved package ID.',502,'invalid_packages')
+ if(!isCollection(value,50,(row:unknown):row is TapePackages['items'][number]=>Boolean(row&&typeof row==='object'&&typeof (row as {id:string}).id==='string'&&isSavedEvidenceId((row as {id:string}).id)&&['matched','different','unrecorded','unavailable'].includes((row as {source_state:string}).source_state)&&typeof (row as {matches_tape:boolean}).matches_tape==='boolean'&&((row as {source_state:string}).source_state==='matched')===(row as {matches_tape:boolean}).matches_tape))||!('tape_id' in value)||value.tape_id!==tapeId)throw new ApiError("技能包查询不完整或版本不受支持，请重试或输入已知技能包 ID。",502,'invalid_packages')
  return value as TapePackages
 }
 
@@ -370,26 +378,43 @@ export async function getReceipts(signal?:AbortSignal,offset=0,filters?:ReceiptF
  if(filters?.status)query.set('status',filters.status)
  if(filters?.skillHash)query.set('skill_hash',filters.skillHash)
  const value=await get<unknown>('/receipts?'+query,signal)
- if(!isCollection(value,50,(row:unknown):row is ReceiptSummary=>{if(!row||typeof row!=='object')return false;const v=row as ReceiptSummary;return typeof v.id==='string'&&isSavedEvidenceId(v.id)&&['available','unavailable'].includes(v.metadata_state)&&(v.status===null||['succeeded','run_failed','assertion_failed','cancelled'].includes(v.status))&&[v.skill_hash,v.run_id].every(hash=>hash===null||typeof hash==='string'&&/^[a-f0-9]{64}$/.test(hash))&&[v.bytes,v.modified_at_ms].every(n=>n===null||Number.isSafeInteger(n)&&n>=0)&&(v.metadata_state!=='available'||v.status!==null&&v.skill_hash!==null&&v.run_id!==null)}))throw new ApiError('Saved Receipt list is invalid. Retry or open a known filename.',502,'invalid_receipt_list')
+ if(!isCollection(value,50,(row:unknown):row is ReceiptSummary=>{if(!row||typeof row!=='object')return false;const v=row as ReceiptSummary;return typeof v.id==='string'&&isSavedEvidenceId(v.id)&&['available','unavailable'].includes(v.metadata_state)&&(v.status===null||['succeeded','run_failed','assertion_failed','cancelled'].includes(v.status))&&[v.skill_hash,v.run_id].every(hash=>hash===null||typeof hash==='string'&&/^[a-f0-9]{64}$/.test(hash))&&[v.bytes,v.modified_at_ms].every(n=>n===null||Number.isSafeInteger(n)&&n>=0)&&(v.metadata_state!=='available'||v.status!==null&&v.skill_hash!==null&&v.run_id!==null)}))throw new ApiError("凭据列表无效，请重试或输入已知文件名。",502,'invalid_receipt_list')
  return value
 }
 
 
 export async function getReceiptComparison(before:string,after:string,signal?:AbortSignal):Promise<ReceiptComparison> {
- if(!isSavedEvidenceId(before)||!isSavedEvidenceId(after)||before===after)throw new ApiError('Choose two different saved Receipt filenames, not paths.',400,'invalid_receipt_pair')
+ if(!isSavedEvidenceId(before)||!isSavedEvidenceId(after)||before===after)throw new ApiError("请选择两个不同的已保存凭据文件名，不要填写路径。",400,'invalid_receipt_pair')
  const value=await get<unknown>('/receipt-comparisons?'+new URLSearchParams({before,after}),signal)
- if(!validReceiptComparison(value,before,after))throw new ApiError('Saved Receipt comparison is invalid or incomplete.',502,'invalid_receipt_comparison')
+ if(!validReceiptComparison(value,before,after))throw new ApiError("已保存凭据的对比结果无效或不完整。",502,'invalid_receipt_comparison')
  return value
 }
 
 export async function getVerifyAttempts(signal?:AbortSignal,offset=0):Promise<Collection<VerifyAttempt>>{
  const value=await get<unknown>('/verify-attempts?'+new URLSearchParams({limit:'12',offset:String(offset)}),signal)
- if(!isCollection(value,12,validVerifyAttempt)||value.total>256||value.offset!==offset||new Set(value.items.map(v=>v.id)).size!==value.items.length)throw new ApiError('Single attempt records are invalid or incomplete. Saved files were not changed.',502,'invalid_attempts')
+ if(!isCollection(value,12,validVerifyAttempt)||value.total>256||value.offset!==offset||new Set(value.items.map(v=>v.id)).size!==value.items.length)throw new ApiError("单次尝试记录无效或不完整，已保存文件未被修改。",502,'invalid_attempts')
  return value
 }
 export async function getVerifyAttempt(id:string,signal?:AbortSignal):Promise<VerifyAttempt>{
- if(!/^[a-f0-9]{64}$/.test(id))throw new ApiError('Choose an existing attempt identifier, not a path.',400,'invalid_attempt_id')
+ if(!/^[a-f0-9]{64}$/.test(id))throw new ApiError("请填写已有尝试 ID，不要填写路径。",400,'invalid_attempt_id')
  const value=await get<unknown>('/verify-attempts/'+encodeURIComponent(id),signal)
- if(!validVerifyAttempt(value)||value.id!==id)throw new ApiError('Single attempt metadata could not be checked. Saved files were not changed.',502,'invalid_attempt')
+ if(!validVerifyAttempt(value)||value.id!==id)throw new ApiError("无法核对单次尝试元数据，已保存文件未被修改。",502,'invalid_attempt')
  return value
+}
+
+function requestFailure(rawCode: unknown, status: number): string {
+  const code = typeof rawCode === 'string' && /^[a-z0-9_-]{1,64}$/i.test(rawCode) ? rawCode : ''
+  const messages: Readonly<Record<string, string>> = {
+    not_found: '未找到这份已保存记录，请核对工作区与 ID。',
+    unsafe_id: '记录 ID 不安全，请使用目录或文件名，不要填写路径。',
+    package_discovery_capacity: '已保存目录超过1,000个，请直接输入已知 ID。',
+    attempt_discovery_capacity: '尝试记录超过读取上限，请保留原件并按工作区分别查看。',
+    inspection_busy: '已有两项检查正在进行，请等待完成后重试。',
+    invalid_document: '已保存记录无效或版本不受支持，请核对原始文件。',
+    unsafe_path: '该路径不在工作区允许范围内，请选择工作区中的已保存记录。',
+    unsupported_delivery_platform: '当前系统无法完成文件完整性检查。',
+  }
+  if (status === 404) return messages.not_found!
+  if (status === 503) return '本机控制台暂不可用，请确认服务已启动，等待已有检查完成后重试。'
+  return (Object.hasOwn(messages, code) ? messages[code] : undefined) ?? `本机服务无法完成请求（HTTP ${status}${code ? '，' + code : ''}），请检查原始记录后重试。`
 }

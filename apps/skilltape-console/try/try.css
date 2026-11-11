@@ -1,0 +1,4 @@
+.trial-nav, .trial-content { max-width: 72rem; margin: auto; padding: 1rem clamp(1rem, 4vw, 3rem); }
+.trial-nav { min-height: 4rem; display: flex; gap: .75rem; align-items: center; border-bottom: 1px solid var(--line); }
+.trial-nav a { margin-left: auto; color: inherit; text-underline-offset: .24em; }
+.trial-content { padding-top: 2rem; }

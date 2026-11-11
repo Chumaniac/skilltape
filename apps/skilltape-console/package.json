@@ -10,7 +10,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "playwright test"
+    "test": "playwright test",
+    "build:demo": "vite build try --config vite.config.ts --base ./ --outDir ../dist-demo --emptyOutDir"
   },
   "dependencies": {
     "react": "^19.3.0",

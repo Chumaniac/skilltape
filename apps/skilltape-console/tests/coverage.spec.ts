@@ -20,21 +20,21 @@ async function fixture(page:import('@playwright/test').Page, read:(id:string,rou
 
 test('whole capture coverage is on demand, includes all pages and locates an observed sequence',async({page})=>{
   let reads=0;await fixture(page,async(id,route)=>{reads++;await route.fulfill({json:coverage(id)})});
-  await page.goto('/#timeline?tape=a');await expect(page.getByRole('heading',{name:'Capture timeline',exact:true})).toBeVisible();expect(reads).toBe(0)
-  await page.getByRole('button',{name:'Check whole Tape',exact:true}).click();const panel=page.getByRole('region',{name:'Capture coverage',exact:true});
-  await expect(panel).toContainText('251 recorded events');await expect(panel).toContainText('200');await expect(panel).toContainText('32 of 53');await expect(panel).toContainText('metadata cannot establish');expect(reads).toBe(1)
-  await panel.getByRole('link',{name:'View sequence 150',exact:true}).click();await expect(page).toHaveURL(/eventsOffset=100/);await expect(page.getByText('#0150', {exact:true}).first()).toBeVisible();expect(reads).toBe(1)
+  await page.goto('/#timeline?tape=a');await expect(page.getByRole('heading',{name:"采集时间线",exact:true})).toBeVisible();expect(reads).toBe(0)
+  await page.getByRole('button',{name:"检查整份采集记录",exact:true}).click();const panel=page.getByRole('region',{name:"采集完整性",exact:true});
+  await expect(panel).toContainText("251 条已记录事件");await expect(panel).toContainText('200');await expect(panel).toContainText('32 / 53');await expect(panel).toContainText('元数据不能判定');expect(reads).toBe(1)
+  await panel.getByRole('link',{name:"查看序号 150",exact:true}).click();await expect(page).toHaveURL(/eventsOffset=100/);await expect(page.getByText('#0150', {exact:true}).first()).toBeVisible();expect(reads).toBe(1)
 })
 
 test('invalid coverage cannot be presented as a checked capture and can recover',async({page})=>{
-  let invalid=true;await fixture(page,async(id,route)=>route.fulfill({json:invalid?{...coverage(id),total_events:1}:coverage(id)}));await page.goto('/#timeline?tape=a');await page.getByRole('button',{name:'Check whole Tape',exact:true}).click();
-  const panel=page.getByRole('region',{name:'Capture coverage',exact:true});await expect(panel.getByRole('alert')).toContainText('invalid or unsupported');invalid=false;await panel.getByRole('button',{name:'Retry request',exact:true}).click();await expect(panel).toContainText('251 recorded events')
+  let invalid=true;await fixture(page,async(id,route)=>route.fulfill({json:invalid?{...coverage(id),total_events:1}:coverage(id)}));await page.goto('/#timeline?tape=a');await page.getByRole('button',{name:"检查整份采集记录",exact:true}).click();
+  const panel=page.getByRole('region',{name:"采集完整性",exact:true});await expect(panel.getByRole('alert')).toContainText("无效或版本不受支持");invalid=false;await panel.getByRole('button',{name:"重试",exact:true}).click();await expect(panel).toContainText("251 条已记录事件")
 })
 
 test('switching tapes discards late coverage without scanning the new Tape automatically',async({page})=>{
   let release:()=>void=()=>{};const gate=new Promise<void>(resolve=>release=resolve);let aStarted=false,bReads=0;
   await fixture(page,async(id,route)=>{if(id==='a'){aStarted=true;await gate;}else bReads++;await route.fulfill({json:coverage(id)}).catch(()=>{})});
-  await page.goto('/#timeline?tape=a');await page.getByRole('button',{name:'Check whole Tape',exact:true}).click();await expect.poll(()=>aStarted).toBe(true);await page.getByLabel('Select capture tape').selectOption('b');
-  await expect(page.getByRole('button',{name:'Check whole Tape',exact:true})).toBeVisible();expect(bReads).toBe(0);await page.getByRole('button',{name:'Check whole Tape',exact:true}).click();release();
-  const panel=page.getByRole('region',{name:'Capture coverage',exact:true});await expect(panel).toContainText('0 recorded events');await expect(panel).not.toContainText('251 recorded events')
+  await page.goto('/#timeline?tape=a');await page.getByRole('button',{name:"检查整份采集记录",exact:true}).click();await expect.poll(()=>aStarted).toBe(true);await page.getByLabel("选择采集记录").selectOption('b');
+  await expect(page.getByRole('button',{name:"检查整份采集记录",exact:true})).toBeVisible();expect(bReads).toBe(0);await page.getByRole('button',{name:"检查整份采集记录",exact:true}).click();release();
+  const panel=page.getByRole('region',{name:"采集完整性",exact:true});await expect(panel).toContainText("0 条已记录事件");await expect(panel).not.toContainText("251 条已记录事件")
 })

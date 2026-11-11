@@ -8,7 +8,7 @@ enum ServiceOwnership {
     let pipe = Pipe()
     process.executableURL = URL(fileURLWithPath: executable)
     process.arguments = arguments
-    process.environment = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "LC_ALL": "C"]
+    process.environment = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "LANG": "C", "LC_TIME": "C", "LC_CTYPE": "en_US.UTF-8"]
     process.standardOutput = pipe
     process.standardError = FileHandle.nullDevice
     do { try process.run() } catch { return nil }
@@ -25,7 +25,7 @@ enum ServiceOwnership {
     else { return nil }
     return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
   }
-  static func managedPID(state: URL, script: String, workingDirectory: String, port: UInt16)
+  static func managedPID(state: URL, script: String, executable: String, workingDirectory: String, port: UInt16)
     -> Int32?
   {
     guard state.resolvingSymlinksInPath().path == state.standardizedFileURL.path,
@@ -39,12 +39,16 @@ enum ServiceOwnership {
       let pid = value["pid"] as? Int, pid > 1, pid <= Int(Int32.max),
       value["port"] as? Int == Int(port), let stamp = value["started"] as? String,
       output("/bin/ps", ["-p", String(pid), "-o", "lstart="]) == stamp,
-      let command = output("/bin/ps", ["-ww", "-p", String(pid), "-o", "command="]),
-      let prefix = command.range(
-        of: #"^(?:\S*/)?[Pp]ython[0-9.]*\s+(?:-(?:u|B|E|I|OO|O|s|S)\s+)*"#,
-        options: .regularExpression)
+      let command = output("/bin/ps", ["-ww", "-p", String(pid), "-o", "command="])
     else { return nil }
-    let argument = String(command[prefix.upperBound...])
+    // ps prints argv without quoting; split only the exact configured executable.
+    let executables = Set([executable, URL(fileURLWithPath: executable).resolvingSymlinksInPath().path])
+    guard let interpreter = executables.first(where: { command.hasPrefix($0 + " ") }) else { return nil }
+    var argument = String(command.dropFirst(interpreter.count)).trimmingCharacters(in: .whitespaces)
+    let flags: Set<String> = ["-u", "-B", "-E", "-I", "-O", "-OO", "-s", "-S"]
+    while let separator = argument.firstIndex(of: " "), flags.contains(String(argument[..<separator])) {
+      argument = String(argument[separator...]).trimmingCharacters(in: .whitespaces)
+    }
     if argument == script || argument.hasPrefix(script + " ") { return Int32(pid) }
     let relative =
       script.hasPrefix(workingDirectory + "/")
@@ -62,9 +66,9 @@ enum ServiceOwnership {
   ) -> Bool {
     let expected: Int32
     if let state = state, let script = script {
-      guard
+      guard let executable = child.executableURL?.path,
         let pid = managedPID(
-          state: state, script: script, workingDirectory: workingDirectory, port: port)
+          state: state, script: script, executable: executable, workingDirectory: workingDirectory, port: port)
       else { return false }
       expected = pid
     } else {

@@ -15,11 +15,12 @@ ROOT = Path(__file__).resolve().parents[1]
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--output', type=Path, default=ROOT / 'desktop/build')
+    parser.add_argument('--runtime', type=Path, help='Embed an assembled portable runtime')
     parser.add_argument('--preview', action='store_true', help='Allow an explicitly marked working-tree preview')
     args = parser.parse_args()
     if sys.platform != 'darwin':
         raise SystemExit('MACOS_BUILD_REQUIRED')
-    config = json.loads((ROOT / 'desktop/app.json').read_text())
+    config = json.loads((ROOT / ('desktop/portable.json' if args.runtime else 'desktop/app.json')).read_text())
     dirty = bool(subprocess.check_output(['git','status','--porcelain'],cwd=ROOT,text=True).strip())
     if dirty and not args.preview:
         raise SystemExit('CLEAN_SOURCE_REQUIRED; use --preview only for local review')
@@ -87,10 +88,39 @@ def main():
             if isinstance(value, list): return [resolve(item) for item in value]
             if isinstance(value, dict): return {key: resolve(item) for key, item in value.items()}
             return value
-        installed = resolve(installed)
+        installed = installed if args.runtime else resolve(installed)
+        if args.runtime:
+            runtime = args.runtime.resolve()
+            if not (runtime / 'runtime-manifest.json').is_file():
+                raise SystemExit('RUNTIME_MANIFEST_REQUIRED')
+            import hashlib
+            manifest = json.loads((runtime / 'runtime-manifest.json').read_text())
+            if manifest.get('sourceCommit') != installed['sourceCommit'] or manifest.get('includesWorkingTreeChanges') != dirty:
+                raise SystemExit('RUNTIME_SOURCE_IDENTITY_MISMATCH')
+            paths = list(runtime.rglob('*'))
+            if len(paths) > 30000 or any(p.is_symlink() and not p.resolve().is_relative_to(runtime) for p in paths):
+                raise SystemExit('RUNTIME_LINK_OR_CAPACITY_INVALID')
+            actual_files = {str(p.relative_to(runtime)) for p in runtime.rglob('*') if p.is_file() and not p.is_symlink() and p.name != 'runtime-manifest.json'}
+            if actual_files != set(manifest['files']):
+                raise SystemExit('RUNTIME_FILE_SET_MISMATCH')
+            for name, expected in manifest['files'].items():
+                candidate = runtime / name
+                if not candidate.resolve().is_relative_to(runtime) or candidate.is_symlink() or not candidate.is_file() or hashlib.sha256(candidate.read_bytes()).hexdigest() != expected:
+                    raise SystemExit('RUNTIME_DIGEST_MISMATCH')
+            minimum = manifest.get('minimumSystemVersion')
+            if not isinstance(minimum, str) or not re.fullmatch(r'\d+(?:\.\d+){1,2}', minimum):
+                raise SystemExit('RUNTIME_DEPLOYMENT_TARGET_INVALID')
+            info['LSMinimumSystemVersion'] = minimum
+            installed['minimumSystemVersion'] = minimum
+            (app / 'Contents/Info.plist').write_bytes(plistlib.dumps(info))
+            shutil.copytree(runtime, resources / 'runtime', symlinks=True)
+            for old_token in ['{{REPO}}', '{{NODE}}', '{{PYTHON}}']:
+                if old_token in json.dumps(installed):
+                    raise SystemExit('SOURCE_BOUND_LAUNCH_PROFILE')
         (resources / 'app.json').write_text(json.dumps(installed, indent=2))
         if needs_assets:
             shutil.copytree(ROOT / config.get('assets', 'dist'), resources / 'ui')
+        shutil.copy2(ROOT / 'desktop/guide.html', resources / 'UserGuide.html')
         architecture = platform.machine()
         if architecture not in {'arm64', 'x86_64'}:
             raise SystemExit('MACOS_ARCHITECTURE_UNSUPPORTED')

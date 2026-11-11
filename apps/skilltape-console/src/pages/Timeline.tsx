@@ -4,7 +4,7 @@ import { formatDate, formatEventPayload, formatNumber, getTapeEvents, getTapes, 
 import type { Collection, TapeEvent, TapeEvents, TapeSummary, WorkspaceSummary } from '../types'
 import { TapePackages } from './TapePackages'
 import { CaptureCoverage } from './CaptureCoverage'
-import { EmptyState, PageError, PageLoading, titleCase } from '../ui'
+import { EmptyState, PageError, PageLoading, evidenceLabel } from '../ui'
 
 interface TimelineProps {
   tapeId?: string
@@ -20,7 +20,7 @@ interface TimelineData {
 
 export function TimelinePage({ tapeId, tapeOffset = 0, eventOffset = 0 }: TimelineProps) {
   const [data, setData] = useState<TimelineData | null>(null)
-  const [error, setError] = useState('Could not load the local capture timeline.')
+  const [error, setError] = useState("无法载入本机采集时间线。")
   const [loading, setLoading] = useState(true)
   const [reload, setReload] = useState(0)
 
@@ -43,7 +43,7 @@ export function TimelinePage({ tapeId, tapeOffset = 0, eventOffset = 0 }: Timeli
       })
       .catch((reason: unknown) => {
         if (!controller.signal.aborted) {
-          setError(reason instanceof Error ? reason.message : 'Could not read the local API.')
+          setError(reason instanceof Error ? reason.message : "无法读取本机 API。")
         }
       })
       .finally(() => {
@@ -52,18 +52,18 @@ export function TimelinePage({ tapeId, tapeOffset = 0, eventOffset = 0 }: Timeli
     return () => controller.abort()
   }, [reload, tapeId, tapeOffset, eventOffset])
 
-  if (loading) return <PageLoading label="Loading capture timeline…" />
+  if (loading) return <PageLoading label="正在载入采集时间线…" />
   if (error) return <PageError message={error} onRetry={() => setReload((value) => value + 1)} />
   if (!data || data.tapes.total === 0) {
     return (
       <PageSection
-        eyebrow="Saved captures"
-        title="Capture timeline"
-        description="Inspect recorded terminal, file and permission events."
+        eyebrow="已保存采集记录"
+        title="采集时间线"
+        description="查看已记录的终端、文件和权限事件。"
       >
         <EmptyState
-          title="No captures yet"
-          message="Run skilltape capture to create the first redacted Tape in this workspace."
+          title="暂无采集记录"
+          message="运行 skilltape capture，在此工作区创建首份脱敏采集记录。"
         />
       </PageSection>
     )
@@ -83,14 +83,14 @@ export function TimelinePage({ tapeId, tapeOffset = 0, eventOffset = 0 }: Timeli
   }
   return (
     <PageSection
-      eyebrow="Saved captures"
-      title="Capture timeline"
-      description="Source and redaction status appear with each event."
+      eyebrow="已保存采集记录"
+      title="采集时间线"
+      description="每个事件均展示来源与脱敏状态。"
       actions={
         <label className="select-control">
-          <span>Tape</span>
+          <span>采集记录</span>
           <select
-            aria-label="Select capture tape"
+            aria-label="选择采集记录"
             name="tape"
             value={selectedTape}
             onChange={(event) => {
@@ -108,7 +108,7 @@ export function TimelinePage({ tapeId, tapeOffset = 0, eventOffset = 0 }: Timeli
       }
     >
       <PageNavigation
-        label="Tapes"
+        label="采集记录"
         offset={data.tapes.offset}
         count={data.tapes.items.length}
         limit={data.tapes.limit}
@@ -118,23 +118,23 @@ export function TimelinePage({ tapeId, tapeOffset = 0, eventOffset = 0 }: Timeli
       />
       <div className="metric-grid">
         <div className="metric metric-accent">
-          <span className="metric-label">Workspace</span>
-          <strong>{data.workspace?.name ?? 'Local workspace'}</strong>
+          <span className="metric-label">工作区</span>
+          <strong>{data.workspace?.name ?? "本地工作区"}</strong>
         </div>
         <div className="metric">
-          <span className="metric-label">Events</span>
+          <span className="metric-label">事件</span>
           <strong>{formatNumber(data.events?.total ?? 0)}</strong>
         </div>
         <div className="metric">
-          <span className="metric-label">Tape status</span>
-          <strong>{!selectedSummary ? 'Unknown' : selectedSummary.finished_at_ms !== null ? 'Finished' : 'Open'}</strong>
+          <span className="metric-label">采集状态</span>
+          <strong>{!selectedSummary ? "未知" : selectedSummary.finished_at_ms !== null ? "已结束" : "尚未结束"}</strong>
         </div>
       </div>
       {selectedTape ? <TapePackages key={selectedTape} tapeId={selectedTape} /> : null}
       {selectedTape ? <CaptureCoverage key={selectedTape} tapeId={selectedTape} eventHref={sequence => tapeLink(selectedTape,tapeOffset,Math.floor(sequence/100)*100)} /> : null}
       {data.events ? (
         <PageNavigation
-          label="Events"
+          label="事件"
           offset={data.events.offset}
           count={data.events.events.length}
           limit={data.events.limit}
@@ -144,15 +144,15 @@ export function TimelinePage({ tapeId, tapeOffset = 0, eventOffset = 0 }: Timeli
         />
       ) : null}
       {data.events && data.events.events.length > 0 ? (
-        <ol className="event-list" aria-label="Capture events">
+        <ol className="event-list" aria-label="采集事件">
           {data.events.events.map((event) => (
             <TimelineEvent event={event} key={event.sequence} />
           ))}
         </ol>
       ) : (
         <EmptyState
-          title={data.events?.total ? 'No events on this page' : 'This Tape is empty'}
-          message={data.events?.total ? 'Use Previous events to return to an earlier page.' : 'This Tape has no saved events.'}
+          title={data.events?.total ? "当前页没有事件" : "采集记录为空"}
+          message={data.events?.total ? "使用“上一页事件”返回之前页面。" : "此采集记录没有保存事件。"}
         />
       )}
     </PageSection>
@@ -172,13 +172,13 @@ function PageNavigation({
 }) {
   if (total <= limit && offset === 0) return null
   return (
-    <nav className="page-navigation" aria-label={label + ' pagination'}>
+    <nav className="page-navigation" aria-label={label + '分页'}>
       <button className="button button-secondary" disabled={offset === 0} onClick={() => onPage(Math.max(0, offset - limit))}>
-        Previous {label.toLowerCase()}
+        上一页{label}
       </button>
-      <span>{label} {count === 0 ? 0 : formatNumber(offset + 1)}–{formatNumber(offset + count)} of {formatNumber(total)}</span>
+      <span>{label} {count === 0 ? 0 : formatNumber(offset + 1)}–{formatNumber(offset + count)} / {formatNumber(total)}</span>
       <button className="button button-secondary" disabled={nextOffset === null} onClick={() => { if (nextOffset !== null) onPage(nextOffset) }}>
-        Next {label.toLowerCase()}
+        下一页{label}
       </button>
     </nav>
   )
@@ -224,20 +224,20 @@ function TimelineEvent({ event }: { event: TapeEvent }) {
         <div className="event-card-header">
           <div>
             <span className="sequence">#{event.sequence.toString().padStart(4, '0')}</span>
-            <h2>{titleCase(event.kind)}</h2>
+            <h2>{evidenceLabel(event.kind)}</h2>
           </div>
           <time dateTime={new Date(event.occurred_at_ms).toISOString()}>
             {formatDate(event.occurred_at_ms)}
           </time>
         </div>
         <div className="event-meta">
-          <span>{titleCase(event.source)}</span>
+          <span>{evidenceLabel(event.source)}</span>
           <span className={'redaction redaction-' + event.redaction}>
-            {titleCase(event.redaction)}
+            {evidenceLabel(event.redaction)}
           </span>
         </div>
         <details className="payload-details">
-          <summary>Inspect event payload</summary>
+          <summary>查看事件内容</summary>
           <pre className="payload-block">
             <code>{shortened}</code>
           </pre>

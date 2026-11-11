@@ -1,0 +1,44 @@
+# 构建 SkillTape 独立程序
+
+macOS 桌面构建需要 macOS 13+ 与 Xcode Command Line Tools。当前实际分发目标是 Apple Silicon；没有声称已提供 Intel 或 Windows 桌面安装包。源码和安装包分开，程序包内含运行文件，私人数据保存在用户目录。
+
+## 编译源码
+
+前提：Node 24、Rust（版本见 rust-toolchain.toml）；macOS 需 Xcode Command Line Tools，Linux 需 bubblewrap。
+
+```sh
+npm ci --prefix apps/skilltape-console
+npm --prefix apps/skilltape-console run build
+cargo build --locked --release -p skilltape-cli -p skilltape-console-api
+```
+
+## 准备运行时
+
+先完成上面的源码编译，再组装新运行目录：
+
+```sh
+python3 desktop/prepare_runtime.py --output /tmp/new-runtime
+```
+
+构建器复制本次构建的 CLI 和 Console API。运行仍需要系统沙箱；二进制与前端均放入程序包。
+
+## 打包与验证
+
+```sh
+python3 desktop/build_app.py --runtime /tmp/new-runtime --output /tmp/new-apps
+```
+
+两个输出目录必须不存在；构建不覆盖旧安装或数据。正式构建要求 Git 干净，运行清单绑定当前提交；本地未提交预览需显式 --preview。
+
+程序包包含「帮助 → 使用指南」，可以离线查看操作步骤和存储位置。复制到新目录后，用最小运行环境启动，检查源码目录不在运行依赖内；桌面与390px窄屏分别核对。测试报告、模型效果和实体设备验收单独记录。
+
+源码检查：
+
+```sh
+cargo test --workspace --locked
+python3 -m unittest discover -s desktop/tests
+```
+
+本地构建仅作临时签名；没有 Apple 开发者签名/公证承诺。发布需附运行时版本、源码提交与 SHA-256 校验和，第三方许可随实际运行包一起保留。
+
+运行包从实际 Mach-O 部署目标计算最低系统版本，当前 Apple Silicon 包最低 macOS 13.0。Rust CLI 与 API 随包提供。具体下载以 source-manifest.json 与应用信息为准。本机验收不等于其他系统版本已实机验收。

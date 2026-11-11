@@ -29,7 +29,7 @@ export function CompileReviewPage({ skillId = '' }: CompileReviewProps) {
       .then(value => { if (!controller.signal.aborted) setSkill(value) })
       .catch((reason: unknown) => {
         if (!controller.signal.aborted) {
-          setError(reason instanceof Error ? reason.message : 'Could not read the Skill package.')
+          setError(reason instanceof Error ? reason.message : "无法读取技能包。")
         }
       })
       .finally(() => {
@@ -42,13 +42,13 @@ export function CompileReviewPage({ skillId = '' }: CompileReviewProps) {
     if (id === skillId) setReload(value => value + 1)
     else window.location.hash = 'compile?skill=' + encodeURIComponent(id)
   }} />
-  if (isSavedEvidenceId(skillId) && loading) return <>{picker}<PageLoading label="Loading compile review…" /></>
+  if (isSavedEvidenceId(skillId) && loading) return <>{picker}<PageLoading label="正在载入编译复核…" /></>
   if (error) return <>{picker}<PageError message={error} onRetry={() => setReload((value) => value + 1)} /></>
   if (!skill) {
     return (
       <>{picker}<EmptyState
-        title="No Skill selected"
-        message="Open a saved package to review its workflow, files and lint results."
+        title="尚未选择技能包"
+        message="打开已保存技能包，复核工作流、文件和静态检查结果。"
       /></>
     )
   }
@@ -61,33 +61,33 @@ export function CompileReviewPage({ skillId = '' }: CompileReviewProps) {
     <>{picker}<section className="page-section">
       <header className="page-heading">
         <div>
-          <p className="eyebrow">Compile review</p>
-          <h1>Compiled package</h1>
+          <p className="eyebrow">编译复核</p>
+          <h1>已编译技能包</h1>
         </div>
         <StatusBadge tone={lintTone}>
-          {skill.lint.errors.length === 0 ? 'Lint clean' : skill.lint.errors.length + ' errors'}
+          {skill.lint.errors.length === 0 ? "静态检查通过" : skill.lint.errors.length + ' 项错误'}
         </StatusBadge>
       </header>
 
       <div className="metric-grid">
-        <Metric label="Skill" value={skill.id} tone="accent" />
-        <Metric label="Workflow steps" value={formatNumber(stepCount)} />
-        <Metric label="Files checked" value={formatNumber(skill.lint.files_checked)} />
+        <Metric label="技能包" value={skill.id} tone="accent" />
+        <Metric label="工作流步骤" value={formatNumber(stepCount)} />
+        <Metric label="已检查文件" value={formatNumber(skill.lint.files_checked)} />
         <Metric
-          label="Warnings"
+          label="警告"
           value={formatNumber(skill.lint.warnings.length)}
           tone={skill.lint.warnings.length > 0 ? 'warn' : 'good'}
         />
       </div>
 
       <article className="panel compile-source" aria-labelledby="compile-source-title">
-        <h2 id="compile-source-title">Capture source</h2>
+        <h2 id="compile-source-title">采集来源</h2>
         {skill.compile_source ? <>
-          <p>Recorded source: {formatNumber(skill.compile_source.event_count)} events. Compare these digests with the retained Capture.</p>
-          <p>Manifest <code>{skill.compile_source.manifest_sha256}</code></p>
-          <p>Events <code>{skill.compile_source.events_sha256}</code></p>
-          <p className="panel-note">Normalized v1 content digests only. This is not author authentication or proof of a successful replay.</p>
-        </> : <p>This package does not record its Capture source. Existing workflow and verification evidence remain available.</p>}
+          <p>记录的来源： {formatNumber(skill.compile_source.event_count)} 个事件。请将这些摘要与保留的采集记录对比。</p>
+          <p>文件清单 <code>{skill.compile_source.manifest_sha256}</code></p>
+          <p>事件 <code>{skill.compile_source.events_sha256}</code></p>
+          <p className="panel-note">仅比较规范化v1内容摘要，不认证作者身份，也不证明重放成功。</p>
+        </> : <p>此技能包未记录采集来源，已有工作流与验证证据仍可查看。</p>}
       </article>
 
       <PackageJourney skillId={skill.id} current="compile" />
@@ -95,10 +95,10 @@ export function CompileReviewPage({ skillId = '' }: CompileReviewProps) {
         <article className="panel panel-span-2">
           <div className="panel-heading">
             <div>
-              <p className="eyebrow">Executable contract</p>
-              <h2>Workflow</h2>
+              <p className="eyebrow">可执行程序约定</p>
+              <h2>工作流</h2>
             </div>
-            <span className="panel-note">Read-only</span>
+            <span className="panel-note">只读</span>
           </div>
           {stepCount > 0 ? (
             <ol className="workflow-list">
@@ -106,31 +106,31 @@ export function CompileReviewPage({ skillId = '' }: CompileReviewProps) {
                 <li key={String(step.id ?? '') + ':' + (workflowPage * pageSize + index)}>
                   <span className="step-index">{String(workflowPage * pageSize + index + 1).padStart(2, '0')}</span>
                   <div className="step-copy">
-                    <strong>{String(step.id ?? 'Unnamed step')}</strong>
-                    <span>{String(step.action ?? 'unknown action')}</span>
+                    <strong>{String(step.id ?? "未命名步骤")}</strong>
+                    <span>{String(step.action ?? "未知操作")}</span>
                   </div>
-                  <code>{String(step.program ?? step.path ?? step.operation ?? 'structured step')}</code>
+                  <code>{String(step.program ?? step.path ?? step.operation ?? "结构化步骤")}</code>
                 </li>
               ))}
             </ol>
           ) : (
             <EmptyState
-              title="No workflow steps"
-              message="This package has a valid workflow document, but it contains no executable steps."
+              title="没有工作流步骤"
+              message="此技能包的工作流文档有效，但没有可执行步骤。"
             />
           )}
-          {stepCount > pageSize && <nav aria-label="Workflow pages" className="panel-heading">
-            <button type="button" disabled={workflowPage === 0} onClick={() => setWorkflowPage(value => value - 1)}>Previous workflow page</button>
-            <span>Steps {workflowPage * pageSize + 1}–{Math.min((workflowPage + 1) * pageSize, stepCount)} of {stepCount}</span>
-            <button type="button" disabled={(workflowPage + 1) * pageSize >= stepCount} onClick={() => setWorkflowPage(value => value + 1)}>Next workflow page</button>
+          {stepCount > pageSize && <nav aria-label="工作流分页" className="panel-heading">
+            <button type="button" disabled={workflowPage === 0} onClick={() => setWorkflowPage(value => value - 1)}>上一页工作流</button>
+            <span>步骤 {workflowPage * pageSize + 1}–{Math.min((workflowPage + 1) * pageSize, stepCount)} / {stepCount}</span>
+            <button type="button" disabled={(workflowPage + 1) * pageSize >= stepCount} onClick={() => setWorkflowPage(value => value + 1)}>下一页工作流</button>
           </nav>}
-          <JsonDisclosure label="View workflow JSON" value={skill.workflow} />
+          <JsonDisclosure label="查看工作流 JSON" value={skill.workflow} />
         </article>
 
         <article className="panel">
           <div className="panel-heading">
             <div>
-              <p className="eyebrow">Package identity</p>
+              <p className="eyebrow">技能包身份</p>
               <h2>{skill.package_path}</h2>
             </div>
           </div>
@@ -140,7 +140,7 @@ export function CompileReviewPage({ skillId = '' }: CompileReviewProps) {
                 <span className="file-dot" aria-hidden="true" />
                 <div className="file-copy">
                   <strong>{file.path}</strong>
-                  <span>{formatNumber(file.bytes)} bytes</span>
+                  <span>{formatNumber(file.bytes)} 字节</span>
                 </div>
                 <code title={file.sha256}>{file.sha256.slice(0, 10)}…</code>
               </div>
@@ -151,17 +151,17 @@ export function CompileReviewPage({ skillId = '' }: CompileReviewProps) {
         <article className="panel panel-span-2">
           <div className="panel-heading">
             <div>
-              <p className="eyebrow">Diagnostics</p>
-              <h2>Lint evidence</h2>
+              <p className="eyebrow">诊断</p>
+              <h2>静态检查证据</h2>
             </div>
-            <span className="panel-note">{formatNumber(skill.lint.errors.length + skill.lint.warnings.length)} findings</span>
+            <span className="panel-note">{formatNumber(skill.lint.errors.length + skill.lint.warnings.length)} 项问题</span>
           </div>
           {skill.lint.errors.length === 0 && skill.lint.warnings.length === 0 ? (
             <div className="success-line" role="status">
               <span className="success-mark" aria-hidden="true">
                 ✓
               </span>
-              <span>Schema, paths, permissions, and lockfile checks are clean.</span>
+              <span>结构、路径、权限和锁文件检查均通过。</span>
             </div>
           ) : (
             <ul className="diagnostic-list">
@@ -177,12 +177,12 @@ export function CompileReviewPage({ skillId = '' }: CompileReviewProps) {
               ))}
             </ul>
           )}
-          {diagnostics.length > pageSize && <nav aria-label="Diagnostic pages" className="panel-heading">
-            <button type="button" disabled={diagnosticPage === 0} onClick={() => setDiagnosticPage(value => value - 1)}>Previous diagnostic page</button>
-            <span>Findings {diagnosticPage * pageSize + 1}–{Math.min((diagnosticPage + 1) * pageSize, diagnostics.length)} of {diagnostics.length}</span>
-            <button type="button" disabled={(diagnosticPage + 1) * pageSize >= diagnostics.length} onClick={() => setDiagnosticPage(value => value + 1)}>Next diagnostic page</button>
+          {diagnostics.length > pageSize && <nav aria-label="诊断分页" className="panel-heading">
+            <button type="button" disabled={diagnosticPage === 0} onClick={() => setDiagnosticPage(value => value - 1)}>上一页诊断</button>
+            <span>发现的问题 {diagnosticPage * pageSize + 1}–{Math.min((diagnosticPage + 1) * pageSize, diagnostics.length)} / {diagnostics.length}</span>
+            <button type="button" disabled={(diagnosticPage + 1) * pageSize >= diagnostics.length} onClick={() => setDiagnosticPage(value => value + 1)}>下一页诊断</button>
           </nav>}
-          <JsonDisclosure label="View manifest JSON" value={skill.manifest} />
+          <JsonDisclosure label="查看清单 JSON" value={skill.manifest} />
         </article>
       </div>
     </section></>
