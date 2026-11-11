@@ -59,6 +59,7 @@ export function LocalTaskPage() {
     [input, setInput] = useState(JSON.stringify(example, null, 2)),
     [formRows, setFormRows] = useState<FormRow[]>(() => formRowsFor(example)),
     [jsonMode, setJsonMode] = useState(false),
+    [onlyDifferences, setOnlyDifferences] = useState(false),
     [result, setResult] = useState<Result | null>(null),
     [message, setMessage] = useState(initial.error),
     [busy, setBusy] = useState(false),
@@ -150,24 +151,33 @@ export function LocalTaskPage() {
       );
     }
   }
+  const differenceCount = result?.rows.filter(row => row.difference !== 0).length ?? 0;
+  const visibleRows = result?.rows.filter(row => !onlyDifferences || row.difference !== 0) ?? [];
   return (
-    <section className="page-section">
-      <header className="page-heading">
+    <section className="page-section local-task-workspace">
+      <header className="page-heading task-hero">
         <div>
+          <p className="eyebrow">QUANTITY WORKSPACE</p>
           <h1>Reconcile quantities</h1>
           <p className="page-description">
             Compare expected and received items. Start with an example, edit
             quantities, then review the differences.
           </p>
         </div>
+        <span className="task-mode-badge">Local calculation</span>
       </header>
+      <div className="task-workspace-stats" aria-label="Current calculation summary">
+        <div className="task-stat task-stat-accent"><span>Input rows</span><strong>{jsonMode ? 'JSON' : formRows.length}</strong><small>{jsonMode ? 'Validate by calculating' : 'Ready to edit'}</small></div>
+        <div className="task-stat"><span>Differences</span><strong>{result ? differenceCount : '—'}</strong><small>{result ? 'From the full comparison' : 'Calculate to compare'}</small></div>
+        <div className="task-stat"><span>Saved locally</span><strong>{history.length}<small> / 20</small></strong><small>Explicit saves only</small></div>
+      </div>
       <p className="task-scope">
         Runs on this device. This calculation is separate from captured runs
         and verified Receipts.
       </p>
       <div className="local-task-grid">
-        <section className="task-panel">
-          <h2>1. Input</h2>
+        <section className="task-panel task-input-panel">
+          <div className="task-section-heading"><h2>1. Input</h2>
           <button
             disabled={busy}
             onClick={() => {
@@ -179,11 +189,12 @@ export function LocalTaskPage() {
             }}
           >
             Fill example
-          </button>
-          <div className="task-actions">
+          </button></div>
+          <div className="task-actions task-view-switch" role="group" aria-label="Input format">
             <button
               type="button"
               disabled={busy || !jsonMode}
+              aria-pressed={!jsonMode}
               onClick={showForm}
             >
               Edit items
@@ -191,6 +202,7 @@ export function LocalTaskPage() {
             <button
               type="button"
               disabled={busy || jsonMode}
+              aria-pressed={jsonMode}
               onClick={() => setJsonMode(true)}
             >
               Edit JSON
@@ -318,14 +330,15 @@ export function LocalTaskPage() {
             {busy ? "Calculating…" : "Calculate differences"}
           </button>
         </section>
-        <section className="task-panel">
+        <section className="task-panel task-result-panel">
           <h2>2. Result</h2>
           <p role="status">
             {message || "No result yet. Fill an example or enter quantities."}
           </p>
           {result ? (
             <>
-              <div className="task-totals">
+              <div className="task-totals" data-balanced={result.balanced}>
+                <span className="task-result-symbol" aria-hidden="true">{result.balanced ? '=' : 'Δ'}</span>
                 <strong>{result.rows.length} items</strong>
                 <span>
                   {result.rows.filter((r) => r.difference !== 0).length}{" "}
@@ -333,6 +346,7 @@ export function LocalTaskPage() {
                 </span>
                 <span>{result.balanced ? "Balanced" : "Review required"}</span>
               </div>
+              <div className="task-table-toolbar"><span>Comparison details</span><label className="task-difference-toggle"><input type="checkbox" checked={onlyDifferences} onChange={event => setOnlyDifferences(event.target.checked)} />Only differences</label></div>
               <div className="task-table">
                 <table>
                   <thead>
@@ -344,8 +358,8 @@ export function LocalTaskPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {result.rows.map((r) => (
-                      <tr key={r.item}>
+                    {visibleRows.map((r) => (
+                      <tr key={r.item} data-difference={r.difference !== 0}>
                         <td>{r.item}</td>
                         <td>{r.expected}</td>
                         <td>{r.received}</td>
@@ -358,6 +372,7 @@ export function LocalTaskPage() {
                   </tbody>
                 </table>
               </div>
+              {onlyDifferences && visibleRows.length === 0 && <p className="task-filter-empty">No differences in this result. The full result stays available for export.</p>}
               <div className="task-actions">
                 <button onClick={save} disabled={!!initial.error} data-desktop-save="calculation">
                   {nativeWorkspace() ? "Save in this app" : "Save in this tab"}
@@ -386,10 +401,10 @@ export function LocalTaskPage() {
                 </code>
               </details>
             </>
-          ) : null}
+          ) : <div className="task-result-empty"><svg viewBox="0 0 120 100" width="120" height="100" aria-hidden="true"><rect x="17" y="10" width="86" height="78" rx="10"/><path d="M17 32h86M46 32v56M74 32v56M17 52h86M17 70h86"/></svg><strong>Awaiting calculation</strong><p>Compare your quantities to see matched items and differences here.</p></div>}
         </section>
       </div>
-      <section className="task-panel">
+      <section className="task-panel task-history-panel">
         <h2>{nativeWorkspace() ? "3. Saved in this app" : "3. Saved in this tab"}</h2>
         <p>{nativeWorkspace()
           ? "Up to 20 records / 512 KB. Explicit saves stay in this app until removed; local calculations remain separate from workspace evidence."
