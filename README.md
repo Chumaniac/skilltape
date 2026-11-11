@@ -6,7 +6,7 @@
 
 记录一次本地命令，把输入、执行步骤和验证凭据放进同一份可复查的交付包。
 
-[在线核对数量](https://chumaniac.github.io/skilltape/) · [CLI 下载](https://github.com/Chumaniac/skilltape/releases/tag/v0.4.1) · [中文桌面包（Apple Silicon）](https://github.com/Chumaniac/skilltape-app/releases/tag/user-2026.11.11-zh)
+[在线核对数量](https://chumaniac.github.io/skilltape/) · [CLI 下载](https://github.com/Chumaniac/skilltape/releases/tag/v0.4.1) · [中文桌面包（Apple Silicon）](https://github.com/Chumaniac/skilltape/releases/tag/user-2026.11.11-zh)
 
 ## 从一份对账单开始
 
