@@ -27,3 +27,6 @@ jobs:
       - run: cargo build --locked -p skilltape-cli
       - run: python3 scripts/test_request_import.py
       - run: python3 -m unittest discover -s desktop/tests
+
+      - name: Check stopped-workspace backup and new-directory recovery
+        run: python3 -m unittest discover -s scripts/tests -p test_workspace_backup.py
