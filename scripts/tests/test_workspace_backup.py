@@ -47,6 +47,8 @@ class WorkspaceBackupTests(unittest.TestCase):
 
     def test_operator_context_bounds_source_backup_and_restore_destinations(self):
         with self.assertRaisesRegex(ValueError, 'OUTSIDE_INVOCATION_ROOT'):
+            backup._scoped_path(self.root.with_name(self.root.name + '-sibling'))
+        with self.assertRaisesRegex(ValueError, 'OUTSIDE_INVOCATION_ROOT'):
             backup.backup(self.root.parent, self.saved, stopped=True)
         with self.assertRaisesRegex(ValueError, 'OUTSIDE_INVOCATION_ROOT'):
             backup.backup(self.source, self.root.parent / 'outside-private-context', stopped=True)

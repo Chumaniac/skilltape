@@ -41,7 +41,10 @@ def _scoped_path(value):
     # Normalize before checking: string-prefix checks without a separator are unsafe.
     basedir = os.path.realpath(os.getcwd())
     filepath = os.path.realpath(os.path.abspath(os.path.expanduser(value)))
-    if not (filepath == basedir or filepath.startswith(basedir.rstrip(os.sep) + os.sep)):
+    prefix = basedir.rstrip(os.sep) + os.sep
+    if filepath == basedir:
+        return Path(basedir)
+    if not filepath.startswith(prefix):
         raise WorkspaceBackupError('PATH_OUTSIDE_INVOCATION_ROOT')
     return Path(filepath)
 
