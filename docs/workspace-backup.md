@@ -4,16 +4,15 @@
 
 1. 正常退出桌面/Console与相关任务，停止其他编辑器和写入者。
 2. 对实际私人工作区操作，不要把整个源码、依赖、模型目录当成工作区。
-3. 选择新的私有输出目录。恢复始终写入新目录，不能覆盖原工作区。
+3. 进入包含源目录和输出目录的私有父目录；所有输入输出必须在当前工作目录范围内。入口会先规范化再检查边界，不能通过`..`或链接跳到范围外。选择新的私有输出目录。恢复始终写入新目录，不能覆盖原工作区。
 
 ```sh
-python3 scripts/workspace_backup.py backup \
-  --source /absolute/private/workspace \
-  --output /absolute/private/new-backup --stopped
-python3 scripts/workspace_backup.py check --backup /absolute/private/new-backup
-python3 scripts/workspace_backup.py restore \
-  --backup /absolute/private/new-backup \
-  --output /absolute/private/new-recovery
+cd /absolute/private
+python3 /path/to/skilltape/scripts/workspace_backup.py backup \
+  --source workspace --output new-backup --stopped
+python3 /path/to/skilltape/scripts/workspace_backup.py check --backup new-backup
+python3 /path/to/skilltape/scripts/workspace_backup.py restore \
+  --backup new-backup --output new-recovery
 ```
 
 恢复出的工作区位于 `new-recovery/workspace/`。核对Tape、Receipt、输入输出和运行版本后，再由用户决定切换；恢复过程不重放命令，不购买服务，不重新生成已有成功结果。检查通过说明文件清单、字节与哈希一致，不说明作者可信，也不等于所有业务规则已验收。
@@ -30,4 +29,6 @@ python3 scripts/workspace_backup.py restore \
 
 备份包含真实私人文件时应当与原工作区同等保护，不能提交Git、Issue或公开存储。本工具不加密，请放入系统加密备份或有权使用的私有加密存储。POSIX新目录为0700、元数据和副本为0600；Windows隐私依赖目标目录ACL，不要使用公共或共享目录。
 
-拒绝符号链接和硬链接，避免把边界外内容误当普通文件复制；部分平台需要单独授权才能创建测试链接，CI会区分这种环境限制。目录同步与文件同步有助于中断恢复，但不能替代介质故障防护、独立副本或实际恢复演练。工具没有修改旧备份、历史release或生产数据库。
+拒绝目录树内的符号链接和硬链接，避免把边界外内容误当普通文件复制；部分平台需要单独授权才能创建测试链接，CI会区分这种环境限制。目录同步与文件同步有助于中断恢复，但不能替代介质故障防护、独立副本或实际恢复演练。工具没有修改旧备份、历史release或生产数据库。
+
+要把备份放到独立加密磁盘，可将完成的备份复制过去，再进入该磁盘的私有父目录运行`check`。不要为方便而从系统根目录运行工具，或放宽操作上下文。

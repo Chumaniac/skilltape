@@ -36,8 +36,18 @@ def _path(value):
     return value
 
 
+def _scoped_path(value):
+    # The operator selects a trusted context by changing directory before invocation.
+    # Normalize before checking: string-prefix checks without a separator are unsafe.
+    basedir = os.path.realpath(os.getcwd())
+    filepath = os.path.realpath(os.path.abspath(os.path.expanduser(value)))
+    if not (filepath == basedir or filepath.startswith(basedir.rstrip(os.sep) + os.sep)):
+        raise WorkspaceBackupError('PATH_OUTSIDE_INVOCATION_ROOT')
+    return Path(filepath)
+
+
 def _root(path):
-    path = Path(path).expanduser().absolute()
+    path = _scoped_path(path)
     if path.is_symlink() or not path.is_dir():
         raise WorkspaceBackupError('REGULAR_DIRECTORY_REQUIRED')
     return path.resolve(strict=True)
@@ -119,7 +129,7 @@ def _copy(source, target, expected, mode=0o600):
 
 
 def _destination(value, protected, required_bytes=0):
-    raw = Path(value).expanduser().absolute()
+    raw = _scoped_path(value)
     if raw.exists() or raw.is_symlink():
         raise WorkspaceBackupError('DESTINATION_EXISTS')
     target = raw.parent.resolve(strict=True) / raw.name

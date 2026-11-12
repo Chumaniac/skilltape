@@ -14,8 +14,10 @@ spec.loader.exec_module(backup)
 
 class WorkspaceBackupTests(unittest.TestCase):
     def setUp(self):
+        self.previous_cwd = Path.cwd()
         self.directory = tempfile.TemporaryDirectory()
         self.root = Path(self.directory.name).resolve()
+        os.chdir(self.root)
         self.source = self.root / 'source'
         self.source.mkdir()
         (self.source / 'receipts').mkdir()
@@ -24,6 +26,7 @@ class WorkspaceBackupTests(unittest.TestCase):
         self.saved = self.root / 'backup'
 
     def tearDown(self):
+        os.chdir(self.previous_cwd)
         self.directory.cleanup()
 
     def create(self):
@@ -41,6 +44,16 @@ class WorkspaceBackupTests(unittest.TestCase):
             if path.is_file():
                 self.assertEqual(path.read_bytes(), (output / 'workspace' / path.relative_to(self.source)).read_bytes())
         self.assertEqual(backup.check(self.saved), data)
+
+    def test_operator_context_bounds_source_backup_and_restore_destinations(self):
+        with self.assertRaisesRegex(ValueError, 'OUTSIDE_INVOCATION_ROOT'):
+            backup.backup(self.root.parent, self.saved, stopped=True)
+        with self.assertRaisesRegex(ValueError, 'OUTSIDE_INVOCATION_ROOT'):
+            backup.backup(self.source, self.root.parent / 'outside-private-context', stopped=True)
+        self.assertFalse(self.saved.exists())
+        self.create()
+        with self.assertRaisesRegex(ValueError, 'OUTSIDE_INVOCATION_ROOT'):
+            backup.restore(self.saved, self.root.parent / 'outside-private-context')
 
     def test_existing_destination_and_unconfirmed_running_workspace_are_preserved(self):
         with self.assertRaisesRegex(ValueError, 'STOP_WORKSPACE'):
