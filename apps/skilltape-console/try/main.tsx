@@ -8,5 +8,5 @@ import './try.css'
 createRoot(document.getElementById('root')!).render(<RenderBoundary>
   <header className="trial-nav"><img src={mark} width="32" height="32" alt="" /><strong>SkillTape</strong>
     <a href="https://github.com/Chumaniac/skilltape">源码与本机安装 ↗</a></header>
-  <main className="trial-content"><LocalTaskPage /></main>
+  <main id="main-content" className="trial-content"><LocalTaskPage /></main>
 </RenderBoundary>)

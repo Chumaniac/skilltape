@@ -29,3 +29,7 @@ Choose **Reconcile quantities**. Follow the root README for the existing local e
 ## Live local Console follow-up
 
 A real local starter run exposed a navigation issue: opening a saved Receipt left its result below the search and comparison panels. The loaded result now receives focus and scrolls into view immediately. The document picker and read-only evidence boundaries remain available. Regression coverage checks the visible result at desktop, 390px and 320px widths.
+
+## 工作区与窄屏操作
+
+手机数量核对分为编辑清单、复核差异和保存记录三个工作区。计算成功后进入结果，切换工作区保留当前输入。桌面仍并排显示输入与结果。

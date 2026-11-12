@@ -65,7 +65,12 @@ export function LocalTaskPage() {
     [message, setMessage] = useState(initial.error),
     [busy, setBusy] = useState(false),
     [unsaved, setUnsaved] = useState(false),
+    [view, setView] = useState<'input' | 'result' | 'history'>('input'),
     generation = useRef(0);
+  function openView(next: 'input' | 'result' | 'history') {
+    setView(next);
+    requestAnimationFrame(() => document.getElementById('task-' + next + '-heading')?.focus());
+  }
   useEffect(() => {
     const protect = (event: BeforeUnloadEvent) => { if (unsaved) { event.preventDefault(); event.returnValue = ""; } };
     window.addEventListener("beforeunload", protect);
@@ -114,6 +119,7 @@ export function LocalTaskPage() {
       try {
         if (new TextEncoder().encode(input).length > 256000) throw Error("输入上限为256 KB。");
         setResult(reconcile(JSON.parse(input)));
+        openView('result');
         setMessage(
           "本机计算完成，请在导出前复核差异。",
         );
@@ -170,7 +176,7 @@ export function LocalTaskPage() {
   const differenceCount = result?.rows.filter(row => row.difference !== 0).length ?? 0;
   const visibleRows = result?.rows.filter(row => !onlyDifferences || row.difference !== 0) ?? [];
   return (
-    <section className="page-section local-task-workspace">
+    <section className="page-section local-task-workspace" data-view={view}>
       <header className="page-heading task-hero">
         <div>
           <h1>核对数量</h1>
@@ -180,6 +186,11 @@ export function LocalTaskPage() {
         </div>
         <span className="task-mode-badge">本机计算</span>
       </header>
+      <nav className="task-stage-nav" aria-label="数量核对工作区">
+        <button type="button" aria-pressed={view === 'input'} aria-controls="task-input-panel" onClick={() => openView('input')}><span>01</span> 编辑清单 <small>{jsonMode ? 'JSON' : formRows.length + ' 行'}</small></button>
+        <button type="button" aria-pressed={view === 'result'} aria-controls="task-result-panel" onClick={() => openView('result')}><span>02</span> 复核差异 <small>{result ? '待复核 ' + differenceCount : '待计算'}</small></button>
+        <button type="button" aria-pressed={view === 'history'} aria-controls="task-history-panel" onClick={() => openView('history')}><span>03</span> 保存记录 <small>{history.length} / 20</small></button>
+      </nav>
       <div className="task-workspace-stats" aria-label="当前计算概览">
         <div className="task-stat task-stat-accent"><span>输入行数</span><strong>{jsonMode ? 'JSON' : formRows.length}</strong><small>{jsonMode ? "计算时校验" : "可直接编辑"}</small></div>
         <div className="task-stat"><span>差异项</span><strong>{result ? differenceCount : '—'}</strong><small>{result ? "基于完整对比结果" : "计算后对比"}</small></div>
@@ -189,8 +200,8 @@ export function LocalTaskPage() {
         在本机计算，与已采集运行和验证凭据分开保存。
       </p>
       <div className="local-task-grid">
-        <section className="task-panel task-input-panel">
-          <div className="task-section-heading"><h2>1. 输入</h2>
+        <section id="task-input-panel" className="task-panel task-input-panel">
+          <div className="task-section-heading"><h2 id="task-input-heading" tabIndex={-1}>1. 输入</h2>
           <button
             disabled={busy}
             onClick={() => {
@@ -343,8 +354,8 @@ export function LocalTaskPage() {
             {busy ? "正在计算…" : "计算差异"}
           </button>
         </section>
-        <section className="task-panel task-result-panel">
-          <h2>2. 结果</h2>
+        <section id="task-result-panel" className="task-panel task-result-panel">
+          <h2 id="task-result-heading" tabIndex={-1}>2. 结果</h2>
           <p role="status">
             {message || "暂无结果，请填入示例或输入数量。"}
           </p>
@@ -423,8 +434,8 @@ export function LocalTaskPage() {
           ) : <div className="task-result-empty"><svg viewBox="0 0 120 100" width="120" height="100" aria-hidden="true"><rect x="17" y="10" width="86" height="78" rx="10"/><path d="M17 32h86M46 32v56M74 32v56M17 52h86M17 70h86"/></svg><strong>等待计算</strong><p>计算后，这里会显示数量一致的物品和差异。</p></div>}
         </section>
       </div>
-      <section className="task-panel task-history-panel">
-        <h2>{nativeWorkspace() ? "3. 本应用保存的记录" : "3. 本标签页保存的记录"}</h2>
+      <section id="task-history-panel" className="task-panel task-history-panel">
+        <h2 id="task-history-heading" tabIndex={-1}>{nativeWorkspace() ? "3. 本应用保存的记录" : "3. 本标签页保存的记录"}</h2>
         <p>{nativeWorkspace()
           ? "最多20条记录、512 KB。主动保存的记录在移除前持续保留于本应用，与工作区执行证据分开存放。"
           : "最多20条记录、512 KB。仅保留主动保存记录，关闭标签页会清除会话存储。"}</p>
@@ -448,6 +459,7 @@ export function LocalTaskPage() {
                     setResult(item.result);
                     setUnsaved(false);
                     setMessage("已打开保存的本机计算。");
+                    openView('result');
                   }
                 }}
               >
