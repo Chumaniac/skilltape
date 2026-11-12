@@ -8,6 +8,9 @@
 
 [在线核对数量](https://chumaniac.github.io/skilltape/) · [CLI 下载](https://github.com/Chumaniac/skilltape/releases/tag/v0.4.1) · [中文桌面包（Apple Silicon）](https://github.com/Chumaniac/skilltape/releases/tag/user-2026.11.11-zh)
 
+
+在线清单页的“第一次使用”提供示例、计算和导出入口；本机控制台另有证据包、时间线与复核引导。清单核对用于熟悉输入输出，完整流程录制与 Receipt 使用 CLI。
+
 ## 从一份对账单开始
 
 网页版可编辑应有与实收数量、查看差异、导出 JSON。计算在当前标签页完成。要重放命令或生成 Receipt，请使用本机 CLI。

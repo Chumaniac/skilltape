@@ -64,6 +64,7 @@ export function LocalTaskPage() {
     [result, setResult] = useState<Result | null>(null),
     [message, setMessage] = useState(initial.error),
     [busy, setBusy] = useState(false),
+    [failed, setFailed] = useState(false),
     [unsaved, setUnsaved] = useState(false),
     [view, setView] = useState<'input' | 'result' | 'history'>('input'),
     generation = useRef(0);
@@ -98,13 +99,27 @@ export function LocalTaskPage() {
       ),
     );
     setResult(null);
+    setFailed(false);
     setMessage("输入已改变，请重新计算以更新结果。");
+  }
+  function loadExample() {
+    if (unsaved && !window.confirm("用示例替换未保存的输入和结果？")) return;
+    setUnsaved(false);
+    setInput(JSON.stringify(example, null, 2));
+    setFormRows(formRowsFor(example));
+    setJsonMode(false);
+    setResult(null);
+    setFailed(false);
+    setMessage("示例已填入，尚未计算。");
+    openView('input');
   }
   function showForm() {
     try {
       setFormRows(formRowsFor(JSON.parse(input)));
       setJsonMode(false);
     } catch {
+      setFailed(true);
+      openView('result');
       setMessage("请先修正 JSON 输入，再打开物品编辑器。");
     }
   }
@@ -112,6 +127,7 @@ export function LocalTaskPage() {
     setUnsaved(true);
     setResult(null);
     setBusy(true);
+    setFailed(false);
     setMessage("正在核对数量…");
     const id = ++generation.current;
     setTimeout(() => {
@@ -124,6 +140,8 @@ export function LocalTaskPage() {
           "本机计算完成，请在导出前复核差异。",
         );
       } catch (e) {
+        setFailed(true);
+        openView('result');
         setMessage(e instanceof SyntaxError ? "JSON 格式有误，请检查括号、逗号和引号。" : e instanceof Error ? e.message : "无法读取输入。");
       } finally {
         setBusy(false);
@@ -186,6 +204,19 @@ export function LocalTaskPage() {
         </div>
         <span className="task-mode-badge">本机计算</span>
       </header>
+      <section className="task-introduction" aria-label="SkillTape 用途与体验范围">
+        <p><strong>给本地工作流留一份可核对的记录。</strong>SkillTape 用于记录操作、重放流程并整理运行证据。这里先用一份收货清单，体验输入、结果和导出怎样对应起来。</p>
+        <dl><div><dt>适合什么时候用</dt><dd>收货、领料或交付前，需要把两份数量清单逐项对照。</dd></div><div><dt>准备与结果</dt><dd>准备应有与实收数量；得到差额、CSV 或 JSON。无需账号，内容留在本机。</dd></div></dl>
+      </section>
+      <details className="task-start-guide">
+        <summary>第一次使用：完成一份清单核对</summary>
+        <ol>
+          <li><strong>先看示例输入</strong><p>示例中笔记本少收了一本，铅笔数量相符。可修改数字，再核对结果。</p><button type="button" disabled={busy} onClick={loadExample}>从示例清单开始</button></li>
+          <li><strong>核对当前数字</strong><p>计算后先看差额，必要时只显示不一致的物品；修改输入后要重新计算。</p><button type="button" disabled={busy} onClick={run}>核对当前输入</button></li>
+          <li><strong>复核后保存或带走</strong><p>进入结果，导出表格或保存记录。网页保存仅在本标签页，关闭前请导出。</p><button type="button" onClick={() => openView('result')}>查看核对与导出区</button></li>
+        </ol>
+        <p className="task-guide-scope">这一步只做数量计算，不运行 Skill，也不生成验证凭据。需要采集、重放和验证时，请从本机安装说明继续。</p>
+      </details>
       <nav className="task-stage-nav" aria-label="数量核对工作区">
         <button type="button" aria-pressed={view === 'input'} aria-controls="task-input-panel" onClick={() => openView('input')}><span>01</span> 编辑清单 <small>{jsonMode ? 'JSON' : formRows.length + ' 行'}</small></button>
         <button type="button" aria-pressed={view === 'result'} aria-controls="task-result-panel" onClick={() => openView('result')}><span>02</span> 复核差异 <small>{result ? '待复核 ' + differenceCount : '待计算'}</small></button>
@@ -204,15 +235,7 @@ export function LocalTaskPage() {
           <div className="task-section-heading"><h2 id="task-input-heading" tabIndex={-1}>1. 输入</h2>
           <button
             disabled={busy}
-            onClick={() => {
-              if (unsaved && !window.confirm("用示例替换未保存的输入和结果？")) return;
-              setUnsaved(false);
-              setInput(JSON.stringify(example, null, 2));
-              setFormRows(formRowsFor(example));
-              setJsonMode(false);
-              setResult(null);
-              setMessage("示例已填入，尚未计算。");
-            }}
+            onClick={loadExample}
           >
             填入示例
           </button></div>
@@ -340,6 +363,7 @@ export function LocalTaskPage() {
                   setUnsaved(true);
                   setInput(e.target.value);
                   setResult(null);
+                  setFailed(false);
                   setMessage(
                     "输入已改变，请重新计算以更新结果。",
                   );
@@ -431,7 +455,7 @@ export function LocalTaskPage() {
                 </code>
               </details>
             </>
-          ) : <div className="task-result-empty"><svg viewBox="0 0 120 100" width="120" height="100" aria-hidden="true"><rect x="17" y="10" width="86" height="78" rx="10"/><path d="M17 32h86M46 32v56M74 32v56M17 52h86M17 70h86"/></svg><strong>等待计算</strong><p>计算后，这里会显示数量一致的物品和差异。</p></div>}
+          ) : <div className="task-result-empty"><svg viewBox="0 0 120 100" width="120" height="100" aria-hidden="true"><rect x="17" y="10" width="86" height="78" rx="10"/><path d="M17 32h86M46 32v56M74 32v56M17 52h86M17 70h86"/></svg><strong>{failed ? "当前输入尚不能读取" : "等待计算"}</strong><p>{failed ? "输入仍然保留。返回编辑清单，按上方提示修正后再核对。" : "计算后，这里会显示数量一致的物品和差异。"}</p>{failed && <button type="button" className="button" onClick={() => openView('input')}>返回编辑清单</button>}</div>}
         </section>
       </div>
       <section id="task-history-panel" className="task-panel task-history-panel">
@@ -457,6 +481,7 @@ export function LocalTaskPage() {
                     setFormRows(formRowsFor(item.input));
                     setJsonMode(false);
                     setResult(item.result);
+                    setFailed(false);
                     setUnsaved(false);
                     setMessage("已打开保存的本机计算。");
                     openView('result');

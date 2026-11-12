@@ -113,6 +113,8 @@ function App() {
         </header>
 
         <main id="main-content" className="main-content" tabIndex={-1}>
+          {route.page !== 'task' && <details className="console-start-guide"><summary>这个工作台用来做什么？如何开始</summary><p>这里查看已经保存在本机的运行与交付证据，适合复查一次操作用了哪些输入、生成了哪些文件，以及验证记录还缺什么。</p><ol><li>尚无记录时，先按安装文档用 CLI 完成采集；不要把本地数量计算当成运行证明。</li><li>从“采集时间线”或“验证批次”打开记录，再核对编译、权限与交付。</li><li>确认结果与范围后，查看验证凭据并准备导出。查看记录不会重新执行 Skill。</li></ol><p><a href="#timeline" onClick={protectDraftNavigation}>查看已采集的记录</a> · <a href="https://github.com/Chumaniac/skilltape#快速开始">阅读本机使用方法</a></p></details>}
+
           {route.page === 'not-found' ? <section className="page-section"><header className="page-heading"><div><h1>页面不存在</h1><p className="page-description">此链接没有对应的控制台页面，请从导航选择功能或返回采集记录。</p></div></header><p><a className="button" href="#timeline">打开采集时间线</a></p></section> : null}
           {route.page === 'task' ? <LocalTaskPage /> : null}
           {route.page === 'batch' ? <BatchReviewPage /> : null}

@@ -179,3 +179,17 @@ test("CSV carries the filtered rows and treats a formula-like item as text", asy
   expect(download.suggestedFilename()).toBe("reconciliation-differences.csv");
   expect(await readFile((await download.path())!, "utf8")).toBe("\uFEFF物品,应有数量,实收数量,差异\r\n\"'=SUM(1,2)\"\"纸\"\"\",4,0,-4\r\n");
 });
+
+test('the first-use path reveals invalid input and returns to the retained draft on mobile', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/#task');
+  await page.getByRole('button', { name: '编辑 JSON', exact: true }).click();
+  const draft = page.getByLabel('应有数量与实收数量（JSON）');
+  await draft.fill('{not-json');
+  await page.locator('.task-start-guide > summary').click();
+  await page.getByRole('button', { name: '核对当前输入', exact: true }).click();
+  await expect(page.locator('#task-result-panel')).toBeVisible();
+  await expect(page.getByRole('status')).toContainText('JSON 格式有误');
+  await page.getByRole('button', { name: '返回编辑清单', exact: true }).click();
+  await expect(draft).toHaveValue('{not-json');
+});
