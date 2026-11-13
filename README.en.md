@@ -4,7 +4,7 @@
 
 [中文](README.md) · [Build](https://github.com/Chumaniac/skilltape/actions/workflows/ci.yml) · [License](LICENSE)
 
-Record a local command and keep its inputs, execution steps and verification receipts in a reviewable delivery.
+**Beta** · Turn a real local workflow into a reviewable Agent Skill you can replay and verify before you share it.
 
 **[Try quantity reconciliation →](https://chumaniac.github.io/skilltape/)** · [CLI releases](https://github.com/Chumaniac/skilltape/releases/tag/v0.4.1) · [Chinese desktop release](https://github.com/Chumaniac/skilltape/releases/tag/user-2026.11.11-zh)
 

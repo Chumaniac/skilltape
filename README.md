@@ -54,6 +54,8 @@ cargo build --locked -p skilltape-cli
 
 [安装 CLI](docs/guides/installation.md) · [批次验证](docs/verification-batches.md) · [贡献指南](CONTRIBUTING.md) · [报告安全问题](SECURITY.md)
 
+**Beta** · Turn a real local workflow into a reviewable Agent Skill you can replay and verify before you share it.
+
 [终端示意](docs/assets/quickstart-terminal.svg) · [纯文本操作记录](docs/assets/quickstart-terminal.txt) · [命令行入门](docs/guides/quickstart.md) · [Configuration](docs/guides/configuration.md)
 
 主分支提供[停止后的工作区备份、校验与新目录恢复](docs/workspace-backup.md)，包含文件清单和哈希，不覆盖唯一原件；需要Python 3.11+。
