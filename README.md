@@ -2,11 +2,19 @@
 
 # SkillTape
 
+[English](README.en.md)
+
 [![Build](https://github.com/Chumaniac/skilltape/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Chumaniac/skilltape/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-555)](LICENSE)
 
 记录一次本地命令，把输入、执行步骤和验证凭据放进同一份可复查的交付包。
 
-[在线核对数量](https://chumaniac.github.io/skilltape/) · [CLI 下载](https://github.com/Chumaniac/skilltape/releases/tag/v0.4.1) · [中文桌面包（Apple Silicon）](https://github.com/Chumaniac/skilltape/releases/tag/user-2026.11.11-zh)
+**[打开数量核对样例 →](https://chumaniac.github.io/skilltape/)** · [CLI 下载](https://github.com/Chumaniac/skilltape/releases/tag/v0.4.1) · [中文桌面包（Apple Silicon）](https://github.com/Chumaniac/skilltape/releases/tag/user-2026.11.11-zh)
+
+进入后，保留示例清单或填写应有与实收数量，点击「计算差异」，再导出当前表格 CSV。网页在当前标签页计算；命令录制、重放与 Receipt 在本机 CLI 中完成。
+
+[![SkillTape 示例清单与数量差异核对结果](docs/preview/online.png)](https://chumaniac.github.io/skilltape/)
+
+*示例数量核对界面。点击截图可直接操作。*
 
 在线清单页的“第一次使用”提供示例、计算和导出入口；本机控制台另有证据包、时间线与复核引导。清单核对用于熟悉输入输出，完整流程录制与 Receipt 使用 CLI。
 
@@ -45,8 +53,6 @@ cargo build --locked -p skilltape-cli
 **下载版和主分支有哪些差异？** v0.4.1 是固定版本。上面的 starter 导入流程使用主分支源码。中文桌面包保留原始发布版本及校验文件。
 
 [安装 CLI](docs/guides/installation.md) · [批次验证](docs/verification-batches.md) · [贡献指南](CONTRIBUTING.md) · [报告安全问题](SECURITY.md)
-
-**Beta** · Turn a real local workflow into a reviewable Agent Skill you can replay and verify before you share it.
 
 [终端示意](docs/assets/quickstart-terminal.svg) · [纯文本操作记录](docs/assets/quickstart-terminal.txt) · [命令行入门](docs/guides/quickstart.md) · [Configuration](docs/guides/configuration.md)
 
