@@ -1983,7 +1983,7 @@ dependencies = [
 
 [[package]]
 name = "skilltape-cli"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "assert_cmd",
  "clap",
@@ -2025,7 +2025,7 @@ dependencies = [
 
 [[package]]
 name = "skilltape-console-api"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "axum",
  "clap",

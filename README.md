@@ -8,7 +8,7 @@
 
 记录一次本地命令，把输入、执行步骤和验证凭据放进同一份可复查的交付包。
 
-**[打开数量核对样例 →](https://chumaniac.github.io/skilltape/)** · [CLI 下载](https://github.com/Chumaniac/skilltape/releases/tag/v0.5.0) · [中文桌面包（Apple Silicon）](https://github.com/Chumaniac/skilltape/releases/tag/v0.5.0)
+**[打开数量核对样例 →](https://chumaniac.github.io/skilltape/)** · [CLI 下载](https://github.com/Chumaniac/skilltape/releases/tag/v0.5.1) · [中文桌面包（Apple Silicon）](https://github.com/Chumaniac/skilltape/releases/tag/v0.5.1)
 
 进入后，保留示例清单或填写应有与实收数量，点击「计算差异」，再导出当前表格 CSV。网页在当前标签页计算；命令录制、重放与 Receipt 在本机 CLI 中完成。
 
@@ -50,7 +50,7 @@ cargo build --locked -p skilltape-cli
 
 **Windows 能重放吗？** Windows 可以查看记录和准备输入。Replay 和 Verify 需要受支持的系统沙箱。
 
-**下载版和主分支有哪些差异？** v0.5.0 的 CLI、Console 与 Apple Silicon 程序包由同一提交构建，包含上述 starter 与复核流程。[旧版 v0.4.1](https://github.com/Chumaniac/skilltape/releases/tag/v0.4.1) 和旧桌面包保留原资产与校验文件。
+**下载版和主分支有哪些差异？** v0.5.1 的 CLI、Console 与 Apple Silicon 程序包由同一提交构建，包含上述 starter 与复核流程。[旧版 v0.4.1](https://github.com/Chumaniac/skilltape/releases/tag/v0.4.1) 和旧桌面包保留原资产与校验文件。
 
 [安装 CLI](docs/guides/installation.md) · [批次验证](docs/verification-batches.md) · [贡献指南](CONTRIBUTING.md) · [报告安全问题](SECURITY.md)
 

@@ -14,7 +14,7 @@ skilltape-v<version>-<target>.zip      # Windows
 checksums.txt
 ```
 
-The `v0.5.0` release supports these targets:
+The `v0.5.1` release supports these targets:
 
 - `x86_64-unknown-linux-gnu`
 - `x86_64-apple-darwin`
@@ -55,7 +55,7 @@ installer_path="$(mktemp)"
 curl --fail --location --silent --show-error --output "$installer_path" \
   "https://raw.githubusercontent.com/Chumaniac/skilltape/aa0380d0ece4c385eb3e7e369009a5a73b48d0c7/scripts/install.sh"
 export SKILLTAPE_RELEASE_BASE_URL="https://github.com/Chumaniac/skilltape/releases/download"
-export SKILLTAPE_VERSION="0.5.0"
+export SKILLTAPE_VERSION="0.5.1"
 bash "$installer_path"
 ```
 
@@ -67,7 +67,7 @@ installer_path="$(mktemp)"
 curl --fail --location --silent --show-error --output "$installer_path" \
   "https://raw.githubusercontent.com/Chumaniac/skilltape/aa0380d0ece4c385eb3e7e369009a5a73b48d0c7/scripts/install.sh"
 SKILLTAPE_RELEASE_BASE_URL="https://github.com/Chumaniac/skilltape/releases/download" \
-  bash "$installer_path" 0.5.0 "$HOME/.local/bin" "aarch64-apple-darwin"
+  bash "$installer_path" 0.5.1 "$HOME/.local/bin" "aarch64-apple-darwin"
 ```
 
 On Windows, download the fixed installer source before setting the same values
@@ -77,7 +77,7 @@ in PowerShell:
 $installerPath = Join-Path $env:TEMP "skilltape-install.ps1"
 Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Chumaniac/skilltape/aa0380d0ece4c385eb3e7e369009a5a73b48d0c7/scripts/install.ps1" -OutFile $installerPath
 $env:SKILLTAPE_RELEASE_BASE_URL = "https://github.com/Chumaniac/skilltape/releases/download"
-$env:SKILLTAPE_VERSION = "0.5.0"
+$env:SKILLTAPE_VERSION = "0.5.1"
 $env:SKILLTAPE_INSTALL_DIR = "$env:LOCALAPPDATA\SkillTape\bin"
 $env:SKILLTAPE_TARGET = "x86_64-pc-windows-msvc"
 & $installerPath
@@ -113,4 +113,4 @@ npm --prefix apps/skilltape-console run build
 
 Use the [candidate identity guide](source-candidates.md) to build and inspect one clean source revision. `--require-identity` refuses mixed CLI/API/UI artifacts before packaging. This does not publish or update the fixed public release; retain old installations and successful data.
 
-The Apple Silicon application is in the same [v0.5.0 Release](https://github.com/Chumaniac/skilltape/releases/tag/v0.5.0). Verify its ZIP against `checksums.txt`; its source manifest records the actual minimum macOS version. It is ad-hoc signed and is not Apple notarized. [Stopped-workspace recovery](workspace-recovery.md) uses a new directory and never overwrites the original.
+The Apple Silicon application is in the same [v0.5.1 Release](https://github.com/Chumaniac/skilltape/releases/tag/v0.5.1). Verify its ZIP against `checksums.txt`; its source manifest records the actual minimum macOS version. It is ad-hoc signed and is not Apple notarized. [Stopped-workspace recovery](workspace-recovery.md) uses a new directory and never overwrites the original.
