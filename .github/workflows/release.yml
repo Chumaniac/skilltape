@@ -31,6 +31,7 @@ jobs:
         id: release
         env:
           RELEASE_VERSION_INPUT: ${{ inputs.version }}
+          GITHUB_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
@@ -63,6 +64,17 @@ jobs:
             echo "v0.1.0 is a historical checksum-only release and must not be republished" >&2
             exit 1
           fi
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "immutable release already exists; original assets retained" >&2
+            exit 1
+          fi
+          for workflow in ci.yml user-edition.yml; do
+            passed="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow" --commit "$GITHUB_SHA" --branch main --status success --limit 1 --json conclusion --jq 'length')"
+            if [[ "$passed" != "1" ]]; then
+              echo "matching main checks must pass before release" >&2
+              exit 1
+            fi
+          done
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
@@ -162,6 +174,30 @@ jobs:
           SKILLTAPE_CONSOLE_UI_DIST=apps/skilltape-console/dist \
           bash scripts/smoke_console.sh "$(mktemp -d)"
 
+      - name: Build and check Apple Silicon application
+        if: matrix.target == 'aarch64-apple-darwin'
+        shell: bash
+        run: |
+          runtime="$GITHUB_WORKSPACE/.release-workspace/runtime"
+          apps="$GITHUB_WORKSPACE/.release-workspace/apps"
+          python3 desktop/prepare_runtime.py --binary-dir "target/${{ matrix.target }}/release" --output "$runtime"
+          python3 desktop/build_app.py --runtime "$runtime" --output "$apps"
+          codesign --verify --deep --strict "$apps/SkillTape.app"
+          "$apps/SkillTape.app/Contents/MacOS/Workspace" --smoke-check "$RUNNER_TEMP/app-smoke.json" --snapshot "$RUNNER_TEMP/app-smoke.png" --width 390
+          python3 -c 'import json,sys; result=json.load(open(sys.argv[1])); assert result.get("success") is True, result' "$RUNNER_TEMP/app-smoke.json"
+          ditto -c -k --sequesterRsrc --keepParent "$apps/SkillTape.app" "release/skilltape-app-v${{ needs.prepare.outputs.version }}-${{ matrix.target }}.zip"
+          python3 scripts/application_manifest.py --application "$apps/SkillTape.app" --archive "release/skilltape-app-v${{ needs.prepare.outputs.version }}-${{ matrix.target }}.zip" --output "release/skilltape-app-v${{ needs.prepare.outputs.version }}-${{ matrix.target }}.source.json"
+
+      - name: Attest Apple Silicon application provenance
+        if: matrix.target == 'aarch64-apple-darwin'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: release/skilltape-app-*.zip
+
+      - name: Include release notes
+        shell: bash
+        run: cp "docs/releases/v${{ needs.prepare.outputs.version }}.md" release/RELEASE-NOTES.md
+
       - name: Upload release artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -188,8 +224,8 @@ jobs:
         working-directory: release-assets
         shell: bash
         run: |
-          archives=(skilltape-v*)
-          if [[ "${#archives[@]}" -eq 0 || "${archives[0]}" == "skilltape-v*" ]]; then
+          archives=(skilltape-*)
+          if [[ "${#archives[@]}" -eq 0 || "${archives[0]}" == "skilltape-*" ]]; then
             echo "no release archives found" >&2
             exit 1
           fi
@@ -218,14 +254,13 @@ jobs:
             fi
           }
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            verify_release_tag
-            gh release upload "$tag" --repo "$GITHUB_REPOSITORY" release-assets/* --clobber
-          else
-            verify_release_tag
-            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --verify-tag release-assets/* \
-              --title "SkillTape $tag" \
-              --generate-notes
+            echo "immutable release already exists; original assets retained" >&2
+            exit 1
           fi
+          verify_release_tag
+          gh release create "$tag" --repo "$GITHUB_REPOSITORY" --verify-tag release-assets/* \
+            --title "SkillTape $tag" \
+            --notes-file release-assets/RELEASE-NOTES.md
 
   windows-installer:
     name: Windows installer smoke

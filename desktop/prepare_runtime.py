@@ -39,7 +39,27 @@ def minimum_macos(directory):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--binary-dir', type=Path, default=ROOT / 'target/release', help='Binaries from the same clean source build')
+    parser.add_argument('--preview', action='store_true', help='Allow an explicitly marked working-tree preview')
     args = parser.parse_args()
+    revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+    dirty = bool(subprocess.check_output(['git', 'status', '--porcelain'], cwd=ROOT, text=True).strip())
+    if dirty and not args.preview:
+        raise SystemExit('CLEAN_SOURCE_REQUIRED')
+    sys.path.insert(0, str(ROOT / 'scripts'))
+    from package_release import verify_components
+    version = json.loads((ROOT / 'apps/skilltape-console/package.json').read_text())['version']
+    target = ('aarch64' if platform.machine() == 'arm64' else 'x86_64') + '-apple-darwin'
+    # Only the known build outputs from this checkout may be executed for identity.
+    selected = str(args.binary_dir.expanduser().resolve())
+    binary_dir = next((candidate for candidate in [ROOT / 'target/release', ROOT / 'target' / target / 'release']
+                       if str(candidate) == selected), None)
+    if binary_dir is None or binary_dir.is_symlink() or not binary_dir.is_dir():
+        raise SystemExit('BINARY_DIRECTORY_OUTSIDE_CHECKOUT_BUILD')
+    identity = verify_components(version, target, binary_dir, ROOT / 'apps/skilltape-console/dist', allow_dirty=args.preview)
+    identity['target'] = target
+    if identity['sourceRevision'] != revision or identity['dirty'] != dirty:
+        raise SystemExit('RUNTIME_SOURCE_IDENTITY_MISMATCH')
     profile = json.loads((ROOT / 'desktop/portable.json').read_text())
     product = profile['product']
     output = args.output.expanduser().absolute()
@@ -62,8 +82,16 @@ def main():
 
     if product != 'skilltape':
         raise SystemExit('PRODUCT_UNSUPPORTED')
+    if binary_dir.is_symlink() or not binary_dir.is_dir():
+        raise SystemExit('BINARY_DIRECTORY_REQUIRED')
     for binary in ['skilltape', 'skilltape-console-api']:
-        copy('target/release/' + binary, 'bin/' + binary)
+        source = binary_dir / binary
+        if source.is_symlink() or not source.is_file():
+            raise SystemExit('BUILD_ASSET_MISSING_OR_LINK')
+        (output / 'bin').mkdir(exist_ok=True)
+        shutil.copy2(source, output / 'bin' / binary)
+    copy('scripts/workspace_backup.py', 'tools/workspace_backup.py')
+    copy('docs/guides/workspace-recovery.md', 'tools/WORKSPACE-RECOVERY.md')
 
     if (ROOT / 'desktop/runtime-licenses').is_dir():
         shutil.copytree(ROOT / 'desktop/runtime-licenses', output / 'runtime-licenses')
@@ -77,9 +105,7 @@ def main():
     manifest = {str(p.relative_to(output)): hashlib.sha256(p.read_bytes()).hexdigest()
                 for p in sorted(output.rglob('*')) if p.is_file() and not p.is_symlink()}
     minimum, deployments = minimum_macos(output)
-    revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
-    dirty = bool(subprocess.check_output(['git', 'status', '--porcelain'], cwd=ROOT, text=True).strip())
-    (output / 'runtime-manifest.json').write_text(json.dumps({'schema': 'runtime-files/v1', 'product': product, 'sourceCommit': revision, 'includesWorkingTreeChanges': dirty, 'minimumSystemVersion': minimum, 'binaryDeploymentTargets': deployments, 'files': manifest}, indent=2) + '\n')
+    (output / 'runtime-manifest.json').write_text(json.dumps({'schema': 'runtime-files/v1', 'product': product, 'sourceCommit': revision, 'includesWorkingTreeChanges': dirty, 'minimumSystemVersion': minimum, 'binaryDeploymentTargets': deployments, 'buildIdentity': identity, 'files': manifest}, indent=2) + '\n')
     print(json.dumps({'product': product, 'files': len(manifest), 'runtime': str(output)}))
 
 

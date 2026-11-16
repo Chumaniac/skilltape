@@ -1,6 +1,8 @@
 .worktrees/
 .superpowers/sdd/
 target/
+/release/
+/.release-workspace/
 __pycache__/
 /apps/skilltape-console/node_modules
 /apps/skilltape-console/dist/

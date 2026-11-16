@@ -32,6 +32,8 @@ def main():
         raise SystemExit('APPLICATION_PROFILE_INVALID')
     if not isinstance(config.get('mark'), str) or not 1 <= len(config['mark']) <= 3 or '\n' in config['mark']:
         raise SystemExit('APPLICATION_PROFILE_INVALID')
+    if config.get('initialFragment') not in {None, 'timeline', 'task', 'batch', 'deliveries'}:
+        raise SystemExit('APPLICATION_PROFILE_INVALID')
     if config['mode'] == 'process':
         launch = config.get('launch')
         if (not isinstance(launch, dict) or not isinstance(launch.get('executable'), str)
@@ -72,10 +74,11 @@ def main():
         binary = app / 'Contents/MacOS/Workspace'
         resources = app / 'Contents/Resources'
         binary.parent.mkdir(parents=True); resources.mkdir()
+        product_version = json.loads((ROOT / 'apps/skilltape-console/package.json').read_text())['version']
         info = {'CFBundleIdentifier': config['identifier'], 'CFBundleName': config['name'],
                 'CFBundleDisplayName': config['name'], 'CFBundleExecutable': 'Workspace',
-                'CFBundlePackageType': 'APPL', 'CFBundleIconFile': 'AppIcon', 'CFBundleShortVersionString': '1.0.0',
-                'CFBundleVersion': '1', 'LSMinimumSystemVersion': '13.0',
+                'CFBundlePackageType': 'APPL', 'CFBundleIconFile': 'AppIcon', 'CFBundleShortVersionString': product_version,
+                'CFBundleVersion': product_version, 'LSMinimumSystemVersion': '13.0',
                 'NSHighResolutionCapable': True,
                 'NSAppTransportSecurity': {'NSAllowsLocalNetworking': True}}
         (app / 'Contents/Info.plist').write_bytes(plistlib.dumps(info))

@@ -1,5 +1,9 @@
 # Release Readiness
 
+## 0.5.0 — current source candidate
+
+Current Capture, starter, batch, saved-Receipt and stopped-workspace recovery capabilities are included in the new immutable release. Large Receipt sections are paged; event inspection uses bounded background admission and normalized source matching streams the complete event input. Source checks, matching main checks, four native archives and a portable Apple Silicon application have separate gates. Existing v0.4.1 and historical desktop assets must remain unchanged. Actual publication and installed-package acceptance are recorded in the task receipt; a source candidate alone is not a released binary.
+
 ## 2026-11-03 priority source fixes
 
 Artifact capacity, execution-parameter admission, Console document/rendering

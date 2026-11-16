@@ -160,6 +160,43 @@ export function CodeBlock({ value, label }: { value: string; label?: string }) {
   )
 }
 
+export function boundedJsonPreview(value: unknown) {
+  let remaining = 40000, nodes = 0, truncated = false
+  function preview(item: unknown, depth: number): unknown {
+    if (++nodes > 1000 || remaining <= 0 || depth > 8) { truncated = true; return '…' }
+    if (typeof item === 'string') {
+      const limit = Math.min(4096, remaining)
+      remaining -= Math.min(item.length, limit)
+      if (item.length > limit) { truncated = true; return item.slice(0, limit) + '…' }
+      return item
+    }
+    if (Array.isArray(item)) {
+      const result: unknown[] = []
+      for (let i = 0; i < item.length; i++) {
+        if (i >= 100 || nodes >= 1000 || remaining <= 0) { truncated = true; result.push('…'); break }
+        result.push(preview(item[i], depth + 1))
+      }
+      return result
+    }
+    if (item && typeof item === 'object') {
+      const result: Record<string, unknown> = Object.create(null)
+      let fields = 0
+      for (const key in item) {
+        if (!Object.hasOwn(item, key)) continue
+        if (++fields > 100 || nodes >= 1000 || remaining <= 0 || key.length > 256) { truncated = true; break }
+        remaining -= key.length
+        result[key] = preview((item as Record<string, unknown>)[key], depth + 1)
+      }
+      return result
+    }
+    return item ?? null
+  }
+  // Bound traversal and projection before serialization, including large arrays.
+  const text = JSON.stringify(preview(value, 0), null, 2) ?? 'null'
+  if (truncated || text.length > 65536) return text.slice(0, 65536) + '\n… 预览已截断，请查看已保存 JSON 获取完整记录。'
+  return text
+}
+
 export function JsonDisclosure({
   label,
   value,
@@ -172,8 +209,7 @@ export function JsonDisclosure({
   const [expanded, setExpanded] = useState(open)
   const preview = useMemo(() => {
     if (!expanded) return ''
-    const text = JSON.stringify(value, null, 2) ?? 'null'
-    return text.length > 65536 ? text.slice(0, 65536) + "\n… 预览已截断，请查看已保存 JSON 获取完整记录。" : text
+    return boundedJsonPreview(value)
   }, [expanded, value])
   return (
     <details className="json-disclosure" open={expanded} onToggle={event => setExpanded(event.currentTarget.open)}>

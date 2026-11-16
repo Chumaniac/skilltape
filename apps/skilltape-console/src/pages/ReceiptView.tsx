@@ -12,6 +12,15 @@ interface ReceiptViewProps {
   skillId?: string
 }
 
+function EvidencePages({ name, page, total, onPage }: { name: string; page: number; total: number; onPage: (page: number) => void }) {
+  if (total <= 100) return null
+  return <nav aria-label={name + '分页'} className="panel-heading">
+    <button type="button" disabled={page === 0} onClick={() => onPage(page - 1)}>上一页{name}</button>
+    <span role="status">{page * 100 + 1}–{Math.min((page + 1) * 100, total)} / {total}</span>
+    <button type="button" disabled={(page + 1) * 100 >= total} onClick={() => onPage(page + 1)}>下一页{name}</button>
+  </nav>
+}
+
 function ReceiptPicker({ receiptId, onOpen }: { receiptId: string; onOpen: (id: string) => void }) {
   const [error, setError] = useState('')
   return (
@@ -44,6 +53,9 @@ export function ReceiptViewPage({ receiptId = '', skillId = '' }: ReceiptViewPro
   const [loading, setLoading] = useState(true)
   const [reload, setReload] = useState(0)
   const [failedOnly, setFailedOnly] = useState(false)
+  const [stepPage, setStepPage] = useState(0)
+  const [checkPage, setCheckPage] = useState(0)
+  const [policyPage, setPolicyPage] = useState(0)
   const resultHeading = useRef<HTMLHeadingElement>(null)
 
   useEffect(() => {
@@ -57,6 +69,7 @@ export function ReceiptViewPage({ receiptId = '', skillId = '' }: ReceiptViewPro
     setLoading(true)
     setError('')
     setFailedOnly(false)
+    setStepPage(0); setCheckPage(0); setPolicyPage(0)
     getReceipt(receiptId, controller.signal)
       .then((stored) => { if (!controller.signal.aborted) setReceipt(stored.document) })
       .catch((reason: unknown) => {
@@ -100,6 +113,7 @@ export function ReceiptViewPage({ receiptId = '', skillId = '' }: ReceiptViewPro
       : { title: "复核执行结果", detail: "修改技能包前，请阅读步骤结果与策略决策。", action: "复核步骤结果" }
   function openReview() {
     setFailedOnly(failed.length > 0)
+    setCheckPage(0)
     const heading = document.getElementById(reviewChecks ? 'receipt-checks-heading' : 'receipt-steps-heading')
     heading?.focus({ preventScroll: true })
     heading?.scrollIntoView({ block: 'start' })
@@ -153,7 +167,7 @@ export function ReceiptViewPage({ receiptId = '', skillId = '' }: ReceiptViewPro
                   </tr>
                 </thead>
                 <tbody>
-                  {receipt.steps.map((step) => (
+                  {receipt.steps.slice(stepPage * 100, (stepPage + 1) * 100).map((step) => (
                     <tr key={step.step_id}>
                       <th scope="row"><code>{step.step_id}</code></th>
                       <td><StatusBadge tone={step.status === 'succeeded' ? 'good' : 'danger'}>{evidenceLabel(step.status)}</StatusBadge></td>
@@ -168,6 +182,7 @@ export function ReceiptViewPage({ receiptId = '', skillId = '' }: ReceiptViewPro
           ) : (
             <EmptyState title="没有步骤摘要" message="本次运行没有保存步骤级证据。" />
           )}
+          <EvidencePages name="步骤" page={stepPage} total={receipt.steps.length} onPage={setStepPage} />
         </article>
 
         <article className="panel">
@@ -179,12 +194,12 @@ export function ReceiptViewPage({ receiptId = '', skillId = '' }: ReceiptViewPro
           </div>
           <p role="status">{receipt.assertions.length - failed.length} 通过 · {failed.length} 失败</p>
           <div className="receipt-filters" role="group" aria-label="断言筛选">
-            <button className="button button-secondary" type="button" aria-pressed={!failedOnly} onClick={() => setFailedOnly(false)}>全部检查（{receipt.assertions.length})</button>
-            <button className="button button-secondary" type="button" aria-pressed={failedOnly} onClick={() => setFailedOnly(true)}>待处理（{failed.length})</button>
+            <button className="button button-secondary" type="button" aria-pressed={!failedOnly} onClick={() => { setFailedOnly(false); setCheckPage(0) }}>全部检查（{receipt.assertions.length})</button>
+            <button className="button button-secondary" type="button" aria-pressed={failedOnly} onClick={() => { setFailedOnly(true); setCheckPage(0) }}>待处理（{failed.length})</button>
           </div>
           {receipt.assertions.length > 0 ? (
             visible.length > 0 ? <ul className="result-list">
-              {visible.map((assertion, index) => (
+              {visible.slice(checkPage * 100, (checkPage + 1) * 100).map((assertion, index) => (
                 <li key={assertion.target + index}>
                   <span className={assertion.passed ? 'result-icon result-pass' : 'result-icon result-fail'} aria-hidden="true">
                     {assertion.passed ? '✓' : '!'}
@@ -201,6 +216,7 @@ export function ReceiptViewPage({ receiptId = '', skillId = '' }: ReceiptViewPro
           ) : (
             <p className="muted">未记录显式断言。</p>
           )}
+          <EvidencePages name="检查" page={checkPage} total={visible.length} onPage={setCheckPage} />
         </article>
 
         <article className="panel">
@@ -212,7 +228,7 @@ export function ReceiptViewPage({ receiptId = '', skillId = '' }: ReceiptViewPro
           </div>
           {receipt.policy_decisions.length > 0 ? (
             <ul className="decision-list">
-              {receipt.policy_decisions.map((decision, index) => (
+              {receipt.policy_decisions.slice(policyPage * 100, (policyPage + 1) * 100).map((decision, index) => (
                 <li key={decision.step_id + decision.phase + index}>
                   <StatusBadge tone={decision.allowed ? 'good' : 'danger'}>{decision.allowed ? 'allowed' : 'denied'}</StatusBadge>
                   <div>
@@ -226,6 +242,7 @@ export function ReceiptViewPage({ receiptId = '', skillId = '' }: ReceiptViewPro
           ) : (
             <p className="muted">未记录策略决策。</p>
           )}
+          <EvidencePages name="策略" page={policyPage} total={receipt.policy_decisions.length} onPage={setPolicyPage} />
         </article>
 
         <article className="panel panel-span-2">

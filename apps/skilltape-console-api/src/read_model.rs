@@ -362,11 +362,25 @@ impl ConsoleReadModel {
         let manifest = store.read_manifest().map_err(map_tape_error)?;
         let events = store
             .read_events_bounded(MAX_EVENT_BYTES, MAX_TAPE_EVENTS)
-            .map_err(map_tape_error)?
-            .collect::<Result<Vec<_>, _>>()
             .map_err(map_tape_error)?;
+        // Match the compiler's normalized JSON array exactly, retaining one
+        // event at a time instead of the whole parsed stream and a second copy.
+        let mut events_digest = Sha256::new();
+        events_digest.update(b"[");
+        let mut count = 0u64;
+        for event in events {
+            let event = event.map_err(map_tape_error)?;
+            if count > 0 {
+                events_digest.update(b",");
+            }
+            let value = serde_json::to_value(event).map_err(|_| ReadModelError::InvalidDocument)?;
+            let bytes = serde_json::to_vec(&value).map_err(|_| ReadModelError::InvalidDocument)?;
+            events_digest.update(bytes);
+            count += 1;
+        }
+        events_digest.update(b"]");
         if store.read_manifest().map_err(map_tape_error)? != manifest
-            || events.len() as u64 != manifest.event_count
+            || count != manifest.event_count
         {
             return Err(ReadModelError::InvalidDocument);
         }
@@ -383,8 +397,14 @@ impl ConsoleReadModel {
         // Use the compiler's normalized JSON representation, not file formatting.
         let manifest_hash =
             digest(serde_json::to_value(&manifest).map_err(|_| ReadModelError::InvalidDocument)?)?;
-        let events_hash =
-            digest(serde_json::to_value(&events).map_err(|_| ReadModelError::InvalidDocument)?)?;
+        let events_hash = format!(
+            "sha256:{}",
+            events_digest
+                .finalize()
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        );
         let mut ids = BTreeSet::new();
         let mut inspected = 0;
         for root in [

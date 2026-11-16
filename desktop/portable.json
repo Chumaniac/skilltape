@@ -7,7 +7,7 @@
   "smokePort": 19011,
   "mode": "process",
   "workspaceSelectable": true,
-  "readySelector": "main",
+  "readySelector": "h1",
   "launch": {
     "executable": "{{RESOURCES}}/runtime/bin/skilltape-console-api",
     "arguments": [
@@ -34,5 +34,6 @@
   },
   "saveSelector": "[data-desktop-save]",
   "product": "skilltape",
-  "assets": "apps/skilltape-console/dist"
+  "assets": "apps/skilltape-console/dist",
+  "initialFragment": "timeline"
 }
