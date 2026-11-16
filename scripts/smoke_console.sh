@@ -17,6 +17,11 @@ child_pid=""
 cleanup() {
   if [[ -n "$child_pid" ]]; then
     kill "$child_pid" 2>/dev/null || true
+    for _ in {1..40}; do
+      if ! kill -0 "$child_pid" 2>/dev/null; then break; fi
+      sleep 0.05
+    done
+    kill -KILL "$child_pid" 2>/dev/null || true
     wait "$child_pid" 2>/dev/null || true
   fi
   rm -f "$log_file"
