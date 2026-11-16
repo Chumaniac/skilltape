@@ -178,8 +178,8 @@ jobs:
         if: matrix.target == 'aarch64-apple-darwin'
         shell: bash
         run: |
-          runtime="$RUNNER_TEMP/skilltape-runtime"
-          apps="$RUNNER_TEMP/skilltape-apps"
+          runtime="$GITHUB_WORKSPACE/.release-workspace/runtime"
+          apps="$GITHUB_WORKSPACE/.release-workspace/apps"
           python3 desktop/prepare_runtime.py --binary-dir "target/${{ matrix.target }}/release" --output "$runtime"
           python3 desktop/build_app.py --runtime "$runtime" --output "$apps"
           codesign --verify --deep --strict "$apps/SkillTape.app"

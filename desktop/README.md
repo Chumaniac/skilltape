@@ -28,3 +28,5 @@ The dedicated Native Swift analysis workflow compiles this target, checks fixtur
 For a matrix build, pass `--binary-dir target/aarch64-apple-darwin/release` to `desktop/prepare_runtime.py`. The release workflow packages the Apple Silicon app from the same clean CLI/API/UI build and checks its isolated native window. The optional runtime recovery tool needs Python 3; ordinary application use does not. App ZIPs remain ad-hoc signed, without a notarization claim.
 
 The application opens the saved Capture timeline first. Use File → Open workspace for an existing evidence directory. The quantity worksheet remains available as a separate local calculation; changing the initial page does not execute or mutate a workspace.
+
+Publication manifest inspection is non-executing: it checks the prepared runtime identity and actual hashes. Invoke `scripts/application_manifest.py` from a trusted parent directory containing both app and ZIP; it refuses paths that escape that directory. The runtime builder only executes known `target/release` or `target/<host>/release` compiler outputs from this checkout.

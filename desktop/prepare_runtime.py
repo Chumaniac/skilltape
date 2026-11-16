@@ -50,8 +50,14 @@ def main():
     from package_release import verify_components
     version = json.loads((ROOT / 'apps/skilltape-console/package.json').read_text())['version']
     target = ('aarch64' if platform.machine() == 'arm64' else 'x86_64') + '-apple-darwin'
-    binary_dir = args.binary_dir.expanduser().absolute()
+    # Only the known build outputs from this checkout may be executed for identity.
+    selected = str(args.binary_dir.expanduser().resolve())
+    binary_dir = next((candidate for candidate in [ROOT / 'target/release', ROOT / 'target' / target / 'release']
+                       if str(candidate) == selected), None)
+    if binary_dir is None or binary_dir.is_symlink() or not binary_dir.is_dir():
+        raise SystemExit('BINARY_DIRECTORY_OUTSIDE_CHECKOUT_BUILD')
     identity = verify_components(version, target, binary_dir, ROOT / 'apps/skilltape-console/dist', allow_dirty=args.preview)
+    identity['target'] = target
     if identity['sourceRevision'] != revision or identity['dirty'] != dirty:
         raise SystemExit('RUNTIME_SOURCE_IDENTITY_MISMATCH')
     profile = json.loads((ROOT / 'desktop/portable.json').read_text())
@@ -99,7 +105,7 @@ def main():
     manifest = {str(p.relative_to(output)): hashlib.sha256(p.read_bytes()).hexdigest()
                 for p in sorted(output.rglob('*')) if p.is_file() and not p.is_symlink()}
     minimum, deployments = minimum_macos(output)
-    (output / 'runtime-manifest.json').write_text(json.dumps({'schema': 'runtime-files/v1', 'product': product, 'sourceCommit': revision, 'includesWorkingTreeChanges': dirty, 'minimumSystemVersion': minimum, 'binaryDeploymentTargets': deployments, 'files': manifest}, indent=2) + '\n')
+    (output / 'runtime-manifest.json').write_text(json.dumps({'schema': 'runtime-files/v1', 'product': product, 'sourceCommit': revision, 'includesWorkingTreeChanges': dirty, 'minimumSystemVersion': minimum, 'binaryDeploymentTargets': deployments, 'buildIdentity': identity, 'files': manifest}, indent=2) + '\n')
     print(json.dumps({'product': product, 'files': len(manifest), 'runtime': str(output)}))
 
 
