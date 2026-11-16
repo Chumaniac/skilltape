@@ -32,5 +32,6 @@
       "{{RESOURCES}}/ui"
     ]
   },
-  "saveSelector": "[data-desktop-save]"
+  "saveSelector": "[data-desktop-save]",
+  "initialFragment": "timeline"
 }

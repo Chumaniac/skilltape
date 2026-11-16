@@ -16,6 +16,7 @@ struct AppConfiguration: Decodable {
   let saveSelector: String?
   let readySelector: String?
   let workspaceSelectable: Bool?
+  let initialFragment: String?
 }
 
 final class DesktopApplication: NSObject, NSApplicationDelegate, NSWindowDelegate,
@@ -138,7 +139,7 @@ final class DesktopApplication: NSObject, NSApplicationDelegate, NSWindowDelegat
           server = assets
           origin = URL(string: "http://127.0.0.1:\(port)/")!
         }
-        web.load(URLRequest(url: origin))
+        web.load(URLRequest(url: startingURL()))
       } else if let launch = configuration.launch {
         let port =
           smokeOutput == nil ? configuration.port : configuration.smokePort ?? configuration.port
@@ -154,7 +155,7 @@ final class DesktopApplication: NSObject, NSApplicationDelegate, NSWindowDelegat
         ) { ready in
           if ready {
             self.web.load(
-              URLRequest(url: self.origin.appendingPathComponent(self.configuration.path ?? "")))
+              URLRequest(url: self.startingURL()))
           } else {
             self.showFailure()
           }
@@ -163,6 +164,12 @@ final class DesktopApplication: NSObject, NSApplicationDelegate, NSWindowDelegat
         showFailure()
       }
     } catch { showFailure() }
+  }
+  func startingURL() -> URL {
+    let base = origin.appendingPathComponent(configuration.path ?? "")
+    var parts = URLComponents(url: base, resolvingAgainstBaseURL: false)
+    parts?.fragment = configuration.initialFragment
+    return parts?.url ?? base
   }
   func installMenus() {
     let menu = NSMenu()

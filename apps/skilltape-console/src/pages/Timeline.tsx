@@ -65,6 +65,7 @@ export function TimelinePage({ tapeId, tapeOffset = 0, eventOffset = 0 }: Timeli
           title="暂无采集记录"
           message="运行 skilltape capture，在此工作区创建首份脱敏采集记录。"
         />
+        <p className="muted">桌面程序可从文件菜单打开已有工作区。先采集，再复核技能包、验证凭据和交付结果；查看记录不会重新执行流程。</p>
       </PageSection>
     )
   }

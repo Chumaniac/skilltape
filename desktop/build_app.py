@@ -32,6 +32,8 @@ def main():
         raise SystemExit('APPLICATION_PROFILE_INVALID')
     if not isinstance(config.get('mark'), str) or not 1 <= len(config['mark']) <= 3 or '\n' in config['mark']:
         raise SystemExit('APPLICATION_PROFILE_INVALID')
+    if config.get('initialFragment') not in {None, 'timeline', 'task', 'batch', 'deliveries'}:
+        raise SystemExit('APPLICATION_PROFILE_INVALID')
     if config['mode'] == 'process':
         launch = config.get('launch')
         if (not isinstance(launch, dict) or not isinstance(launch.get('executable'), str)

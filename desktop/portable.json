@@ -34,5 +34,6 @@
   },
   "saveSelector": "[data-desktop-save]",
   "product": "skilltape",
-  "assets": "apps/skilltape-console/dist"
+  "assets": "apps/skilltape-console/dist",
+  "initialFragment": "timeline"
 }
