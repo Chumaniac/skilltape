@@ -110,6 +110,30 @@ def verify_components(version,target,binary_dir,ui_dist, *, allow_dirty=False):
     return identity
 
 
+def copy_release_notices(console_root: Path) -> None:
+    project = Path(__file__).resolve().parents[1]
+    source = project / 'desktop/runtime-licenses'
+    require_directory(source, 'third-party notices')
+    tracked = set(subprocess.check_output(['git', 'ls-files', '-z', '--', 'desktop/runtime-licenses'], cwd=project).decode().split('\0')) - {''}
+    actual = set(); total = 0
+    for entry in source.rglob('*'):
+        if entry.is_symlink() or not (entry.is_dir() or entry.is_file()):
+            raise ValueError('third-party notice tree contains a link or special file')
+        if entry.is_file():
+            actual.add(entry.relative_to(project).as_posix())
+            total += entry.stat().st_size
+            if len(actual) > 2000 or total > 32 * 1024 * 1024:
+                raise ValueError('third-party notices exceed release capacity')
+    if not tracked or actual != tracked:
+        raise ValueError('third-party notice tree must match the tracked source inventory')
+    destination = console_root / 'licenses'
+    destination.mkdir()
+    for name in ['LICENSE', 'THIRD_PARTY_NOTICES.md']:
+        require_file(project / name, 'project notice')
+        shutil.copy2(project / name, destination / name)
+    shutil.copytree(source, destination / 'runtime-licenses')
+
+
 def stage_release(
     version: str, target: str, binary_dir: Path, ui_dist: Path, staging_root: Path
 ) -> Path:
@@ -132,6 +156,8 @@ def stage_release(
         archive_root / f"skilltape-console-api{suffix}",
     )
     copy_ui(ui_dist, console_root)
+    # Keep notices with Console so existing installers retain them with the UI.
+    copy_release_notices(console_root)
     tools = archive_root / 'tools'
     tools.mkdir()
     project = Path(__file__).resolve().parents[1]

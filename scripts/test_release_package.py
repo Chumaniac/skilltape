@@ -115,6 +115,9 @@ class ReleasePackageTests(unittest.TestCase):
                 "skilltape-v0.1.0-x86_64-apple-darwin/console/assets/app.js",
                 names,
             )
+            self.assertIn('skilltape-v0.1.0-x86_64-apple-darwin/console/licenses/LICENSE', names)
+            self.assertIn('skilltape-v0.1.0-x86_64-apple-darwin/console/licenses/THIRD_PARTY_NOTICES.md', names)
+            self.assertTrue(any('/console/licenses/runtime-licenses/cargo/' in name for name in names))
 
     def test_windows_archive_uses_executable_names_and_zip(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
