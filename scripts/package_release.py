@@ -4,6 +4,7 @@
 import argparse
 import hashlib
 import json
+import os
 import re
 import subprocess
 import shutil
@@ -16,7 +17,8 @@ from pathlib import Path
 
 def safe_component(value: str, label: str) -> str:
     if (
-        not value
+        not isinstance(value, str)
+        or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}", value)
         or value in {".", ".."}
         or "/" in value
         or "\\" in value
@@ -111,7 +113,13 @@ def verify_components(version,target,binary_dir,ui_dist, *, allow_dirty=False):
 def stage_release(
     version: str, target: str, binary_dir: Path, ui_dist: Path, staging_root: Path
 ) -> Path:
-    archive_root = staging_root / f"skilltape-v{version}-{target}"
+    version = safe_component(version, 'version')
+    target = safe_component(target, 'target')
+    base = os.path.realpath(staging_root)
+    destination = os.path.realpath(os.path.join(base, f"skilltape-v{version}-{target}"))
+    if not destination.startswith(base.rstrip(os.sep) + os.sep):
+        raise ValueError('release staging path is outside its owned directory')
+    archive_root = Path(destination)
     console_root = archive_root / "console"
     archive_root.mkdir(parents=True)
     require_directory(binary_dir, "release binary directory")

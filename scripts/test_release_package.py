@@ -14,6 +14,14 @@ PACKAGER = ROOT / "scripts" / "package_release.py"
 
 
 class ReleasePackageTests(unittest.TestCase):
+    def test_version_and_target_are_portable_bounded_components(self):
+        for version, target in [('0.5.0\ninjected', 'aarch64-apple-darwin'), ('0.5.0', 'C:unsafe'), ('v' + 'a' * 81, 'aarch64-apple-darwin')]:
+            with tempfile.TemporaryDirectory() as temporary:
+                binary_dir, ui_dist, output_dir = self.make_fixture(Path(temporary), 'aarch64-apple-darwin')
+                result = self.run_packager(version, target, binary_dir, ui_dist, output_dir)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(list(output_dir.iterdir()))
+
     def test_existing_partial_output_cannot_overwrite_an_original(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
