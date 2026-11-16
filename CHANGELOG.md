@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0 — 2026-11-16
+
+- Ship current capture, starter, batch and saved-Receipt workflows in one immutable release.
+- Bound Receipt rendering and JSON projection; stream normalized Capture identity and admit event scans through the bounded inspection pool.
+- Include stopped-workspace recovery tools, a portable Apple Silicon application, exact build identities and installed-package checks.
+
+
 ## Unreleased source - 2026-11-02
 
 - Share file, total-byte, entry and depth ceilings across Replay artifact I/O,

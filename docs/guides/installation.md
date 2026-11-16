@@ -14,7 +14,7 @@ skilltape-v<version>-<target>.zip      # Windows
 checksums.txt
 ```
 
-The `v0.4.1` release supports these targets:
+The `v0.5.0` release supports these targets:
 
 - `x86_64-unknown-linux-gnu`
 - `x86_64-apple-darwin`
@@ -26,14 +26,13 @@ archive SHA-256, validate the CLI, API companion, and Console UI, and stage all
 assets before replacement. A download, checksum, extraction, or staging failure
 leaves an existing installation untouched.
 
-The unreleased source installers additionally back up the CLI, API and UI as one
+The pinned installers additionally back up the CLI, API and UI as one
 replacement transaction. A final-move failure restores the complete previous set;
 a failed fresh install removes its partial set. If restoration is blocked, the
 installer preserves its backup and installation lock and reports the recovery
 location. Inspect those files before removing the lock or retrying. Process
 termination without cleanup (for example, SIGKILL or power loss) still requires
-manual recovery. This source change does not alter the pinned v0.4.1 installers
-or release archives linked below.
+manual recovery. Existing historical installers and release archives remain available without replacement.
 
 Linux needs `bwrap`/Bubblewrap and an available user namespace for Replay and
 Verify; Debian and Ubuntu users can install it with `sudo apt-get install
@@ -54,9 +53,9 @@ installed files only after the new archive has passed all checks:
 ```bash
 installer_path="$(mktemp)"
 curl --fail --location --silent --show-error --output "$installer_path" \
-  "https://raw.githubusercontent.com/Chumaniac/skilltape/9f6bec579258baa63234139af0fae650d9efdbd2/scripts/install.sh"
+  "https://raw.githubusercontent.com/Chumaniac/skilltape/aa0380d0ece4c385eb3e7e369009a5a73b48d0c7/scripts/install.sh"
 export SKILLTAPE_RELEASE_BASE_URL="https://github.com/Chumaniac/skilltape/releases/download"
-export SKILLTAPE_VERSION="0.4.1"
+export SKILLTAPE_VERSION="0.5.0"
 bash "$installer_path"
 ```
 
@@ -66,9 +65,9 @@ custom Unix location:
 ```bash
 installer_path="$(mktemp)"
 curl --fail --location --silent --show-error --output "$installer_path" \
-  "https://raw.githubusercontent.com/Chumaniac/skilltape/9f6bec579258baa63234139af0fae650d9efdbd2/scripts/install.sh"
+  "https://raw.githubusercontent.com/Chumaniac/skilltape/aa0380d0ece4c385eb3e7e369009a5a73b48d0c7/scripts/install.sh"
 SKILLTAPE_RELEASE_BASE_URL="https://github.com/Chumaniac/skilltape/releases/download" \
-  bash "$installer_path" 0.4.1 "$HOME/.local/bin" "aarch64-apple-darwin"
+  bash "$installer_path" 0.5.0 "$HOME/.local/bin" "aarch64-apple-darwin"
 ```
 
 On Windows, download the fixed installer source before setting the same values
@@ -76,9 +75,9 @@ in PowerShell:
 
 ```powershell
 $installerPath = Join-Path $env:TEMP "skilltape-install.ps1"
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Chumaniac/skilltape/9f6bec579258baa63234139af0fae650d9efdbd2/scripts/install.ps1" -OutFile $installerPath
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Chumaniac/skilltape/aa0380d0ece4c385eb3e7e369009a5a73b48d0c7/scripts/install.ps1" -OutFile $installerPath
 $env:SKILLTAPE_RELEASE_BASE_URL = "https://github.com/Chumaniac/skilltape/releases/download"
-$env:SKILLTAPE_VERSION = "0.4.1"
+$env:SKILLTAPE_VERSION = "0.5.0"
 $env:SKILLTAPE_INSTALL_DIR = "$env:LOCALAPPDATA\SkillTape\bin"
 $env:SKILLTAPE_TARGET = "x86_64-pc-windows-msvc"
 & $installerPath
@@ -113,3 +112,5 @@ npm --prefix apps/skilltape-console run build
 ## Current-source candidates
 
 Use the [candidate identity guide](source-candidates.md) to build and inspect one clean source revision. `--require-identity` refuses mixed CLI/API/UI artifacts before packaging. This does not publish or update the fixed public release; retain old installations and successful data.
+
+The Apple Silicon application is in the same [v0.5.0 Release](https://github.com/Chumaniac/skilltape/releases/tag/v0.5.0). Verify its ZIP against `checksums.txt`; its source manifest records the actual minimum macOS version. It is ad-hoc signed and is not Apple notarized. [Stopped-workspace recovery](workspace-recovery.md) uses a new directory and never overwrites the original.

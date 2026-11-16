@@ -72,10 +72,11 @@ def main():
         binary = app / 'Contents/MacOS/Workspace'
         resources = app / 'Contents/Resources'
         binary.parent.mkdir(parents=True); resources.mkdir()
+        product_version = json.loads((ROOT / 'apps/skilltape-console/package.json').read_text())['version']
         info = {'CFBundleIdentifier': config['identifier'], 'CFBundleName': config['name'],
                 'CFBundleDisplayName': config['name'], 'CFBundleExecutable': 'Workspace',
-                'CFBundlePackageType': 'APPL', 'CFBundleIconFile': 'AppIcon', 'CFBundleShortVersionString': '1.0.0',
-                'CFBundleVersion': '1', 'LSMinimumSystemVersion': '13.0',
+                'CFBundlePackageType': 'APPL', 'CFBundleIconFile': 'AppIcon', 'CFBundleShortVersionString': product_version,
+                'CFBundleVersion': product_version, 'LSMinimumSystemVersion': '13.0',
                 'NSHighResolutionCapable': True,
                 'NSAppTransportSecurity': {'NSAllowsLocalNetworking': True}}
         (app / 'Contents/Info.plist').write_bytes(plistlib.dumps(info))

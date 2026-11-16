@@ -56,6 +56,29 @@ const receipt = {
   ],
 }
 
+test('large saved Receipts keep each evidence list paged and every row reachable', async ({page}) => {
+  const large = {...receipt,
+    steps: Array.from({length:205}, (_,i)=>({...receipt.steps[0],step_id:'step-'+i})),
+    assertions: Array.from({length:205}, (_,i)=>({...receipt.assertions[0],target:'outputs/'+i})),
+    policy_decisions: Array.from({length:205}, (_,i)=>({...receipt.policy_decisions[0],step_id:'decision-'+i})),
+  }
+  await mockApi(page, 'normal', large)
+  await page.goto('/#receipt?run=run-a')
+  await expect(page.locator('.receipt-review tbody tr')).toHaveCount(100)
+  await expect(page.locator('.receipt-review .result-list li')).toHaveCount(100)
+  await expect(page.locator('.receipt-review .decision-list li')).toHaveCount(100)
+  await page.getByRole('button',{name:'下一页步骤'}).click()
+  await expect(page.getByText('step-100',{exact:true})).toBeVisible()
+  await page.getByRole('button',{name:'下一页检查'}).click()
+  await expect(page.getByText('outputs/100',{exact:true})).toBeVisible()
+  await page.getByRole('button',{name:'下一页策略'}).click()
+  await expect(page.getByText('decision-100',{exact:true})).toBeVisible()
+  await page.getByRole('button',{name:'下一页检查'}).click()
+  await expect(page.locator('.receipt-review .result-list li')).toHaveCount(5)
+  await page.getByRole('button',{name:'待处理（0)',exact:true}).click()
+  await expect(page.getByText('没有失败断言，请另行复核运行状态和策略决策。')).toBeVisible()
+})
+
 test('bounded saved run documents preserve explicit legacy and replay identities',async({page})=>{
  await mockApi(page)
  let payload:unknown={schema:'skilltape.dev/run/v1',id:'run-a',document:{status:'succeeded'}}

@@ -41,6 +41,13 @@ def copy_ui(ui_dist: Path, destination: Path) -> None:
     require_file(ui_dist / "index.html", "UI index")
     assets = ui_dist / "assets"
     require_directory(assets, "UI assets")
+    allowed = {'.html', '.js', '.css', '.svg', '.png', '.jpg', '.webp', '.woff2', '.txt', '.json', '.ico'}
+    entries = list(ui_dist.rglob('*'))
+    files = [p for p in entries if p.is_file() and not p.is_symlink()]
+    if (len(entries) > 1024 or len(files) > 512 or sum(p.stat().st_size for p in files) > 32 * 1024 * 1024
+            or any(p.stat().st_size > 8 * 1024 * 1024 or p.suffix not in allowed
+                   or any(part.startswith('.') for part in p.relative_to(ui_dist).parts) for p in files)):
+        raise ValueError('UI file type or capacity is outside the release boundary')
     asset_files = []
     for source in sorted(ui_dist.rglob("*")):
         relative = source.relative_to(ui_dist)
@@ -60,14 +67,14 @@ def copy_ui(ui_dist: Path, destination: Path) -> None:
         raise ValueError("UI assets directory must contain at least one regular file")
 
 
-def validate_identities(version, target, cli, api, ui):
+def validate_identities(version, target, cli, api, ui, *, allow_dirty=False):
     catalog = json.loads((Path(__file__).resolve().parents[1]/'product-capabilities.json').read_text())
     keys = ['schema','version','sourceRevision','dirty','channel','capabilities']
     if (not all(isinstance(info,dict) for info in [cli,api,ui])
             or cli.get('schema') != 'skilltape.build-info/v1' or cli.get('version') != version
             or not isinstance(cli.get('sourceRevision'),str)
             or not re.fullmatch('[0-9a-f]{40}',cli['sourceRevision'])
-            or cli.get('dirty') is not False or cli.get('channel') not in {'source','release'}
+            or type(cli.get('dirty')) is not bool or cli.get('dirty') and not allow_dirty or cli.get('channel') not in {'source','release'}
             or cli.get('capabilities') != catalog['capabilities']
             or any(info.get(key) != cli.get(key) for info in [api,ui] for key in keys)
             or cli.get('target') != target or api.get('target') != target):
@@ -87,7 +94,7 @@ def file_digest(path):
         return hashlib.file_digest(stream,'sha256').hexdigest()
 
 
-def verify_components(version,target,binary_dir,ui_dist):
+def verify_components(version,target,binary_dir,ui_dist, *, allow_dirty=False):
     suffix='.exe' if 'windows' in target else ''
     for name in ['skilltape'+suffix,'skilltape-console-api'+suffix]:require_file(binary_dir/name,'component')
     require_file(ui_dist/'build-info.json','UI build identity')
@@ -95,7 +102,7 @@ def verify_components(version,target,binary_dir,ui_dist):
     cli=component_identity(binary_dir/('skilltape'+suffix),['build-info'])
     api=component_identity(binary_dir/('skilltape-console-api'+suffix),['--build-info'])
     ui=json.loads((ui_dist/'build-info.json').read_text())
-    identity=validate_identities(version,target,cli,api,ui)
+    identity=validate_identities(version,target,cli,api,ui,allow_dirty=allow_dirty)
     identity['components']={name:file_digest(binary_dir/name) for name in ['skilltape'+suffix,'skilltape-console-api'+suffix]}
     identity['uiFiles']={str(p.relative_to(ui_dist)):file_digest(p) for p in ui_dist.rglob('*') if p.is_file()}
     return identity
@@ -117,6 +124,12 @@ def stage_release(
         archive_root / f"skilltape-console-api{suffix}",
     )
     copy_ui(ui_dist, console_root)
+    tools = archive_root / 'tools'
+    tools.mkdir()
+    project = Path(__file__).resolve().parents[1]
+    for source, name in [(project / 'scripts/workspace_backup.py', 'workspace_backup.py'), (project / 'docs/guides/workspace-recovery.md', 'WORKSPACE-RECOVERY.md')]:
+        require_file(source, 'workspace recovery tool')
+        shutil.copy2(source, tools / name)
     return archive_root
 
 
@@ -142,6 +155,8 @@ def add_tar_entry(package: tarfile.TarFile, path: Path, archive_root: Path) -> N
 
 def write_archive(archive_root: Path, output: Path, windows: bool) -> None:
     partial = output.with_name(output.name + ".partial")
+    if partial.exists() or partial.is_symlink():
+        raise ValueError('partial release output already exists; preserve and inspect it')
     if output.exists() or output.is_symlink():
         raise ValueError(f"release archive already exists: {output}")
     try:

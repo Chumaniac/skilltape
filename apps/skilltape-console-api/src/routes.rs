@@ -276,7 +276,12 @@ async fn tape_events(
     Query(query): Query<PageQuery>,
 ) -> Result<Json<TapeEvents>, ApiError> {
     let (offset, limit) = page(&query)?;
-    Ok(Json(state.model.tape_events(&tape_id, offset, limit)?))
+    let permit = inspection_permit(&state)?;
+    let (events, _permit) = inspect(permit, move || {
+        state.model.tape_events(&tape_id, offset, limit)
+    })
+    .await?;
+    Ok(Json(events))
 }
 
 async fn tape_coverage(
@@ -550,6 +555,31 @@ fn parse_last_event_id(headers: &HeaderMap) -> Result<Option<u64>, ApiError> {
 #[cfg(test)]
 mod inspection_tests {
     use super::*;
+
+    #[tokio::test]
+    async fn event_reads_respect_the_same_inspection_limit() {
+        let root = tempfile::TempDir::new().unwrap();
+        let state = AppState {
+            model: ConsoleReadModel::new(root.path()).unwrap(),
+            static_root: None,
+            inspections: Arc::new(tokio::sync::Semaphore::new(2)),
+        };
+        let _first = inspection_permit(&state).unwrap();
+        let _second = inspection_permit(&state).unwrap();
+        let result = tape_events(
+            State(state),
+            Path("missing".into()),
+            Query(PageQuery::default()),
+        )
+        .await;
+        assert!(matches!(
+            result,
+            Err(ApiError::Unavailable {
+                code: "inspection_busy",
+                ..
+            })
+        ));
+    }
 
     #[tokio::test]
     async fn busy_inspections_do_not_build_a_queue() {

@@ -812,7 +812,28 @@ async fn compile_source_summary_is_optional_bounded_and_validated() {
 async fn tape_package_discovery_matches_both_normalized_digests_and_bounds_metadata() {
     use sha2::{Digest, Sha256};
     let (_temp, root) = fixture();
-    let store = TapeStore::open(root.join(".skilltape/tapes/tape-a")).unwrap();
+    let store = TapeStore::create(
+        root.join(".skilltape/tapes/tape-b"),
+        TapeManifest {
+            schema: TAPE_SCHEMA_V1.into(),
+            id: "tape-b".into(),
+            started_at_ms: 10,
+            finished_at_ms: None,
+            platform: "test".into(),
+            workspace_root: "workspace".into(),
+            event_count: 0,
+        },
+    )
+    .unwrap();
+    for sequence in 0..4 {
+        store.append(&TapeEvent {
+            sequence, occurred_at_ms: 11 + sequence,
+            kind: TapeEventKind::TerminalCommand, source: EventSource::Shell,
+            payload: json!({"z": ["合成", "escaped\ntext"], "a": {"unicode": "é", "n": sequence}}),
+            redaction: RedactionState::Redacted,
+        }).unwrap();
+    }
+    store.finish(20).unwrap();
     let manifest = store.read_manifest().unwrap();
     let events = store
         .read_events_bounded(16 * 1024 * 1024, 100_000)
@@ -838,7 +859,7 @@ async fn tape_package_discovery_matches_both_normalized_digests_and_bounds_metad
     let response = router(model)
         .oneshot(
             Request::builder()
-                .uri("/api/v1/tapes/tape-a/packages?limit=50")
+                .uri("/api/v1/tapes/tape-b/packages?limit=50")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -860,7 +881,7 @@ async fn tape_package_discovery_matches_both_normalized_digests_and_bounds_metad
     let response = router(ConsoleReadModel::new(&root).unwrap())
         .oneshot(
             Request::builder()
-                .uri("/api/v1/tapes/tape-a/packages")
+                .uri("/api/v1/tapes/tape-b/packages")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -878,7 +899,7 @@ async fn tape_package_discovery_matches_both_normalized_digests_and_bounds_metad
     let response = router(ConsoleReadModel::new(&root).unwrap())
         .oneshot(
             Request::builder()
-                .uri("/api/v1/tapes/tape-a/packages")
+                .uri("/api/v1/tapes/tape-b/packages")
                 .body(Body::empty())
                 .unwrap(),
         )

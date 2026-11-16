@@ -14,6 +14,18 @@ PACKAGER = ROOT / "scripts" / "package_release.py"
 
 
 class ReleasePackageTests(unittest.TestCase):
+    def test_existing_partial_output_cannot_overwrite_an_original(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            binary_dir, ui_dist, output_dir = self.make_fixture(root, "aarch64-apple-darwin")
+            original = root / 'retained-original'; original.write_bytes(b'original fixture')
+            partial = output_dir / 'skilltape-v0.5.0-aarch64-apple-darwin.tar.gz.partial'
+            partial.symlink_to(original)
+            result = self.run_packager('0.5.0', 'aarch64-apple-darwin', binary_dir, ui_dist, output_dir)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(original.read_bytes(), b'original fixture')
+            self.assertTrue(partial.is_symlink())
+
     def make_fixture(self, root: Path, target: str) -> tuple[Path, Path, Path]:
         binary_dir = root / "target" / target / "release"
         ui_dist = root / "ui-dist"
@@ -51,6 +63,19 @@ class ReleasePackageTests(unittest.TestCase):
             text=True,
             check=False,
         )
+
+    def test_release_ui_rejects_hidden_private_or_oversized_files(self):
+        for filename, size in [('assets/.env', 8), ('assets/private.sqlite', 8), ('assets/large.js', 8 * 1024 * 1024 + 1)]:
+            with tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                binary_dir, ui_dist, output_dir = self.make_fixture(root, "aarch64-apple-darwin")
+                source = ui_dist / filename
+                with source.open('wb') as stream:
+                    stream.truncate(size)
+                result = self.run_packager("0.5.0", "aarch64-apple-darwin", binary_dir, ui_dist, output_dir)
+                self.assertNotEqual(result.returncode, 0, filename)
+                self.assertFalse(list(output_dir.iterdir()), 'rejected assets must not publish an archive')
+                self.assertEqual(source.stat().st_size, size)
 
     def test_unix_archive_contains_the_complete_console_layout(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -379,22 +379,12 @@ steps:
             '"$tag_commit" != "$GITHUB_SHA"',
         ):
             self.assertIn(fragment, publish_script)
-        self.assertEqual(publish_script.count("verify_release_tag"), 3)
-        self.assertRegex(
-            publish_script,
-            r'if gh release view "\$tag" --repo "\$GITHUB_REPOSITORY".*?then\n'
-            r'\s+verify_release_tag\n'
-            r'\s+gh release upload "\$tag" --repo "\$GITHUB_REPOSITORY"',
-            "existing-release publication must revalidate immediately before upload",
-        )
-        self.assertRegex(
-            publish_script,
-            r'else\n'
-            r'\s+verify_release_tag\n'
-            r'\s+gh release create "\$tag" --repo "\$GITHUB_REPOSITORY" --verify-tag',
-            "new-release publication must revalidate immediately before creation",
-        )
-        self.assertIn('gh release view "$tag" --repo "$GITHUB_REPOSITORY"', publish_script)
+        self.assertEqual(publish_script.count("verify_release_tag"), 2)
+        self.assertNotIn("--clobber", publish_script)
+        self.assertNotIn("gh release upload", publish_script)
+        self.assertRegex(publish_script, r'if gh release view.*?then\n(?:.*\n)*?\s+exit 1\n\s+fi')
+        self.assertRegex(publish_script, r'fi\n\s+verify_release_tag\n\s+gh release create')
+        self.assertIn("matching main checks must pass before release", prepare_validation)
 
         checksums = run_script(named_step(publish_steps, "Generate checksums"))
         self.assertIn('sha256sum "${archives[@]}" | sort > checksums.txt', checksums)

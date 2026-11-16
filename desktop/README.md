@@ -24,3 +24,5 @@ The repository also includes a Swift Package Manager target for native-host comp
 The dedicated Native Swift analysis workflow compiles this target, checks fixture boundaries and retains CodeQL SARIF as an Actions artifact. It fails on any reported finding. SARIF and database uploads to Code Scanning are disabled (`upload: never`, `upload-database: false`), preserving the repository’s existing default setup and Rust coverage.
 
 完整可移动程序的构建步骤、运行时闭包和许可要求见[构建说明](../docs/build.md)。
+
+For a matrix build, pass `--binary-dir target/aarch64-apple-darwin/release` to `desktop/prepare_runtime.py`. The release workflow packages the Apple Silicon app from the same clean CLI/API/UI build and checks its isolated native window. The optional runtime recovery tool needs Python 3; ordinary application use does not. App ZIPs remain ad-hoc signed, without a notarization claim.

@@ -18,6 +18,7 @@ cargo build --locked --release -p skilltape-cli -p skilltape-console-api
 
 ```sh
 python3 desktop/prepare_runtime.py --output /tmp/new-runtime
+# Matrix builds may add --binary-dir target/aarch64-apple-darwin/release
 ```
 
 构建器复制本次构建的 CLI 和 Console API。运行仍需要系统沙箱；二进制与前端均放入程序包。
@@ -28,7 +29,7 @@ python3 desktop/prepare_runtime.py --output /tmp/new-runtime
 python3 desktop/build_app.py --runtime /tmp/new-runtime --output /tmp/new-apps
 ```
 
-两个输出目录必须不存在；构建不覆盖旧安装或数据。正式构建要求 Git 干净，运行清单绑定当前提交；本地未提交预览需显式 --preview。
+两个输出目录必须不存在；构建不覆盖旧安装或数据。正式构建要求 Git 干净，运行清单绑定当前提交；本地未提交预览需在运行时组装和程序构建两步均显式使用 --preview；CLI、API与UI的版本、提交和dirty标记仍必须一致。
 
 程序包包含「帮助 → 使用指南」，可以离线查看操作步骤和存储位置。复制到新目录后，用最小运行环境启动，检查源码目录不在运行依赖内；桌面与390px窄屏分别核对。测试报告、模型效果和实体设备验收单独记录。
 
