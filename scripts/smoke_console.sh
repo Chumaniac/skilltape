@@ -56,7 +56,9 @@ esac
 
 python3 - "$ready_url" <<'PY'
 import http.client
+from html.parser import HTMLParser
 import json
+import re
 import sys
 from urllib.parse import urlsplit
 
@@ -79,7 +81,30 @@ assert document["schema"] == "skilltape.dev/console/v1"
 assert document["items"]
 
 html = get("/")
-assert "SkillTape Console" in html
+class PageIdentity(HTMLParser):
+    def __init__(self):
+        super().__init__(); self.in_title=False; self.title=[]; self.assets=[]
+    def handle_starttag(self, tag, attrs):
+        values=dict(attrs)
+        if tag=='title':self.in_title=True
+        if tag=='script' and values.get('type')=='module':self.assets.append(values.get('src',''))
+        if tag=='link' and values.get('rel')=='stylesheet':self.assets.append(values.get('href',''))
+    def handle_endtag(self, tag):
+        if tag=='title':self.in_title=False
+    def handle_data(self, data):
+        if self.in_title:self.title.append(data)
+page=PageIdentity();page.feed(html)
+assert ''.join(page.title).strip()=='SkillTape 控制台', 'wrong product title'
+assert page.assets, 'built UI assets missing'
+for path in page.assets:
+    assert path.startswith('/assets/') and '..' not in path and not urlsplit(path).netloc, 'unsafe UI asset path'
+    assert get(path), 'empty UI asset'
+api=json.loads(get('/api/v1/build-info'));ui=json.loads(get('/build-info.json'))
+assert api['schema']=='skilltape.build-info/v1'
+assert re.fullmatch('[a-f0-9]{40}',api['sourceRevision'])
+assert api['dirty'] is False
+for key in ['schema','version','sourceRevision','dirty','channel','capabilities']:
+    assert api[key]==ui[key], 'component identity mismatch: '+key
 PY
 
 echo "Console API/UI smoke passed at $ready_url"

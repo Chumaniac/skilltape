@@ -25,6 +25,12 @@ jobs:
       - run: npm --prefix apps/skilltape-console run build
       - run: cargo test --workspace --locked
       - run: cargo build --locked -p skilltape-cli
+      - name: Verify real localized Console identity and assets
+        run: |
+          cargo build --locked -p skilltape-console-api
+          smoke_workspace="$(mktemp -d)"
+          trap 'rm -rf "$smoke_workspace"' EXIT
+          SKILLTAPE_CONSOLE_API_BIN=target/debug/skilltape-console-api SKILLTAPE_CONSOLE_UI_DIST=apps/skilltape-console/dist bash scripts/smoke_console.sh "$smoke_workspace"
       - run: python3 scripts/test_request_import.py
       - run: python3 -m unittest discover -s desktop/tests
 

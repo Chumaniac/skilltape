@@ -6,7 +6,7 @@
 
 **Beta** · Turn a real local workflow into a reviewable Agent Skill you can replay and verify before you share it.
 
-**[Try quantity reconciliation →](https://chumaniac.github.io/skilltape/)** · [CLI releases](https://github.com/Chumaniac/skilltape/releases/tag/v0.5.0) · [Chinese desktop release](https://github.com/Chumaniac/skilltape/releases/tag/v0.5.0)
+**[Try quantity reconciliation →](https://chumaniac.github.io/skilltape/)** · [CLI releases](https://github.com/Chumaniac/skilltape/releases/tag/v0.5.1) · [Chinese desktop release](https://github.com/Chumaniac/skilltape/releases/tag/v0.5.1)
 
 Start with the sample inventory, edit expected and received quantities, calculate the differences, then export the current CSV. The browser example handles the checklist locally. Command recording, replay and Receipt verification use the local CLI.
 
@@ -24,7 +24,7 @@ cargo build --locked -p skilltape-cli
 ./target/debug/skilltape starter run inputs --output run --yes
 ```
 
-The v0.5.0 CLI, Console and Apple Silicon application are built from one source revision, including the starter and review workflows. The historical [v0.4.1 release](https://github.com/Chumaniac/skilltape/releases/tag/v0.4.1) remains available. The historical desktop release keeps its original files and checksums. Windows can prepare inputs and inspect records; replay and verification need a supported system sandbox.
+The v0.5.1 CLI, Console and Apple Silicon application are built from one source revision, including the starter and review workflows. The historical [v0.4.1 release](https://github.com/Chumaniac/skilltape/releases/tag/v0.4.1) remains available. The historical desktop release keeps its original files and checksums. Windows can prepare inputs and inspect records; replay and verification need a supported system sandbox.
 
 ## Continue locally
 

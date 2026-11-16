@@ -11,13 +11,13 @@ Verify the Skill. A successful Receipt ends with `"status":"succeeded"`.
 
 ## macOS and Linux
 
-Install the fixed public v0.5.0 release without piping a download into a shell.
+Install the fixed public v0.5.1 release without piping a download into a shell.
 The installer source is pinned to commit
 `aa0380d0ece4c385eb3e7e369009a5a73b48d0c7`, and the public release base URL is
 explicit.
 
 ```bash
-SKILLTAPE_VERSION="0.5.0"
+SKILLTAPE_VERSION="0.5.1"
 SKILLTAPE_RELEASE_BASE_URL="https://github.com/Chumaniac/skilltape/releases/download"
 installer_path="$(mktemp)"
 curl --fail --location --silent --show-error --output "$installer_path" \
@@ -62,7 +62,7 @@ release. This path does not require a compiler or a checkout of this repository.
 $installerPath = Join-Path $env:TEMP "skilltape-install.ps1"
 Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Chumaniac/skilltape/aa0380d0ece4c385eb3e7e369009a5a73b48d0c7/scripts/install.ps1" -OutFile $installerPath
 $env:SKILLTAPE_RELEASE_BASE_URL = "https://github.com/Chumaniac/skilltape/releases/download"
-$env:SKILLTAPE_VERSION = "0.5.0"
+$env:SKILLTAPE_VERSION = "0.5.1"
 $env:SKILLTAPE_TARGET = "x86_64-pc-windows-msvc"
 & $installerPath
 $env:PATH = "$env:LOCALAPPDATA\SkillTape\bin;$env:PATH"

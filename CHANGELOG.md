@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1 — 2026-11-16
+
+- Validate the localized Console title, API/UI identity and built asset paths in installed smoke checks.
+- Run the actual API/UI smoke in source CI, preserving the failed v0.5.0 tag rather than republishing it.
+
+
 ## 0.5.0 — 2026-11-16
 
 - Ship current capture, starter, batch and saved-Receipt workflows in one immutable release.
