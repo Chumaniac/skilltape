@@ -63,6 +63,8 @@ import sys
 from urllib.parse import urlsplit
 
 parts = urlsplit(sys.argv[1])
+assert parts.scheme == "http" and parts.hostname == "127.0.0.1" and parts.port and not parts.username and not parts.password
+assert parts.path in {"", "/"} and not parts.query and not parts.fragment
 
 
 def get(path: str) -> str:
