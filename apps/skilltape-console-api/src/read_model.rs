@@ -1036,10 +1036,9 @@ impl ConsoleReadModel {
         let mut names = BTreeSet::new();
         for entry in entries {
             let entry = entry.map_err(ReadModelError::Io)?;
-            let metadata = fs::symlink_metadata(entry.path()).map_err(ReadModelError::Io)?;
+            let file_type = entry.file_type().map_err(ReadModelError::Io)?;
             let name = entry.file_name().to_string_lossy().into_owned();
-            if metadata.is_dir() && !metadata.file_type().is_symlink() && validate_id(&name).is_ok()
-            {
+            if file_type.is_dir() && !file_type.is_symlink() && validate_id(&name).is_ok() {
                 names.insert(name);
             }
         }
@@ -1059,10 +1058,10 @@ impl ConsoleReadModel {
         let mut count = 0;
         for entry in entries {
             let entry = entry.map_err(ReadModelError::Io)?;
-            let metadata = fs::symlink_metadata(entry.path()).map_err(ReadModelError::Io)?;
+            let file_type = entry.file_type().map_err(ReadModelError::Io)?;
             let name = entry.file_name().to_string_lossy().into_owned();
-            if metadata.is_file()
-                && !metadata.file_type().is_symlink()
+            if file_type.is_file()
+                && !file_type.is_symlink()
                 && suffix.is_none_or(|suffix| name.ends_with(suffix))
             {
                 count += 1;

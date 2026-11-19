@@ -241,16 +241,16 @@ fn collect_tree(
                 path: "non-UTF-8 export path".into(),
             })?
             .replace('\\', "/");
-        let metadata = fs::symlink_metadata(&path).map_err(|source| ExportError::Io {
+        let file_type = entry.file_type().map_err(|source| ExportError::Io {
             path: path.clone(),
             source,
         })?;
-        if metadata.file_type().is_symlink() {
+        if file_type.is_symlink() {
             return Err(ExportError::SymlinkSource { path });
         }
-        if metadata.is_dir() {
+        if file_type.is_dir() {
             collect_tree(package, &child, files, observed, true)?;
-        } else if metadata.is_file() {
+        } else if file_type.is_file() {
             files.insert(child);
             if files.len() > MAX_ENTRIES {
                 return Err(ExportError::Capacity);
