@@ -14,7 +14,7 @@
     "build:demo": "vite build try --config vite.config.ts --base ./ --outDir ../dist-demo --emptyOutDir"
   },
   "dependencies": {
-    "react": "^19.3.0",
+    "react": "^19.3.1",
     "react-dom": "^19.3.0"
   },
   "devDependencies": {
