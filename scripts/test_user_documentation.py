@@ -1,9 +1,13 @@
+import json
 import re
 import unittest
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+RELEASE_VERSION = json.loads(
+    (ROOT / "apps/skilltape-console/package.json").read_text(encoding="utf-8")
+)["version"]
 README = ROOT / "README.md"
 DOCS_INDEX = ROOT / "docs" / "README.md"
 GUIDES_INDEX = ROOT / "docs" / "guides" / "README.md"
@@ -88,7 +92,7 @@ class UserDocumentationContractTests(unittest.TestCase):
         self.assertIn("docs/assets/quickstart-terminal.txt", text)
         self.assertIn("docs/guides/quickstart.md", text)
         self.assertIn(
-            "https://github.com/Chumaniac/skilltape/releases/tag/v0.5.1", text
+            f"https://github.com/Chumaniac/skilltape/releases/tag/v{RELEASE_VERSION}", text
         )
         destinations = {
             destination.split("#", 1)[0].strip().strip("<>")
@@ -177,7 +181,7 @@ class UserDocumentationContractTests(unittest.TestCase):
         self.assertEqual(2, text.count(unix_download))
         self.assertEqual(2, text.count('bash "$installer_path"'))
         self.assertIn(
-            'bash "$installer_path" 0.5.1 "$HOME/.local/bin" "aarch64-apple-darwin"',
+            f'bash "$installer_path" {RELEASE_VERSION} "$HOME/.local/bin" "aarch64-apple-darwin"',
             text,
         )
         self.assertIn(
@@ -191,7 +195,7 @@ class UserDocumentationContractTests(unittest.TestCase):
         )
         for value in (
             '"https://github.com/Chumaniac/skilltape/releases/download"',
-            '"0.5.1"',
+            f'"{RELEASE_VERSION}"',
             '"$env:LOCALAPPDATA\\SkillTape\\bin"',
             '"x86_64-pc-windows-msvc"',
         ):

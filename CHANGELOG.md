@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.2 — 2026-11-19
+
+- Use directory-entry type metadata while preserving link, identifier and bounded snapshot checks in Console inventories and export.
+- Record the named static-analysis trust-boundary review without relaxing execution or path policy.
+- Rebuild CLI, Console and Apple Silicon application from the same new source identity; retain every prior release and download URL.
+
 ## 0.5.1 — 2026-11-16
 
 - Validate the localized Console title, API/UI identity and built asset paths in installed smoke checks.
