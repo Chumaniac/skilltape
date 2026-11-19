@@ -1,5 +1,49 @@
 # CodeQL path-safety audit
 
+## Current source review: 2026-11-19
+
+**Scope:** The ten open alerts observed on main commit
+`9d998a9d0fc7f87c07428d58659cc3a5d3ca4c5c`. This is a source and
+trust-boundary review, not a claim of independent security certification.
+The matching PR/main checks and the live Security page determine current
+scan results and alert state.
+
+| Alert | Source | Reviewed boundary and outcome |
+| ---: | --- | --- |
+| 163 | `crates/skilltape-core/build.rs`, fixed-argument Git invocation | Cargo/build-operator environment selects the repository and tool search path. Git receives argument values without a shell; the release channel also requires a clean, matching immutable tag. No HTTP route or document parser assigns this build input. Preserve the build-tool interface. |
+| 162 | `crates/skilltape-core/build.rs`, repository metadata path | `CARGO_MANIFEST_DIR` is supplied by Cargo. The path is used for local build provenance; an absent checkout produces a dirty/unversioned source build and cannot satisfy the release guard. Preserve this build-environment boundary. |
+| 161 | `scripts/package_release.py`, component identity query | The release operator selects the local binary directory; CI selects its just-built target directory. Regular-file checks precede fixed `build-info` arguments passed as an argv list, with a timeout. This interface intentionally runs trusted build outputs; it must not receive unreviewed external executable paths. |
+| 121 | `crates/skilltape-export/src/generic.rs`, source tree enumeration | Inspect `DirEntry::file_type` directly and continue rejecting links and special files. Relative-path, ancestor, capacity, snapshot and observed-open checks remain authoritative before source contents are published. |
+| 109 | `crates/skilltape-cli/src/console_command.rs`, browser opener | The local operator's explicit opener override is used only with `console --open`. The ready URL is a validated loopback socket URL and is passed as one argument, not shell text. Preserve explicit local program selection. |
+| 108 | `crates/skilltape-cli/src/console_command.rs`, Console API startup | The executable override, packaged companion lookup and tool search path belong to the local launcher. HTTP requests, Tape metadata and Skill documents do not set the companion executable. Preserve the documented local override and existing spawn errors. |
+| 102 | `crates/skilltape-cli/src/console_command.rs`, companion file check | The regular-file query validates that same local executable selection; it does not read an HTTP-selected host path. Preserve the local-launch boundary and the canonical workspace/loopback guards used after startup. |
+| 101 | `crates/skilltape-cli/src/capture_command.rs`, Capture output check | The operator explicitly chooses the output destination. Component validation, canonical default-output containment and no-replace publication protect the output; a browser or document does not choose it. Preserve Capture's declared local output interface. |
+| 77 | `apps/skilltape-console-api/src/read_model.rs`, directory entry count | Inspect each directory entry's type directly. Fixed workspace storage roots, valid single-component IDs and link rejection remain unchanged; this helper only classifies entries. |
+| 76 | `apps/skilltape-console-api/src/read_model.rs`, receipt file count | Inspect each directory entry's type directly and retain the suffix filter and link rejection. This metadata count is separate from the bounded content-reading paths. |
+
+The three enumeration changes use the standard library's
+[non-following directory-entry type query](https://doc.rust-lang.org/std/fs/struct.DirEntry.html#method.file_type).
+On supported platforms it can avoid a second path-based metadata lookup;
+this is source-level reasoning, not a measured CPU or memory improvement.
+It does not provide descriptor-relative atomic isolation or a consistent
+snapshot of a directory concurrently changed by another process. Existing
+snapshot/open checks, no-overwrite publication and symlink regression cases
+remain in place.
+
+The local launch and release interfaces intentionally select executable
+programs. A caller forwarding unreviewed network or document values into
+those options would cross a new trust boundary and needs its own authorization
+design. The current HTTP routes and document parsers do not assign those
+options. An argv list avoids implicit shell parsing; it does not make an
+arbitrary executable trustworthy. See the standard-library documentation for
+[Rust command arguments](https://doc.rust-lang.org/std/process/struct.Command.html#method.arg)
+and [Python subprocess security](https://docs.python.org/3/library/subprocess.html#security-considerations).
+
+## Archived review: 2026-08-08
+
+The record below preserves its original commits, decisions and scan outcome.
+Its resolved-alert count is historical and is not the current alert count.
+
 **Date:** 2026-08-08
 
 **Status:** Complete — matching `main` scan verified and every alert resolved
