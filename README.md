@@ -22,7 +22,7 @@
 
 ## 从一份对账单开始
 
-网页版可编辑应有与实收数量、查看差异、导出 JSON。计算在当前标签页完成。要重放命令或生成 Receipt，请使用本机 CLI。
+网页版可编辑应有与实收数量、查看差异与合计、导出 JSON。清单可以逐行填写，也可以从表格粘贴「物品、应有数量、实收数量」三列，或用「导入清单」打开本页导出的 CSV 与 JSON；按 Ctrl / ⌘ + Enter 计算。计算在当前标签页完成，支持浅色与深色外观。要重放命令或生成 Receipt，请使用本机 CLI。
 
 1. 在网页版保存输入 JSON。
 2. 从本仓库构建 CLI。Linux 需安装 bubblewrap，macOS 需 Xcode Command Line Tools。Rust 版本见 [工具链配置](rust-toolchain.toml)。

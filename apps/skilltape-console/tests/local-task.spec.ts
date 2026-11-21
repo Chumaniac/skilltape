@@ -193,3 +193,48 @@ test('the first-use path reveals invalid input and returns to the retained draft
   await page.getByRole('button', { name: '返回编辑清单', exact: true }).click();
   await expect(draft).toHaveValue('{not-json');
 });
+
+test("an exported CSV can be imported again, and a refused file keeps the current list", async ({ page }) => {
+  await page.goto("/#task");
+  const csv = "﻿物品,应有数量,实收数量,差异\r\n\"'=SUM(1,2)\"\"纸\"\"\",4,0,-4\r\n相符,1,1,0\r\n";
+  await page.getByLabel("导入清单文件").setInputFiles({ name: "reconciliation.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
+  await expect(page.getByRole("status")).toContainText("已导入 2 种物品，尚未计算");
+  await expect(page.getByLabel("物品名称 1", { exact: true })).toHaveValue('=SUM(1,2)"纸"');
+  await expect(page.getByLabel("应有数量 1", { exact: true })).toHaveValue("4");
+  await expect(page.getByRole("button", { name: "导出结果", exact: true })).toHaveCount(0);
+  page.once("dialog", dialog => dialog.accept());
+  await page.getByLabel("导入清单文件").setInputFiles({ name: "bad.csv", mimeType: "text/csv", buffer: Buffer.from("甲,1,1\n乙,many,1") });
+  await expect(page.getByRole("status")).toContainText("无法导入「bad.csv」，原输入已保留");
+  await expect(page.getByLabel("物品名称 2", { exact: true })).toHaveValue("相符");
+});
+
+test("rows pasted from a spreadsheet fill the list from the focused row", async ({ page }) => {
+  await page.goto("/#task");
+  await page.getByLabel("物品名称 2", { exact: true }).evaluate((field, text) => {
+    const data = new DataTransfer();
+    data.setData("text/plain", text);
+    field.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+  }, "纸\t3\t3\r\n墨水\t2\t1\r\n");
+  await expect(page.getByRole("status")).toContainText("已粘贴 2 行");
+  await expect(page.getByLabel("物品名称 1", { exact: true })).toHaveValue("笔记本");
+  await expect(page.getByLabel("物品名称 2", { exact: true })).toHaveValue("纸");
+  await expect(page.getByLabel("实收数量 3", { exact: true })).toHaveValue("1");
+  // A single copied cell is still an ordinary paste into that field.
+  const single = await page.getByLabel("物品名称 1", { exact: true }).evaluate(field => {
+    const data = new DataTransfer();
+    data.setData("text/plain", "5\r\n");
+    return field.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+  });
+  expect(single).toBe(true);
+});
+
+test("the shortcut calculates and the totals row always covers the full result", async ({ page }) => {
+  await page.goto("/#task");
+  await page.getByLabel("物品名称 1", { exact: true }).press("ControlOrMeta+Enter");
+  await expect(page.getByText("1 项差异", { exact: true })).toBeVisible();
+  const totals = page.locator(".task-table tfoot tr");
+  await expect(totals).toHaveText(/合计（全部 2 种）\s*15\s*14\s*-1/);
+  await page.getByRole("checkbox", { name: "仅看差异", exact: true }).check();
+  await expect(page.locator(".task-table tbody tr")).toHaveCount(1);
+  await expect(totals).toHaveText(/合计（全部 2 种）\s*15\s*14\s*-1/);
+});

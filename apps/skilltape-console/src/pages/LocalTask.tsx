@@ -1,6 +1,16 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ClipboardEvent } from "react";
 import { example, reconcile, type Request } from "../reconcile";
+import { importLimit, parseImport, parseTable } from "../reconcile-import";
 type FormRow = { item: string; expected: string; received: string };
+// randomUUID needs a secure context; a static server on a LAN address still has getRandomValues.
+function recordId() {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 const formRowsFor = (request: Request): FormRow[] =>
   reconcile(request).rows.map((r) => ({
     item: r.item,
@@ -67,7 +77,9 @@ export function LocalTaskPage() {
     [failed, setFailed] = useState(false),
     [unsaved, setUnsaved] = useState(false),
     [view, setView] = useState<'input' | 'result' | 'history'>('input'),
-    generation = useRef(0);
+    generation = useRef(0),
+    fileInput = useRef<HTMLInputElement>(null),
+    latestRun = useRef(() => {});
   function openView(next: 'input' | 'result' | 'history') {
     setView(next);
     requestAnimationFrame(() => document.getElementById('task-' + next + '-heading')?.focus());
@@ -78,6 +90,17 @@ export function LocalTaskPage() {
     return () => window.removeEventListener("beforeunload", protect);
   }, [unsaved]);
   useEffect(() => () => { generation.current += 1; }, []);
+  useEffect(() => {
+    // Ctrl / ⌘ + Enter calculates from anywhere on the page, as the primary button does.
+    const shortcut = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key === "Enter") {
+        event.preventDefault();
+        latestRun.current();
+      }
+    };
+    window.addEventListener("keydown", shortcut);
+    return () => window.removeEventListener("keydown", shortcut);
+  }, []);
   function editRows(next: FormRow[]) {
     setUnsaved(true);
     setFormRows(next);
@@ -112,6 +135,41 @@ export function LocalTaskPage() {
     setFailed(false);
     setMessage("示例已填入，尚未计算。");
     openView('input');
+  }
+  async function importFile(file: File) {
+    if (unsaved && !window.confirm("用导入的清单替换未保存的输入和结果？")) return;
+    try {
+      if (file.size > importLimit) throw Error("输入上限为256 KB。");
+      const request = parseImport(await file.text());
+      const rows = formRowsFor(request);
+      setUnsaved(true);
+      setInput(JSON.stringify(request, null, 2));
+      setFormRows(rows);
+      setJsonMode(false);
+      setResult(null);
+      setFailed(false);
+      setMessage("已导入 " + rows.length + " 种物品，尚未计算。");
+      openView('input');
+    } catch (e) {
+      // A refused file never replaces what is already on the page.
+      setMessage("无法导入「" + file.name + "」，原输入已保留。" + (e instanceof Error ? e.message : ""));
+      openView('result');
+    }
+  }
+  /** Rows copied from a spreadsheet fill the list from the row that received the paste. */
+  function pasteRows(event: ClipboardEvent, index: number) {
+    const text = event.clipboardData.getData("text/plain");
+    if (!/[\t\n]/.test(text.trim())) return;
+    event.preventDefault();
+    try {
+      const rows = parseTable(text);
+      const next = [...formRows.slice(0, index), ...rows, ...formRows.slice(index + rows.length)];
+      if (next.length > 1000) throw Error("清单最多1,000行。");
+      editRows(next);
+      setMessage("已粘贴 " + rows.length + " 行，请重新计算以更新结果。");
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "无法读取粘贴的表格。");
+    }
   }
   function showForm() {
     try {
@@ -148,6 +206,7 @@ export function LocalTaskPage() {
       }
     }, 0);
   }
+  latestRun.current = () => { if (!busy) run(); };
   function latestHistory() {
     const latest = read();
     if (latest.error) throw Error(latest.error);
@@ -168,7 +227,7 @@ export function LocalTaskPage() {
       if (!result) return;
       if (initial.error) throw Error(initial.error);
       const record = {
-        id: crypto.randomUUID(),
+        id: recordId(),
         at: new Date().toISOString(),
         input: JSON.parse(input) as Request,
         result,
@@ -193,6 +252,12 @@ export function LocalTaskPage() {
   }
   const differenceCount = result?.rows.filter(row => row.difference !== 0).length ?? 0;
   const visibleRows = result?.rows.filter(row => !onlyDifferences || row.difference !== 0) ?? [];
+  // Totals always cover the complete result, whatever the filter shows.
+  const totals = (result?.rows ?? []).reduce(
+    (sum, row) => ({ expected: sum.expected + row.expected, received: sum.received + row.received }),
+    { expected: 0, received: 0 },
+  );
+  const totalDifference = totals.received - totals.expected;
   return (
     <section className="page-section local-task-workspace" data-view={view}>
       <header className="page-heading task-hero">
@@ -233,12 +298,29 @@ export function LocalTaskPage() {
       <div className="local-task-grid">
         <section id="task-input-panel" className="task-panel task-input-panel">
           <div className="task-section-heading"><h2 id="task-input-heading" tabIndex={-1}>1. 输入</h2>
-          <button
-            disabled={busy}
-            onClick={loadExample}
-          >
-            填入示例
-          </button></div>
+          <div className="task-heading-actions">
+            <button type="button" disabled={busy} onClick={() => fileInput.current?.click()}>
+              导入清单
+            </button>
+            <button
+              disabled={busy}
+              onClick={loadExample}
+            >
+              填入示例
+            </button>
+            <input
+              ref={fileInput}
+              type="file"
+              hidden
+              aria-label="导入清单文件"
+              accept=".json,.csv,.tsv,.txt,application/json,text/csv,text/plain"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (file) void importFile(file);
+              }}
+            />
+          </div></div>
           <div className="task-actions task-view-switch" role="group" aria-label="输入格式">
             <button
               type="button"
@@ -261,7 +343,7 @@ export function LocalTaskPage() {
             <>
               <div className="quantity-editor">
                 {formRows.map((row, index) => (
-                  <fieldset key={index} disabled={busy}>
+                  <fieldset key={index} disabled={busy} onPaste={(event) => pasteRows(event, index)}>
                     <legend>物品 {index + 1}</legend>
                     <label>
                       物品名称
@@ -344,7 +426,7 @@ export function LocalTaskPage() {
                 添加物品
               </button>
               <p>
-                填写物品名称与整数数量；已有任务输入可切换到 JSON。
+                填写物品名称与整数数量；已有任务输入可切换到 JSON。也可从表格粘贴「物品、应有数量、实收数量」三列，或导入本页导出的 CSV 与 JSON。
               </p>
             </>
           ) : null}
@@ -377,6 +459,7 @@ export function LocalTaskPage() {
           <button className="button button-primary" disabled={busy} onClick={run}>
             {busy ? "正在计算…" : "计算差异"}
           </button>
+          <p className="task-shortcut-hint">快捷键：<kbd>Ctrl</kbd> / <kbd>⌘</kbd> + <kbd>Enter</kbd></p>
         </section>
         <section id="task-result-panel" className="task-panel task-result-panel">
           <h2 id="task-result-heading" tabIndex={-1}>2. 结果</h2>
@@ -418,6 +501,17 @@ export function LocalTaskPage() {
                       </tr>
                     ))}
                   </tbody>
+                  <tfoot>
+                    <tr data-difference={totalDifference !== 0}>
+                      <th scope="row">合计（全部 {result.rows.length} 种）</th>
+                      <td>{totals.expected}</td>
+                      <td>{totals.received}</td>
+                      <td>
+                        {totalDifference > 0 ? "+" : ""}
+                        {totalDifference}
+                      </td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
               {onlyDifferences && visibleRows.length === 0 && <p className="task-filter-empty">本次结果没有差异，仍可导出完整结果。</p>}

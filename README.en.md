@@ -8,7 +8,7 @@
 
 **[Try quantity reconciliation →](https://chumaniac.github.io/skilltape/)** · [CLI releases](https://github.com/Chumaniac/skilltape/releases/tag/v0.5.2) · [Chinese desktop release](https://github.com/Chumaniac/skilltape/releases/tag/v0.5.2)
 
-Start with the sample inventory, edit expected and received quantities, calculate the differences, then export the current CSV. The browser example handles the checklist locally. Command recording, replay and Receipt verification use the local CLI.
+Start with the sample inventory, edit expected and received quantities, calculate the differences, then export the current CSV. You can also paste three columns from a spreadsheet or import a CSV or JSON file the page exported. The browser example handles the checklist locally. Command recording, replay and Receipt verification use the local CLI.
 
 [![SkillTape sample inventory and quantity differences](docs/preview/online.png)](https://chumaniac.github.io/skilltape/)
 

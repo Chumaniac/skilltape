@@ -1,4 +1,170 @@
-.trial-nav, .trial-content { max-width: 72rem; margin: auto; padding: 1rem clamp(1rem, 4vw, 3rem); }
-.trial-nav { min-height: 4rem; display: flex; gap: .75rem; align-items: center; border-bottom: 1px solid var(--line); }
-.trial-nav a { margin-left: auto; color: inherit; text-underline-offset: .24em; }
-.trial-content { padding-top: 2rem; }
+/*
+ * Public sample page. It reuses the console's task component and re-themes it with neutral
+ * tokens so a light and a dark appearance share one set of rules. The desktop console keeps
+ * its own palette; nothing here loads there.
+ */
+:root {
+  color-scheme: light;
+  font-family: Inter, "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --bg: #fafafa;
+  --bg-soft: #f4f4f5;
+  --panel: #ffffff;
+  --panel-strong: #f4f4f5;
+  --line: #e4e4e7;
+  --line-bright: #d4d4d8;
+  --text: #18181b;
+  --muted: #63636b;
+  --faint: #8e8e96;
+  --cyan: #7a5c2e;
+  --cyan-soft: #7a5c2e1a;
+  --blue: #7a5c2e;
+  --shadow: none;
+  --trial-primary: #18181b;
+  --trial-primary-text: #fafafa;
+  --trial-primary-hover: #2e2e33;
+  --trial-hover: #f4f4f5;
+  --trial-warn: #8a5a00;
+  --trial-warn-soft: #8a5a0014;
+  --trial-ok: #17663a;
+  --trial-ok-soft: #17663a12;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #09090b;
+    --bg-soft: #18181b;
+    --panel: #111113;
+    --panel-strong: #18181b;
+    --line: #27272a;
+    --line-bright: #3f3f46;
+    --text: #f4f4f5;
+    --muted: #a1a1aa;
+    --faint: #7c7c85;
+    --cyan: #d9bf8a;
+    --cyan-soft: #d9bf8a24;
+    --blue: #d9bf8a;
+    --trial-primary: #f4f4f5;
+    --trial-primary-text: #18181b;
+    --trial-primary-hover: #d4d4d8;
+    --trial-hover: #1f1f23;
+    --trial-warn: #e2b454;
+    --trial-warn-soft: #e2b45418;
+    --trial-ok: #5fc98a;
+    --trial-ok-soft: #5fc98a14;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #09090b;
+  --bg-soft: #18181b;
+  --panel: #111113;
+  --panel-strong: #18181b;
+  --line: #27272a;
+  --line-bright: #3f3f46;
+  --text: #f4f4f5;
+  --muted: #a1a1aa;
+  --faint: #7c7c85;
+  --cyan: #d9bf8a;
+  --cyan-soft: #d9bf8a24;
+  --blue: #d9bf8a;
+  --trial-primary: #f4f4f5;
+  --trial-primary-text: #18181b;
+  --trial-primary-hover: #d4d4d8;
+  --trial-hover: #1f1f23;
+  --trial-warn: #e2b454;
+  --trial-warn-soft: #e2b45418;
+  --trial-ok: #5fc98a;
+  --trial-ok-soft: #5fc98a14;
+}
+
+html, body { background: var(--bg); color: var(--text); }
+
+/* ---- app bar ---- */
+.trial-bar { position: sticky; top: 0; z-index: 10; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: saturate(1.4) blur(8px); }
+.trial-nav { display: flex; align-items: center; gap: 12px; max-width: 72rem; min-height: 56px; margin: 0 auto; padding: 0 24px; }
+.trial-nav img { border-radius: 6px; }
+.trial-nav strong { font-weight: 600; letter-spacing: -0.01em; }
+.trial-nav .trial-actions { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+.trial-nav a, .trial-nav button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 32px; padding: 0 12px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--muted); font-size: 13px; font-weight: 500; text-decoration: none; cursor: pointer; transition: background-color 120ms ease, color 120ms ease; }
+.trial-nav a:hover, .trial-nav button:hover { background: var(--trial-hover); color: var(--text); }
+.trial-nav .trial-icon-button { width: 32px; padding: 0; }
+.trial-nav svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+/* The toggle shows the appearance it switches to. */
+.trial-sun { display: none; }
+:root[data-theme="dark"] .trial-sun { display: block; }
+:root[data-theme="dark"] .trial-moon { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .trial-sun { display: block; }
+  :root:not([data-theme="light"]) .trial-moon { display: none; }
+}
+
+.trial-content { max-width: 72rem; margin: 0 auto; padding: 48px 24px 64px; }
+
+/* ---- task component, neutral surfaces ---- */
+.trial-content .task-hero h1 { font-size: 28px; font-weight: 600; letter-spacing: -0.025em; }
+.trial-content .task-mode-badge { border-color: var(--line); background: var(--panel); color: var(--muted); }
+.trial-content .task-mode-badge::before { background: var(--trial-ok); }
+.trial-content .task-introduction,
+.trial-content .task-start-guide,
+.trial-content .task-stage-nav,
+.trial-content .task-panel { border-color: var(--line); border-radius: 8px; background: var(--panel); box-shadow: none; }
+.trial-content .local-task-grid > .task-panel:nth-child(2) { border-top: 1px solid var(--line); }
+.trial-content .task-panel h2,
+.trial-content .task-start-guide > summary { color: var(--text); }
+.trial-content .task-start-guide li::marker { color: var(--faint); }
+
+.trial-content .task-stage-nav button { color: var(--muted); }
+.trial-content .task-stage-nav button:hover { background: var(--trial-hover); }
+.trial-content .task-stage-nav button[aria-pressed="true"] { background: var(--bg-soft); color: var(--text); box-shadow: inset 0 -2px var(--text); }
+
+.trial-content .task-panel button,
+.trial-content .task-start-guide button,
+.trial-content .button { border: 1px solid var(--line-bright); border-radius: 6px; background: var(--panel); color: var(--text); box-shadow: none; transition: background-color 120ms ease, border-color 120ms ease; }
+.trial-content .task-panel button:not(.button-primary):hover,
+.trial-content .task-start-guide button:hover,
+.trial-content .button:not(.button-primary):hover { border-color: var(--faint); background: var(--trial-hover); }
+.trial-content .task-panel button:disabled { opacity: 0.45; cursor: not-allowed; }
+.trial-content .task-panel .button-primary,
+.trial-content .task-result-panel .task-actions button:first-child { border-color: var(--trial-primary); background: var(--trial-primary); color: var(--trial-primary-text); box-shadow: none; }
+.trial-content .task-panel .button-primary:hover,
+.trial-content .task-result-panel .task-actions button:first-child:hover:not(:disabled) { border-color: var(--trial-primary-hover); background: var(--trial-primary-hover); }
+
+.trial-content .task-view-switch { border: 1px solid var(--line); border-radius: 8px; background: var(--bg-soft); }
+.trial-content .task-view-switch button { border-color: transparent; background: transparent; color: var(--muted); }
+.trial-content .task-view-switch button[aria-pressed="true"] { border-color: var(--line); background: var(--panel); color: var(--text); box-shadow: none; opacity: 1; }
+
+.trial-content .quantity-editor fieldset { border-color: var(--line); border-radius: 8px; background: var(--bg-soft); }
+.trial-content .task-panel input,
+.trial-content .task-panel textarea { border: 1px solid var(--line-bright); border-radius: 6px; background: var(--panel); color: var(--text); box-shadow: none; transition: border-color 120ms ease, box-shadow 120ms ease; }
+.trial-content .task-panel input:focus,
+.trial-content .task-panel textarea:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px var(--cyan-soft); outline: none; }
+.trial-content .task-panel textarea { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.trial-content .task-difference-toggle input { accent-color: var(--trial-primary); box-shadow: none; }
+
+.trial-content .task-result-panel .task-totals { border: 1px solid var(--line); border-radius: 8px; background: var(--trial-warn-soft); color: var(--trial-warn); }
+.trial-content .task-result-panel .task-totals[data-balanced="true"] { background: var(--trial-ok-soft); color: var(--trial-ok); }
+.trial-content .task-table thead { background: var(--bg-soft); }
+.trial-content .task-table tbody tr:hover { background: var(--trial-hover); }
+.trial-content .task-table tr[data-difference="true"] td:last-child { background: var(--trial-warn-soft); color: var(--trial-warn); }
+.trial-content .task-table td,
+.trial-content .task-table th { font-variant-numeric: tabular-nums; }
+.trial-content .task-filter-empty,
+.trial-content .saved-task { border-color: var(--line); border-radius: 8px; background: var(--bg-soft); }
+.trial-content .task-result-empty svg { fill: var(--bg-soft); stroke: var(--line-bright); }
+.trial-content .task-result-empty strong { color: var(--text); }
+.trial-content .task-result-panel code { color: var(--text); overflow-wrap: anywhere; }
+
+.trial-footer { border-top: 1px solid var(--line); }
+.trial-footer p { max-width: 72rem; margin: 0 auto; padding: 24px; color: var(--faint); font-size: 12px; }
+.trial-footer a { margin-left: 8px; color: inherit; text-underline-offset: 3px; }
+
+@media (max-width: 720px) {
+  .trial-nav { padding: 0 16px; }
+  .trial-nav a span { display: none; }
+  .trial-nav a, .trial-nav button { min-height: 40px; }
+  .trial-nav a, .trial-nav .trial-icon-button { width: 40px; padding: 0; }
+  .trial-content { padding: 32px 16px 48px; }
+  .trial-content .task-hero h1 { font-size: 24px; }
+}
